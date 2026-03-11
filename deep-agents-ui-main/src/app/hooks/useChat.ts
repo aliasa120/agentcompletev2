@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback } from "react";
 import { useStream } from "@langchain/langgraph-sdk/react";
 import {
   type Message,
@@ -49,6 +49,7 @@ export function useChat({
     reconnectOnMount: true,
     threadId: threadId ?? null,
     onThreadId: setThreadId,
+    defaultHeaders: { "x-auth-scheme": "langsmith" },
     // Enable fetching state history when switching to existing threads
     fetchStateHistory: true,
     // Revalidate thread list when stream finishes, errors, or creates new thread
@@ -63,37 +64,6 @@ export function useChat({
     onCreated: onHistoryRevalidate,
     experimental_thread: thread,
   });
-
-  // ── Stale thread guard ────────────────────────────────────────────────────
-  // If a threadId is in the URL but the server no longer knows about it
-  // (e.g. after langgraph dev restart), isThreadLoading stays true forever.
-  // After 5 seconds of loading with no messages, clear the threadId so the
-  // UI recovers and shows an empty chat instead of hanging.
-  const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (stream.isThreadLoading && threadId) {
-      // Start a 5-second timeout — if still loading, the thread is stale
-      loadingTimerRef.current = setTimeout(() => {
-        if (stream.isThreadLoading) {
-          console.warn("[useChat] Thread loading timed out — clearing stale threadId:", threadId);
-          setThreadId(null);
-        }
-      }, 5000);
-    } else {
-      // Thread loaded successfully — cancel the timeout
-      if (loadingTimerRef.current) {
-        clearTimeout(loadingTimerRef.current);
-        loadingTimerRef.current = null;
-      }
-    }
-
-    return () => {
-      if (loadingTimerRef.current) {
-        clearTimeout(loadingTimerRef.current);
-      }
-    };
-  }, [stream.isThreadLoading, threadId, setThreadId]);
 
   const sendMessage = useCallback(
     (content: string) => {
