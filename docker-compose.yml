@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+  # ── LangGraph agent backend (port 2024) ────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent-backend
+    restart: unless-stopped
+    ports:
+      - "2024:2024"
+    env_file:
+      - .env
+    environment:
+      - LANGGRAPH_HOST=0.0.0.0
+      - LANGGRAPH_PORT=2024
+
+  # ── Feeder HTTP server (port 8080, HTTP-only, no scheduler) ────────────
+  feeder_svc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent-feeder
+    restart: unless-stopped
+    command: python feeder_server.py
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      - backend
+
+  # ── Cron scheduler (no exposed ports — internal only) ──────────────────
+  cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent-cron
+    restart: unless-stopped
+    command: python cron_scheduler.py
+    env_file:
+      - .env
+    environment:
+      - FEEDER_SERVER_URL=http://feeder_svc:8080
+      - LANGGRAPH_URL=http://backend:2024
+    depends_on:
+      - backend
+      - feeder_svc
+
+  # ── Next.js frontend (port 3000, public) ───────────────────────────────
+  frontend:
+    build:
+      context: ./deep-agents-ui-main
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_SUPABASE_URL
+        - NEXT_PUBLIC_SUPABASE_ANON_KEY
+    container_name: agent-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./deep-agents-ui-main/.env
+    environment:
+      - FEEDER_SERVER_URL=http://feeder_svc:8080
+      - NEXT_PUBLIC_API_URL=http://backend:2024
+    depends_on:
+      - backend
+      - feeder_svc

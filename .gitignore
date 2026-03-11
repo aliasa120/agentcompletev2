@@ -1,0 +1,28 @@
+# Environment files — never commit real secrets
+.env
+.env.local
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.ruff_cache/
+deep_research_example.egg-info/
+*.egg-info/
+
+# LangGraph
+.langgraph_api/
+checkpoints.db
+
+# Frontend build artifacts (not needed in git — built inside Docker)
+deep-agents-ui-main/node_modules/
+deep-agents-ui-main/.next/
+deep-agents-ui-main/.env
+deep-agents-ui-main/.env.local
+deep-agents-ui-main/yarn-error.log
+deep-agents-ui-main/*.tsbuildinfo
+
+# Misc
+output/
+*.ipynb
