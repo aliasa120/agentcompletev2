@@ -1,13 +1,11 @@
-"""Create social post image using GPT-Image-1.5 via Vercel AI Gateway.
+"""Create social post image using KIE AI GPT-Image-1.5 via the KIE AI API.
 
 Flow:
-1. Load the full-resolution image from disk (saved by view_candidate_images)
-   — falls back to downloading from URL if not found on disk.
-2. Crop to 1024×1024 square, encode as PNG.
-3. POST to Vercel AI Gateway /v1/images/edits with model=openai/gpt-image-1.5,
-   quality=medium, size=1024x1024.
-4. Decode the returned base64 PNG and save as output/<slug>-<ts>.jpg.
-5. Fall back to PIL overlay if the API call fails.
+1. Load the full-resolution target image from disk (saved by view_candidate_images).
+2. Upload the target image to Supabase Storage (required — news site URLs have hotlink protection).
+3. Send to KIE AI with the editing_prompt and BOTH THE ECHO reference images as style guides.
+4. Poll for completion, download the result.
+5. Fall back to saving the raw target image if KIE AI fails.
 """
 
 import base64
@@ -24,17 +22,17 @@ from langchain_core.tools import tool
 from PIL import Image, ImageDraw, ImageFont
 
 
-# ── constants ────────────────────────────────────────────────────────────────
+# ── Constants ─────────────────────────────────────────────────────────────────
 
-_OUTPUT_DIR = Path("output")
-_MANIFEST_FILE = Path("output") / "candidate_images" / "manifest.json"
+_OUTPUT_DIR       = Path("output")
+_MANIFEST_FILE    = Path("output") / "candidate_images" / "manifest.json"
 _LATEST_IMAGE_FILE = Path("output") / "latest_image_path.txt"
 
-# Brand reference images — attached to BOTH vision analysis AND editing calls
-_REF_IMAGES_DIR = Path("reference images")
-_REF_IMAGE_PATHS = [
-    _REF_IMAGES_DIR / "ref1.png",
-    _REF_IMAGES_DIR / "ref2.jpg",
+# THE ECHO brand reference images — served from Cloudflare R2
+_R2_BASE = "https://pub-61765db165154158829d1ed1ff18c3e0.r2.dev/ref%20images"
+_REF_URLS = [
+    f"{_R2_BASE}/ref1.png",
+    f"{_R2_BASE}/ref2.png",
 ]
 
 _FONT_PATHS = [
@@ -44,11 +42,10 @@ _FONT_PATHS = [
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
 ]
 
-# Vercel AI Gateway base URL
 _GATEWAY_BASE = "https://ai-gateway.vercel.sh/v1"
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_font(size: int):
     for path in _FONT_PATHS:
@@ -87,178 +84,169 @@ def _make_image_filename(headline: str) -> str:
     return f"{slug}-{ts}.jpg"
 
 
-def _square_crop(img: Image.Image, size: int = 1024) -> Image.Image:
-    """Smart-crop and resize to a square."""
-    sc = smartcrop.SmartCrop()
-    result = sc.crop(img, size, size)
-    crop = result['top_crop']
-    x, y, w, h = crop['x'], crop['y'], crop['width'], crop['height']
-    return img.crop((x, y, x + w, y + h)).resize(
-        (size, size), Image.LANCZOS
-    )
+def _upload_target_to_supabase(pil_img: Image.Image, slug: str) -> str | None:
+    """Upload target image to Supabase Storage so KIE AI can access it.
 
+    News website URLs are often blocked by hotlink protection.
+    Supabase provides a guaranteed-accessible public URL for KIE AI.
+    Returns public URL or None if upload fails.
+    """
+    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    api_key = os.environ.get("SUPABASE_ANON_KEY", "")
+    if not supabase_url or not api_key:
+        print("[create_post_image] ⚠️ SUPABASE_URL/KEY not set — KIE AI will use original URL (may fail)")
+        return None
 
-def _img_to_png_bytes(img: Image.Image) -> bytes:
-    """Encode PIL image as PNG bytes."""
     buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    return buf.getvalue()
+    pil_img.save(buf, format="JPEG", quality=92)
+    img_bytes = buf.getvalue()
 
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"kie-targets/{slug}-{timestamp}.jpg"
+    upload_url = f"{supabase_url}/storage/v1/object/post-images/{filename}"
 
-def _load_ref_image_b64(path: Path, size: int = 1024) -> str | None:
-    """Load a local reference brand image as base64 JPEG, resized to max `size` px."""
-    if not path.exists():
-        print(f"[create_post_image] ⚠️ Reference image not found: {path}")
-        return None
+    headers = {
+        "apikey": api_key,
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "image/jpeg",
+        "x-upsert": "true",
+    }
     try:
-        img = Image.open(path).convert("RGB")
-        w, h = img.size
-        if max(w, h) > size:
-            scale = size / max(w, h)
-            img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=85)
-        b64 = base64.b64encode(buf.getvalue()).decode()
-        print(f"[create_post_image] ✅ Loaded ref image: {path.name} ({len(b64)//1024} KB)")
-        return b64
+        resp = requests.post(upload_url, headers=headers, data=img_bytes, timeout=(10, 30))
+        if resp.ok:
+            public_url = f"{supabase_url}/storage/v1/object/public/post-images/{filename}"
+            print(f"[create_post_image] ✅ Target uploaded to Supabase: {public_url}")
+            return public_url
+        else:
+            print(f"[create_post_image] ⚠️ Supabase upload failed ({resp.status_code}) — will use original URL")
+            return None
     except Exception as e:
-        print(f"[create_post_image] ⚠️ Failed to load ref image {path}: {e}")
+        print(f"[create_post_image] ⚠️ Supabase upload error: {e} — will use original URL")
         return None
 
 
-# ── Gemini 2.5 Flash Image via Vercel AI Gateway ─────────────────────────────
+# ── KIE AI Image-to-Image ─────────────────────────────────────────────────────
 
-_MODEL = "google/gemini-2.5-flash-image"
+def _kie_image_edit(target_url: str, editing_prompt: str) -> Image.Image | None:
+    """Edit a news photo using KIE AI GPT-Image-1.5.
 
-def _gpt_image_edit(img: Image.Image, editing_prompt: str) -> Image.Image | None:
-    """Edit a news photo using Gemini-2.5-Flash-Image via Vercel AI Gateway.
-
-    Uses /v1/chat/completions — Gemini 2.5 Flash Image is a multimodal LLM that
-    accepts image input AND generates image output.
-
+    Sends the target image plus BOTH THE ECHO reference images.
     Returns edited PIL image or None on failure.
     """
-    api_key = os.environ.get("AI_GATEWAY_API_KEY", "")
-    if not api_key or api_key in ("", "your_vercel_ai_gateway_key_here"):
-        print("[create_post_image] AI_GATEWAY_API_KEY not set -- skipping image edit.")
+    import time
+
+    api_key = os.environ.get("KIE_API_KEY", "")
+    if not api_key:
+        print("[create_post_image] KIE_API_KEY not set — skipping image edit.")
         return None
 
-    # Encode the reference photo as base64 JPEG (1024x1024)
-    img_sq = _square_crop(img, size=1024)
-    buf = io.BytesIO()
-    img_sq.save(buf, format="JPEG", quality=85)
-    b64_img = base64.b64encode(buf.getvalue()).decode()
-    print(f"[create_post_image] Reference image: {len(b64_img)//1024} KB (1024x1024 JPEG)")
+    # Target image first, then both reference images
+    input_urls = [target_url] + _REF_URLS
+    print(f"[create_post_image] KIE input: 1 target + {len(_REF_URLS)} reference images")
 
-    # ── Build multimodal content ────────────────────────────────────────────────
-    # Order: brand reference images FIRST (visual style guide)
-    #        then the news image to edit
-    #        then the editing instruction prompt
-    message_content: list[dict] = []
-
-    # 1. Attach brand reference images so editing model can copy The ECHO style
-    ref_instructions_added = False
-    for i, ref_path in enumerate(_REF_IMAGE_PATHS, 1):
-        ref_b64 = _load_ref_image_b64(ref_path)
-        if ref_b64:
-            if not ref_instructions_added:
-                message_content.append({
-                    "type": "text",
-                    "text": (
-                        "The following images are THE ECHO brand reference examples — "
-                        "study them to understand the EXACT layout, color scheme, overlay style, "
-                        "text placement, and brand identity you must reproduce:"
-                    )
-                })
-                ref_instructions_added = True
-            message_content.append({"type": "text", "text": f"ECHO Brand Reference Image {i}:"})
-            message_content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"},
-            })
-
-    # 2. Attach the news image to be edited
-    message_content.append({"type": "text", "text": "This is the NEWS IMAGE to edit (apply THE ECHO brand overlay to this):"})
-    message_content.append({
-        "type": "image_url",
-        "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"},
-    })
-
-    # 3. Editing instruction
-    message_content.append({"type": "text", "text": editing_prompt})
+    full_prompt = (
+        "TASK: Apply THE ECHO brand style from the reference images to the FIRST TARGET NEWS IMAGE.\n"
+        "CRITICAL: Keep the original photographic content of the TARGET NEWS IMAGE exactly as it is.\n"
+        "DO NOT blend or copy any photographic elements from the reference images into the target image.\n"
+        "ONLY apply the layout, typography, color overlays, and brand elements shown in the reference images.\n"
+        "EDITING INSTRUCTIONS:\n"
+        + editing_prompt
+    )
 
     payload = {
-        "model": _MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": message_content,
-            }
-        ],
-        "modalities": ["image", "text"],
+        "model": "gpt-image/1.5-image-to-image",
+        "input": {
+            "input_urls": input_urls,
+            "prompt": full_prompt,
+            "aspect_ratio": "1:1",
+            "quality": "medium",
+        }
     }
 
     try:
-        print(f"[create_post_image] Calling {_MODEL} via Vercel AI Gateway (chat/completions)...")
+        print("[create_post_image] Calling KIE AI API (createTask)...")
         resp = requests.post(
-            f"{_GATEWAY_BASE}/chat/completions",
+            "https://api.kie.ai/api/v1/jobs/createTask",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
             json=payload,
-            timeout=180,
+            timeout=60,
         )
-        print(f"[create_post_image] Gateway status: {resp.status_code}")
+        resp.raise_for_status()
+        data = resp.json()
 
-        # Save debug info
-        _OUTPUT_DIR.mkdir(exist_ok=True)
-        try:
-            debug = {"status_code": resp.status_code, "response": resp.text[:8000]}
-            (_OUTPUT_DIR / "gemini_debug.json").write_text(
-                json.dumps(debug, indent=2), encoding="utf-8"
-            )
-        except Exception:
-            pass
-
-        if not resp.ok:
-            print(f"[create_post_image] Error {resp.status_code}: {resp.text[:500]}")
+        if data.get("code") != 200:
+            print(f"[create_post_image] KIE API Error: {data}")
             return None
 
-        data = resp.json()
-        message = data["choices"][0]["message"]
+        task_id = data.get("data", {}).get("taskId")
+        if not task_id:
+            print("[create_post_image] No taskId returned.")
+            return None
 
-        # Vercel Gateway returns images in message.images array
-        images = message.get("images", [])
-        if images:
-            img_data = images[0]["image_url"]["url"]
-            _, encoded = img_data.split(",", 1)
-            print("[create_post_image] Got image from message.images")
-            return Image.open(io.BytesIO(base64.b64decode(encoded))).convert("RGB")
+        print(f"[create_post_image] KIE task created: {task_id}. Polling for completion...")
 
-        # Fallback: check content list for image_url parts
-        content = message.get("content", "")
-        if isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict) and part.get("type") == "image_url":
-                    img_data = part["image_url"]["url"]
-                    _, encoded = img_data.split(",", 1)
-                    print("[create_post_image] Got image from content array")
-                    return Image.open(io.BytesIO(base64.b64decode(encoded))).convert("RGB")
+        max_attempts = 120
+        for i in range(max_attempts):
+            time.sleep(3)
+            poll_resp = requests.get(
+                f"https://api.kie.ai/api/v1/jobs/recordInfo?taskId={task_id}",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=20,
+            )
+            poll_resp.raise_for_status()
+            poll_data = poll_resp.json()
 
-        print(f"[create_post_image] No image in response. Keys: {list(message.keys())}")
-        print(f"[create_post_image] Text response: {str(content)[:200]}")
+            if poll_data.get("code") != 200:
+                print(f"[create_post_image] KIE Poll Error: {poll_data}")
+                return None
+
+            state = poll_data.get("data", {}).get("state")
+            if state == "success":
+                result_str = poll_data.get("data", {}).get("resultJson", "{}")
+                result_json = json.loads(result_str)
+                result_urls = result_json.get("resultUrls", [])
+                if result_urls:
+                    final_url = result_urls[0]
+                    print(f"[create_post_image] KIE Success! Downloading from {final_url} (with retries)...")
+
+                    img_resp = None
+                    for attempt in range(3):
+                        try:
+                            img_resp = requests.get(final_url, timeout=60)
+                            img_resp.raise_for_status()
+                            break
+                        except Exception as e:
+                            print(f"[create_post_image] Download attempt {attempt+1} failed: {e}")
+                            if attempt < 2:
+                                time.sleep(2)
+                            else:
+                                raise e
+
+                    if img_resp and img_resp.ok:
+                        return Image.open(io.BytesIO(img_resp.content)).convert("RGB")
+
+                print(f"[create_post_image] KIE Success but no resultUrls or download failed: {result_str}")
+                return None
+
+            elif state == "fail":
+                fail_msg = poll_data.get("data", {}).get("failMsg", "Unknown failure")
+                print(f"[create_post_image] KIE Task Failed: {fail_msg}")
+                return None
+
+            print(f"[create_post_image] Task {task_id} state: {state} ... ({i+1}/{max_attempts})")
+
+        print(f"[create_post_image] Polling timed out for task {task_id}.")
         return None
 
     except Exception as e:
-        print(f"[create_post_image] Exception: {e}")
+        print(f"[create_post_image] KIE Exception: {e}")
         return None
 
 
-
-# ── PIL fallback (Removed) ───────────────────────────────────────────────────
-# ── main tool ─────────────────────────────────────────────────────────────────
+# ── Main Tool ─────────────────────────────────────────────────────────────────
 
 @tool(parse_docstring=True)
 def create_post_image_gemini(
@@ -266,56 +254,55 @@ def create_post_image_gemini(
     headline_text: str,
     editing_prompt: str,
 ) -> str:
-    """Edit the chosen news image using GPT-Image-1.5 and save as a social post.
+    """Edit the chosen news image using KIE AI and save as a social post.
 
-    Loads the full-resolution image from disk (downloaded earlier by view_candidate_images),
-    crops it to 1024×1024, and sends it to GPT-Image-1.5 via Vercel AI Gateway with
-    your detailed editing prompt (quality=medium, size=1024x1024).
+    Loads the full-resolution target image from disk, uploads it to Supabase Storage
+    (to avoid hotlink blocking), then calls KIE AI with the editing prompt and BOTH
+    THE ECHO reference images (ref1.png, ref2.png) as style guides.
 
-    Output saved as output/<headline-slug>-<timestamp>.jpg.
+    Output is saved as output/<headline-slug>-<timestamp>.jpg.
 
     Args:
         image_url: URL of the chosen image (used to look up the full-res file on disk).
-        headline_text: Short headline (max 10 words) — used for filename.
-        editing_prompt: Full creative editing instruction: layout name, kicker text,
-            headline text, spice/teaser line, exact colors, position, and watermark.
+        headline_text: Short headline (max 10 words) — used for filename generation.
+        editing_prompt: Full editing instruction JSON string from analyze_images_gemini.
 
     Returns:
-        Status message with the output path.
+        Absolute POSIX path to the saved output image.
     """
     _OUTPUT_DIR.mkdir(exist_ok=True)
     output_filename = _make_image_filename(headline_text)
     output_path = _OUTPUT_DIR / output_filename
 
-    # Load image (full-res from disk or download)
+    # Load target image (full-res from disk or download)
     try:
         source_img = _load_image(image_url)
         print(f"[create_post_image] Source image size: {source_img.size}")
     except Exception as e:
         return f"❌ Could not load image: {e}"
 
-    # Try GPT-Image-1.5 first
-    result_img = _gpt_image_edit(source_img, editing_prompt)
+    # Upload target to Supabase to get a reliable public URL for KIE AI
+    slug = re.sub(r"[^a-z0-9]+", "-", headline_text.lower())[:40].strip("-")
+    kie_target_url = _upload_target_to_supabase(source_img, slug) or image_url
+    print(f"[create_post_image] KIE AI target URL: {kie_target_url[:80]}...")
+    print(f"[create_post_image] KIE AI reference URLs: {_REF_URLS}")
+
+    # Call KIE AI
+    result_img = _kie_image_edit(kie_target_url, editing_prompt)
 
     if result_img is not None:
-        final = _square_crop(result_img, size=1024)
-        final.save(str(output_path), "JPEG", quality=92)
+        result_img.save(str(output_path), "JPEG", quality=92)
         _LATEST_IMAGE_FILE.write_text(str(output_path), encoding="utf-8")
-        return (
-            f"✅ Image saved to {output_path} ({final.size[0]}×{final.size[1]}) "
-            f"— GPT-Image-1.5 edit applied successfully."
-        )
+        absolute_posix_path = output_path.resolve().as_posix()
+        return absolute_posix_path
 
-    # Raw crop fallback
-    print("[create_post_image] ⚠️ Gemini edit failed — using raw 1024x1024 crop fallback.")
+    # Fallback: save raw target image
+    print("[create_post_image] ⚠️ KIE AI edit failed — using raw image fallback.")
+    base_name = output_path.stem
+    fallback_path = output_path.with_name(f"{base_name}-fallback.jpg")
     try:
-        final = _square_crop(source_img, size=1024)
-        final.save(str(output_path), "JPEG", quality=92)
-        _LATEST_IMAGE_FILE.write_text(str(output_path), encoding="utf-8")
-        return (
-            f"⚠️ Gemini edit failed — using raw square image as fallback.\n"
-            f"Image saved to {output_path} ({final.size[0]}×{final.size[1]}).\n"
-            f"Check output/gemini_debug.json to see the exact API error."
-        )
+        source_img.save(str(fallback_path), "JPEG", quality=92)
+        _LATEST_IMAGE_FILE.write_text(str(fallback_path), encoding="utf-8")
+        return fallback_path.resolve().as_posix()
     except Exception as e:
-        return f"❌ Both GPT-Image-1.5 and PIL failed: {e}. No image created."
+        return f"❌ Failed to save fallback image: {e}"

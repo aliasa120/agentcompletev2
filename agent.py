@@ -31,7 +31,7 @@ INSTRUCTIONS = MAIN_AGENT_INSTRUCTIONS.format(date=datetime.now().strftime("%Y-%
 
 # Model: configured via environment variables
 model = ChatOpenAI(
-    model="minimax/minimax-m2.5",
+    model="MiniMax-M2.5",
     api_key=os.environ.get("OPENAI_API_KEY"),
     base_url=os.environ.get("OPENAI_BASE_URL", "http://47.82.173.134:4000"),
     temperature=0.45,

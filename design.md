@@ -1,104 +1,303 @@
 # THE ECHO — Master Brand Design Guide
-
-## Brand Identity
-
-**Brand Name:** THE ECHO  
-**Website watermark:** `theecho.news.tv`  
+> Derived from direct visual analysis of official published cards. This guide supersedes all previous versions.
 
 ---
 
-## Official Color Palette
+## 1. Brand Identity
 
-| Role | Color Name | Hex | Usage |
+| Field | Value |
+|---|---|
+| **Brand Name** | THE ECHO |
+| **Website** | www.theecho.news.tv |
+| **Card Format** | Vertical / Portrait (approx. 1:1.2 ratio, e.g. 1080×1350px) |
+
+---
+
+## 2. Official Color Palette
+
+| Role | Color Name | Hex | Where Used |
 |---|---|---|---|
-| Primary / Top Header | Deep Teal | `#0E4D4A` | Top bar background, THE ECHO brand header bar |
-| Accent / Highlight | Mustard Gold | `#CBA052` | Category tags (#NEWS, #GLOBAL), key word highlights in headline |
-| Text Box Background | Deep Charcoal | `#1A1A1A` | Background behind text overlays for readability |
-| Primary Text | Pure White | `#FFFFFF` | Main headline text |
-| Secondary Text | Light Grey | `#E0E0E0` | Sub-headlines, teasers, supporting text |
-| Dark Card/Band | Soft Black | `#0D1F1E` | Dark bands, card backgrounds |
+| Header Background | Deep Teal | `#0D4D49` | Top header bar ONLY |
+| Accent / Highlight | Mustard Gold | `#C9A227` | Category pill BG, keyword highlights in headline, diagonal accent stripe |
+| Card Text Box Background | Pure White | `#FFFFFF` | Bottom text section background |
+| Primary Headline Text | Dark Navy-Teal | `#0E2D3A` | Main headline text on white box |
+| Logo & Category Label | Pure White | `#FFFFFF` | "THE ECHO" wordmark, "# NEWS" text inside pill |
+| Inset Border | Pure White | `#FFFFFF` | Thin frame running inside all card edges |
+
+> ⚠️ **CRITICAL:** The bottom text box is **WHITE**, not teal. Headline text is **dark on light**, not white on dark. This is the single most common mistake.
 
 ---
 
-## Typography
+## 3. Card Layout Structure (Top to Bottom)
 
-| Element | Font | Style |
+```
+┌─────────────────────────────────────────┐  ← Outer canvas edge
+│  ┌───────────────────────────────────┐  │  ← Thin white inset border (4–6px)
+│  │  ████████████████████████████████ │  │
+│  │       TEAL HEADER BAR             │  │  ← ~70–80px tall
+│  │   [🌐] THE ECHO                   │  │
+│  │  ████████████████████████████████ │  │
+│  │                                   │  │
+│  │  [# NEWS pill]                    │  │  ← Overlaid top-left of photo
+│  │                                   │  │
+│  │         FULL-WIDTH PHOTO          │  │  ← Main content image
+│  │                                   │  │
+│  │                                   │  │
+│  │  ┌─────────────────────────────┐  │  │
+│  │  │  WHITE TEXT BOX             │  │  │  ← Bottom section, white BG
+│  │  │                             │  │  │
+│  │  │  Headline text in dark navy │  │  │
+│  │  │  with GOLD keyword accents  │  │  │
+│  │  │                         ◢██ │  │  │  ← Gold diagonal accent (bottom-right)
+│  │  └─────────────────────────────┘  │  │
+│  └───────────────────────────────────┘  │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## 4. Zone-by-Zone Specifications
+
+### 4.1 — Outer Canvas & Inset Border
+- **Canvas size:** 1080×1350px (recommended for social media)
+- **White inset border:** 4–6px solid white line, inset ~8–10px from the true canvas edge
+- The border wraps the **entire card** — all four sides continuously
+- This border visually "frames" the card and separates it from any platform background
+
+---
+
+### 4.2 — Top Header Bar
+- **Background:** Solid Deep Teal `#0D4D49` — no gradient, no texture
+- **Height:** ~70–80px
+- **Left element:** Globe icon with soundwave bars on each side (white, ~30px)
+- **Logo text:** "THE ECHO" — bold, wide-tracked, clean sans-serif, pure white
+  - The "H" in "THE" and the "E"s in "ECHO" use a slightly stylized form (horizontal bars replaced with double-stroke or offset bars giving a distinctive typographic feel)
+- **Alignment:** Globe icon + "THE ECHO" are horizontally centered together in the bar
+
+---
+
+### 4.3 — Photo / Image Zone
+- **Width:** Fills 100% of the card width (edge to edge within the border)
+- **Height:** Approximately 55–60% of total card height
+- The photo has **no overlays, no gradients, no darkening vignettes**
+- The photo sits directly between the teal header above and white text box below
+
+---
+
+### 4.4 — Category Pill (Tag Badge)
+- **Position:** Top-left corner of the photo zone, flush or slightly offset from the left inset border
+- **Shape:** Rounded rectangle (pill), fully solid — no transparency
+- **Background:** Mustard Gold `#C9A227`
+- **Text:** e.g. `# NEWS`, `# ENV`, `# BREAKING` — bold, white, uppercase sans-serif
+- **Size:** ~120–140px wide × ~36–42px tall
+- **Placement:** Overlaid on top of the photo (not in the teal header, not in the white box)
+
+---
+
+### 4.5 — White Text Box (Bottom Section)
+- **Background:** Pure White `#FFFFFF` — solid, no shadow, no rounded top corners
+- **Height:** ~35–40% of total card height
+- **Edge meeting photo:** Clean hard horizontal edge (no rounded corners at the photo join)
+- **Padding:** ~20–28px on all sides
+- **Content:** Headline only (no sub-headline, no URL in the base card format)
+
+#### Headline Typography
+| Property | Value |
+|---|---|
+| Font style | Bold Serif (e.g., Playfair Display Bold, Georgia Bold) |
+| Base text color | Dark Navy-Teal `#0E2D3A` |
+| Highlight color | Mustard Gold `#C9A227` |
+| Alignment | Center-aligned |
+| Size | ~40–52px (scales to fit 2–4 lines) |
+| Line height | ~1.2–1.3 |
+
+- **Highlighting rule:** 2–4 most impactful/emotional words are switched to Mustard Gold. All other words stay Dark Navy-Teal.
+- Example: `Stargazers to watch` *(dark)* `'Blood Moon'` *(gold)* `rising tonight during Lunar Eclipse` *(dark)*
+
+---
+
+### 4.6 — Gold Diagonal Accent Strip
+- **Position:** Bottom-right corner of the white text box
+- **Shape:** A solid Mustard Gold `#C9A227` diagonal slash / parallelogram strip
+- **Size:** Roughly 80–120px wide × full text box height, cropped by the card border
+- **Angle:** ~45° diagonal, cut into the bottom-right corner
+- This is a **purely decorative geometric accent** — it adds visual tension and brand character
+- It sits **behind** the text but **within** the white box layer
+
+---
+
+## 5. Typography System
+
+| Element | Font | Weight | Color | Size |
+|---|---|---|---|---|
+| Logo "THE ECHO" | Stylized Sans-Serif (custom or Montserrat ExtraBold) | Extra Bold | White | ~28–32px |
+| Category Pill | Clean Sans-Serif (e.g. Montserrat Bold) | Bold | White | ~14–16px |
+| Headline — base | Serif (Playfair Display / Georgia) | Bold | Dark Navy-Teal | ~40–52px |
+| Headline — keywords | Serif (same as above) | Bold | Mustard Gold | ~40–52px |
+
+---
+
+## 6. What This Design Is NOT
+
+These are explicit violations of the brand style — **never do these:**
+
+| ❌ Wrong | ✅ Correct |
+|---|---|
+| Dark teal or colored bottom text box | Pure white bottom text box |
+| White headline text | Dark navy-teal headline text |
+| Solid black footer bar | No black footer bar in base card |
+| Gradient or semi-transparent overlays on the photo | Clean, unmodified photo — no overlays |
+| Gold text on white box (non-keyword) | Dark navy base text; gold on selected keywords only |
+| Category pill in gold text on transparent BG | Solid gold pill background with white text |
+| Gemini/AI watermark logo | No watermarks of any kind |
+| Large empty side margins | Full-width photo and elements — tight, edge-to-edge layout |
+| Rounded corners on white text box top | Hard straight edge at photo-to-textbox join |
+| Teal gradient instead of solid teal header | Flat, solid teal — no gradients anywhere |
+
+---
+
+## 7. Card Variants
+
+| Variant | Difference from base |
+|---|---|
+| **Breaking News** | Category pill reads `# BREAKING` — same gold pill |
+| **Environment** | Category pill reads `# ENV` |
+| **Politics** | Category pill reads `# POL` |
+| **Extended card (with sub-headline)** | White box grows taller; sub-headline in regular sans-serif dark navy below main headline |
+| **Extended card (with URL footer)** | A thin black bar `#000000` added below white box; URL `www.theecho.news.tv` in small white sans-serif, centered |
+
+---
+
+## 8. Spacing & Proportions (1080×1350px Reference)
+
+| Zone | Height (px) | % of Card |
 |---|---|---|
-| Brand Name / Category Tags | Montserrat or Roboto | Bold, Sans-Serif — modern and clean |
-| Main Headlines | Playfair Display or PT Serif | Bold, Serif — high authority, established newspaper feel |
+| Inset border (top) | ~10px | — |
+| Teal Header Bar | ~75px | ~5.5% |
+| Photo Zone | ~780px | ~58% |
+| White Text Box | ~460px | ~34% |
+| Inset border (bottom) | ~10px | — |
 
 ---
 
-## Layout Rules (Required in Every Design)
+## 9. Design Philosophy
 
-1. **Top Header Bar:** Solid Deep Teal `#0E4D4A` bar at the top containing "THE ECHO" wordmark/logo — white text on teal background. Always top-left.
-2. **Category Tag:** Small Mustard Gold `#CBA052` tag above the headline — e.g. `# NEWS`, `# GLOBAL`, `# EXCLUSIVE`, `# BREAKING`. Montserrat Bold.
-3. **Text Box:** Deep Charcoal `#1A1A1A` background behind headline text blocks for maximum readability.
-4. **Watermark:** `theecho.news.tv` bottom-right corner, small Mustard Gold `#CBA052` text.
+> THE ECHO is a **premium editorial news brand**. Its visual identity borrows from classic newspaper authority (serif fonts, strong contrast, structured layout) while feeling modern and social-media native. The teal-and-gold palette signals **credibility with sophistication**. The white text box on a dark-photo background creates a clean, high-contrast reading zone that works at thumbnail size. The gold diagonal accent injects geometric energy without compromising the overall restraint.
 
----
-
-## ⚠️ CRITICAL DESIGN NOTE FOR AI
-
-You CANNOT hallucinate or invent the brand design. Two reference images of THE ECHO's actual published posts are attached alongside this document. 
-
-**You MUST:**
-- Study these reference images carefully FIRST before selecting any candidate image or writing any prompt.
-- Base ALL design decisions on what you observe in those reference images — the real color application, text placement, overlay style, and layout.
-- The reference images are your ground truth. The guidelines here describe them in text, but the images show exactly how everything actually looks in practice.
-- When writing an editing_prompt, explicitly instruct the editing model to "reproduce the layout shown in the attached THE ECHO brand reference images" so the editing model also has visual guidance.
+**Core principles:**
+1. **Solid blocks over gradients** — every color zone is flat and decisive
+2. **Dark text on light background** in the text zone — maximum readability
+3. **One decorative accent** (the diagonal strip) — discipline over decoration
+4. **Photo speaks first** — no overlays, no text in the photo zone except the category pill
+5. **Mustard gold as the voice** — used sparingly so it always draws the eye
 
 ---
 
-## News-Type → Style Selection Guide
+## 10. JSON Version of This Guide
 
-| News Type | THE ECHO Style | Key Visual Feel |
-|---|---|---|
-| Breaking / Hard News | **Style 1 — Gritty Ground-Level** | Real photo dominant, deep teal gradient overlay on bottom 30%, white serif headline on image, mustard gold category tag |
-| Quote / Interview / Controversy | **Style 2 — Portrait Gradient** | Close-up face photo, dark `#0D1F1E` gradient fills bottom 40%, bold sans-serif headline in white, key words in mustard gold |
-| Feature / Natural / Science | **Style 3 — Clean Container** | Wide cinematic shot, clean white/teal rounded text block at bottom, teal `#0E4D4A` left accent bar, high readability |
-| Tabloid / Opinion / Geo-political Drama | **Style 4 — Composite Dramatic** | Multiple image layers, bold all-caps white headline, mustard gold word highlights, distressed textures, high contrast |
-| Tech / Environment / Niche Brand | **Style 5 — Cinematic Branded** | Dramatic aerial or sunset photo, solid black text block at bottom 28%, teal single vertical accent bar on left edge |
-| Disaster / Grief / Humanitarian | **Style 6 — Immersive Dark Band** | Teal/dark band at top (25%) + bottom (25%), photo fills middle 50%, white serif centered headline — sombre and respectful |
-
----
-
-## THE ECHO Styles — Full Specifications
-
-### Style 1 — Gritty Ground-Level
-Ground-level photo fills frame. Deep Teal `#0E4D4A` gradient overlay covering bottom 30%, fading upward into transparency. Bold white serif headline (Playfair Display / PT Serif) in the overlay. Mustard Gold `#CBA052` category badge above headline. THE ECHO wordmark in Deep Teal bar at top-left. Watermark `theecho.news.tv` bottom-right in small mustard text.
-
-### Style 2 — Portrait Gradient
-Close-up portrait photo. Dark `#0D1F1E` gradient fills bottom 40%. Bold sans-serif (Montserrat/Roboto) headline in white; key words highlighted in Mustard Gold `#CBA052`. Category tag above headline. THE ECHO badge top-left on teal bar. Watermark bottom-right.
-
-### Style 3 — Clean Container
-Wide or cinematic photo. Clean rounded charcoal/white text block at bottom — a card, not a full gradient overlay. Dark `#1A1A1A` or teal `#0E4D4A` headline inside the card. Teal `#0E4D4A` left accent bar on the card. Very readable. THE ECHO badge integrated into the card. Watermark inside card bottom-right area.
-
-### Style 4 — Composite Dramatic
-Multiple overlaid images or textures. Photo-montage feel. Bold all-caps white headline; key words in Mustard Gold `#CBA052`. Distressed or flag textures in background. High-contrast tabloid energy. THE ECHO badge top-left on teal bar. Watermark bottom-right.
-
-### Style 5 — Cinematic Branded
-One dramatic high-angle or sunset photo. Solid Deep Charcoal `#1A1A1A` text block at bottom 28% (clean rectangle — not gradient). Teal `#0E4D4A` single vertical accent bar on left edge of block. White Montserrat Bold headline inside block. Mustard Gold `#CBA052` category tag above headline inside block. THE ECHO badge in block top-left area. Watermark bottom-right.
-
-### Style 6 — Immersive Dark Band
-Solid Deep Teal `#0E4D4A` or Dark `#0D1F1E` band at top (25%) + bottom band (25%). Photo fills middle 50%. Bold white serif headline centered in bottom band. No visual clutter — sombre and respectful. `URGENT` or `BREAKING` category tag in Mustard Gold in top band. THE ECHO badge in top-band left. Watermark in bottom-band right.
-
----
-
-## Text Layers (Required in Every Editing Prompt)
-
-1. **CATEGORY TAG / KICKER** — 2-4 words, small caps or bold sans-serif, Mustard Gold `#CBA052`. E.g. `# BREAKING NEWS`, `# COURT RULING`, `# EXCLUSIVE`, `# DEVELOPING`, `# GLOBAL`, `# URGENT`
-2. **HEADLINE** — Bold, large, serif feel (Playfair Display or PT Serif). Max 10 words. Hook line adapted from the X (Twitter) post text.
-3. **SPICE LINE / TEASER** — Smaller italic text below headline. One compelling sentence, max 15 words. Intriguing — not a repeat of the headline. Light Grey `#E0E0E0` color.
-
----
-
-## Editing Prompt Rules
-
-- Always reference THE ECHO style number and name at the start of the prompt.
-- Explicitly tell the editing model: "Refer to the attached THE ECHO brand reference images to replicate the exact layout, overlay style, and text placement."
-- Reference exact image zones for text placement (e.g. "top-left 40% sky area", "avoid face in center-right").
-- Specify exact overlay position and size.
-- Include all three text layers with exact wording.
-- Specify exact color hex codes in the prompt: `#0E4D4A`, `#CBA052`, `#1A1A1A`, `#FFFFFF`, `#E0E0E0`.
-- Always end the prompt with: `"Preserve original photo quality, sharpness and colors exactly — only add overlay and text. Do not upscale, blur, or re-compress."`
+```json
+{
+  "brand": {
+    "name": "THE ECHO",
+    "url": "www.theecho.news.tv",
+    "canvas": { "width": 1080, "height": 1350, "unit": "px" }
+  },
+  "colors": {
+    "deep_teal": "#0D4D49",
+    "mustard_gold": "#C9A227",
+    "pure_white": "#FFFFFF",
+    "dark_navy_text": "#0E2D3A",
+    "pure_black": "#000000"
+  },
+  "layout_zones": {
+    "inset_border": {
+      "color": "#FFFFFF",
+      "thickness_px": 5,
+      "inset_from_edge_px": 9
+    },
+    "header_bar": {
+      "background": "#0D4D49",
+      "height_px": 75,
+      "elements": ["globe_soundwave_icon", "THE_ECHO_wordmark"],
+      "alignment": "center"
+    },
+    "photo_zone": {
+      "width": "100%",
+      "height_percent": 58,
+      "overlays": "none",
+      "gradients": "none"
+    },
+    "category_pill": {
+      "position": "top_left_of_photo",
+      "background": "#C9A227",
+      "text_color": "#FFFFFF",
+      "shape": "rounded_rectangle",
+      "examples": ["# NEWS", "# ENV", "# BREAKING", "# POL"]
+    },
+    "white_text_box": {
+      "background": "#FFFFFF",
+      "height_percent": 34,
+      "top_edge": "straight",
+      "padding_px": 24,
+      "accent": {
+        "type": "diagonal_strip",
+        "position": "bottom_right_corner",
+        "color": "#C9A227",
+        "angle_degrees": 45
+      }
+    },
+    "black_footer": {
+      "present_in_base_card": false,
+      "note": "Only in extended URL variant",
+      "background": "#000000",
+      "content": "www.theecho.news.tv",
+      "text_color": "#FFFFFF"
+    }
+  },
+  "typography": {
+    "logo": {
+      "style": "stylized_extra_bold_sans_serif",
+      "color": "#FFFFFF",
+      "size_px": 30
+    },
+    "category_pill": {
+      "style": "bold_sans_serif",
+      "color": "#FFFFFF",
+      "size_px": 15
+    },
+    "headline": {
+      "style": "bold_serif",
+      "suggested_fonts": ["Playfair Display Bold", "Georgia Bold"],
+      "base_color": "#0E2D3A",
+      "keyword_highlight_color": "#C9A227",
+      "highlight_word_count": "2-4 most impactful words",
+      "alignment": "center",
+      "size_px": 44,
+      "line_height": 1.25
+    }
+  },
+  "design_rules": {
+    "never_do": [
+      "teal or colored bottom text box",
+      "white headline text on white box",
+      "black footer bar in base card",
+      "photo overlays or gradients",
+      "gold text on white background (non-keyword)",
+      "transparent category pill",
+      "AI watermarks",
+      "large empty side margins",
+      "rounded top corners on white text box",
+      "gradients in teal header"
+    ],
+    "always_do": [
+      "white text box for bottom section",
+      "dark navy-teal as headline base color",
+      "mustard gold for 2-4 keyword highlights",
+      "solid flat teal header",
+      "full-width unmodified photo",
+      "gold diagonal accent in bottom-right corner of text box",
+      "thin white inset border around entire card"
+    ]
+  }
+}
+```

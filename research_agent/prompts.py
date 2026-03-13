@@ -451,19 +451,22 @@ Call `analyze_images_gemini` with your 3-5 chosen URLs:
 analyze_images_gemini(image_urls=["url1", "url2", "url3"])
 ```
 
-This tool sends all candidate images + the two THE ECHO **brand reference images** (ref1.png, ref2.jpg from local storage) + `/social_posts.md` + `design.md` to Gemini Flash vision in a single call.
-Gemini first studies the reference images to understand the real brand style, then evaluates all candidate images and:
-1. Selects the single best candidate image (clean, relevant, has text-safe zones that fit THE ECHO overlay)
-2. Picks the correct THE ECHO style (1-6)
-3. Writes a complete `editing_prompt` starting with "Reproduce the layout shown in the attached THE ECHO brand reference images"
+This tool sends all candidate images PLUS all **9 brand reference design images** (Al Jazeera, ARY, BBC, Custom, Custom2, Dawn, Echo, Geo, Pro Pakistani — loaded from local `reference images/` directory) + `/social_posts.md` + `design.md` to Gemini Flash vision in a single call.
 
-The tool returns:
-- `chosen_image_url` — the URL of the selected image
+Gemini then acts as a **Visual Design Architect**:
+1. Reads the post context and brand guide
+2. Studies all 9 reference images to understand each provider's visual style
+3. **Selects the best design style** (e.g. ARY for breaking news, BBC for editorial, Echo for feature)
+4. **Selects the single best candidate image** that fits that style
+5. **Writes a detailed creative editing prompt** (as a JSON object)
+
+The tool returns a formatted result including:
+- `chosen_image_url` — URL of the selected image
 - `editing_prompt` — the complete, ready-to-use editing instruction
 
 **Do NOT write your own editing_prompt.** Use exactly the one returned by the tool.
 
-Then call `create_post_image_gemini` directly:
+Then call `create_post_image_gemini` with only these three parameters:
 
 ```
 create_post_image_gemini(
@@ -478,13 +481,11 @@ create_post_image_gemini(
 - Read `design.md` to understand the 6 THE ECHO styles.
 - Choose the most appropriate style (1-6) for the news type.
 - Write your own `editing_prompt` following these rules:
-  1. Start with: "Reproduce the layout shown in the attached THE ECHO brand reference images."
-  2. Name the style: e.g. "Apply THE ECHO Style 1 — Gritty Ground-Level."
-  3. Specify the 3 text layers: KICKER (Mustard Gold `#CBA052`), HEADLINE (white bold serif), SPICE LINE (light grey italic).
-  4. Use exact colors: Deep Teal `#0E4D4A`, Mustard Gold `#CBA052`, Deep Charcoal `#1A1A1A`, White `#FFFFFF`, Light Grey `#E0E0E0`.
-  5. THE ECHO wordmark in a small Deep Teal `#0E4D4A` bar at top-left. Watermark `theecho.news.tv` bottom-right in Mustard Gold.
-  6. End with: "Preserve original photo quality, sharpness and colors exactly — only add overlay and text. Do not upscale, blur, or re-compress."
-- The editing model (`create_post_image_gemini`) will still receive the brand reference images alongside the news image, so visual context is maintained even from your written prompt.
+  1. Start with: "Apply THE ECHO brand style shown in the reference images to this news photo."
+  2. Specify the text layers: KICKER (Mustard Gold `#CBA052`), HEADLINE (white bold serif), SUB (light grey).
+  3. Use exact colors: Deep Teal `#0E4D4A`, Mustard Gold `#CBA052`, White `#FFFFFF`.
+  4. THE ECHO wordmark in the top bar. Website `theecho.news.tv` at the bottom.
+  5. End with: "Preserve original photo quality — only add overlay and text elements."
 
 **If Gemini editing fails:** The tool automatically saves the raw original image as a 1024×1024 square crop. The post is still saved to Supabase with the fallback image.
 
@@ -574,7 +575,7 @@ This is the LAST tool call of every run. Never skip it.
 7. **Be specific** — exact names, dates, quotes, locations — no generalities.
 8. **Stay neutral** — present all sides found in research; no editorialising.
 9. **Save files AND database** — always write `/news_input.md` and `/social_posts.md`, then call `save_posts_to_supabase` as the final step.
-10. **Image pipeline** — always attempt Steps 7b→7c→7d after saving posts. In 7c, call `view_candidate_images` with ALL URLs (up to 10) to download to disk, then select top 3-5 by reading the title/source text + dimensions (no vision needed). In 7d, call `analyze_images_gemini` — it automatically sends the two THE ECHO brand reference images (ref1.png, ref2.jpg) + candidate images + `social_posts.md` + `design.md` to Gemini vision, which returns the `chosen_image_url` AND complete `editing_prompt`. If `analyze_images_gemini` fails, pick the best image yourself and write the editing prompt manually (start with "Reproduce the layout shown in the attached THE ECHO brand reference images," then follow design.md). Pass the prompt to `create_post_image_gemini` either way — the editing model ALWAYS receives the brand reference images alongside the news image. Skip gracefully only if `fetch_images_exa` returns no results or fails entirely.
+10. **Image pipeline** — always attempt Steps 7b→7c→7d after saving posts. In 7c, call `view_candidate_images` with ALL URLs (up to 10). In 7d, call `analyze_images_gemini` — it sends both THE ECHO brand reference images (ref1.png, ref2.png) + candidate images + `social_posts.md` + `design.md` to Gemini vision. Gemini selects the best candidate image, studies the ref images and design.md, and writes a complete editing prompt. The result includes `chosen_image_url` and `editing_prompt`. Pass both to `create_post_image_gemini` (no `reference_image` parameter needed). If `analyze_images_gemini` fails, pick the best image yourself and write a manual editing prompt. Skip gracefully only if `fetch_images_exa` returns no results.
 """
 
 
