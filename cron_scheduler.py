@@ -24,6 +24,12 @@ import requests
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
+# ── Publish failure tracker ──────────────────────────────────────────────────
+# Tracks consecutive failures per (post_id, platform) in memory.
+# After _MAX_PUBLISH_ATTEMPTS failures, the platform is marked "failed" in DB.
+_publish_failures: dict = {}   # {post_id: {platform: int}}
+_MAX_PUBLISH_ATTEMPTS = 3
+
 # ── Load env ────────────────────────────────────────────────────────────────
 load_dotenv()           # root .env
 load_dotenv("deep-agents-ui-main/.env.local", override=False)   # frontend .env
@@ -111,6 +117,25 @@ def _strip_html(text: str) -> str:
     return clean.strip()
 
 
+# ── Retry helper ─────────────────────────────────────────────────────────────
+def _retry(fn, max_attempts: int = 3, wait_seconds: int = 10, label: str = ""):
+    """Call fn() up to max_attempts times, waiting wait_seconds between attempts.
+    Returns the result on success, or raises the last exception.
+    """
+    last_exc: Exception = RuntimeError("_retry: no attempts made")
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return fn()
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_attempts:
+                log.warning(f"{'[' + label + '] ' if label else ''}Attempt {attempt}/{max_attempts} failed: {exc} — retrying in {wait_seconds}s...")
+                time.sleep(wait_seconds)
+            else:
+                log.error(f"{'[' + label + '] ' if label else ''}All {max_attempts} attempts failed: {exc}")
+    raise last_exc
+
+
 # ── Feeder trigger ───────────────────────────────────────────────────────────
 def check_feeder() -> None:
     try:
@@ -131,15 +156,16 @@ def check_feeder() -> None:
             log.info(f"⏰ FEEDER trigger due (elapsed={elapsed/60:.1f}min, interval={interval_min}min) — firing...")
             # Save timestamp FIRST to prevent double-fire
             _sb_upsert("feeder_settings", [{"key": "feeder_last_trigger_at", "value": run_time, "updated_at": run_time}])
-            # Call feeder HTTP server (synchronous OK here — runs in background thread)
+            # CON-6: Retry feeder HTTP call up to 3 times with 10s waits
             try:
-                resp = requests.post(f"{FEEDER_URL}/run", json={}, timeout=310)
-                if resp.ok:
-                    log.info("✅ Feeder pipeline completed successfully.")
-                else:
-                    log.warning(f"❌ Feeder pipeline returned {resp.status_code}: {resp.text[:200]}")
+                def _call_feeder():
+                    resp = requests.post(f"{FEEDER_URL}/run", json={}, timeout=310)
+                    resp.raise_for_status()
+                    return resp
+                resp = _retry(_call_feeder, max_attempts=3, wait_seconds=10, label="Feeder")
+                log.info("✅ Feeder pipeline completed successfully.")
             except Exception as e:
-                log.error(f"❌ Feeder HTTP call failed: {e}")
+                log.error(f"❌ Feeder HTTP call failed after 3 attempts: {e}")
         else:
             remaining = interval_sec - elapsed
             log.info(f"Feeder: next run in {remaining/60:.1f}min (interval={interval_min}min)")
@@ -230,23 +256,27 @@ def check_agent() -> None:
             except Exception as e:
                 log.warning(f"Could not fetch assistants — using fallback 'research': {e}")
 
-            # Create one LangGraph run per article
+            # Create one LangGraph run per article (Retry 1: 3 attempts, 10s wait)
             for article in pending:
                 try:
-                    thread_id = _lg_create_thread()
-                    # Match page.tsx format: strip HTML, no URL
                     clean_title = _strip_html(article.get('title', ''))
                     clean_desc  = _strip_html(article.get('description', ''))
                     content = f"Title: {clean_title}\nDescription: {clean_desc}"
-                    _lg_create_run(thread_id, assistant_id, content)
+
+                    def _create_run_for_article():
+                        tid = _lg_create_thread()
+                        _lg_create_run(tid, assistant_id, content)
+                        return tid
+
+                    thread_id = _retry(_create_run_for_article, max_attempts=3, wait_seconds=10, label=f"Agent:{clean_title[:40]}")
                     log.info(f"  ✅ Created run for article: {clean_title[:60]}")
                 except Exception as e:
-                    # Revert article to Pending so it can be retried
+                    # Revert article to Pending so it can be retried on next cron tick
                     try:
                         _sb_patch("feeder_articles", f"id=eq.{article['id']}", {"status": "Pending"})
                     except Exception:
                         pass
-                    log.error(f"  ❌ Failed to create run for article {article['id']}: {e}")
+                    log.error(f"  ❌ Failed to create run for article {article['id']} after 3 attempts: {e}")
 
         else:
             remaining = interval_sec - elapsed
@@ -321,10 +351,11 @@ def check_auto_publish() -> None:
                 except Exception:
                     published_to = {}
 
-            # Find platforms that are enabled but NOT yet successfully published
+            # Skip: already succeeded (True) OR permanently failed ("failed" string)
             pending_platforms = [
                 p for p in enabled_platforms
-                if not published_to.get(p, False)
+                if published_to.get(p) is not True
+                and published_to.get(p) != "failed"
             ]
             if pending_platforms:
                 publish_candidates.append((post, pending_platforms))
@@ -336,26 +367,65 @@ def check_auto_publish() -> None:
 
         for post, platforms in publish_candidates:
             post_id = post.get("id", "?")
-            for platform in platforms:
+            published_to = post.get("published_to") or {}
+            if isinstance(published_to, str):
                 try:
-                    payload = {
-                        "postId": post_id,
-                        "platform": platform,
-                    }
-                    resp = requests.post(
-                        f"{NEXT_URL}/api/publish",
-                        json=payload,
-                        headers={"Content-Type": "application/json"},
-                        timeout=60,
-                    )
-                    if resp.ok:
-                        log.info(f"  ✅ Published post {post_id} → {platform}")
-                    else:
-                        # Log the failure but do NOT retry — post must be manually reposted
-                        err = resp.json().get("error", resp.text[:200]) if resp.content else f"HTTP {resp.status_code}"
-                        log.warning(f"  ❌ Failed to publish post {post_id} → {platform}: {err}")
-                except Exception as e:
-                    log.error(f"  ❌ Exception publishing post {post_id} → {platform}: {e}")
+                    published_to = json.loads(published_to)
+                except Exception:
+                    published_to = {}
+
+            # Send ALL pending platforms in ONE batch request
+            try:
+                payload = {
+                    "post_id": post_id,
+                    "platforms": platforms,
+                }
+                resp = requests.post(
+                    f"{NEXT_URL}/api/publish",
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=120,
+                )
+                if resp.ok:
+                    data = resp.json()
+                    results = data.get("results", {})
+                    for platform, result in results.items():
+                        if result.get("success"):
+                            log.info(f"  ✅ Published post {post_id} → {platform}")
+                            # Reset failure count on success
+                            _publish_failures.get(post_id, {}).pop(platform, None)
+                        else:
+                            err_msg = result.get("error", "unknown error")
+                            # Increment failure counter
+                            if post_id not in _publish_failures:
+                                _publish_failures[post_id] = {}
+                            fail_count = _publish_failures[post_id].get(platform, 0) + 1
+                            _publish_failures[post_id][platform] = fail_count
+
+                            if fail_count >= _MAX_PUBLISH_ATTEMPTS:
+                                log.error(
+                                    f"  🚫 post {post_id} → {platform}: "
+                                    f"{_MAX_PUBLISH_ATTEMPTS} attempts all failed — marking as FAILED permanently."
+                                    f" Last error: {err_msg}"
+                                )
+                                # Write "failed" marker to Supabase so cron never retries
+                                try:
+                                    merged = {**published_to, platform: "failed"}
+                                    _sb_patch("social_posts", f"id=eq.{post_id}", {"published_to": merged})
+                                    # Update local copy so the next platform in same loop is accurate
+                                    published_to = merged
+                                except Exception as db_err:
+                                    log.error(f"  Could not write failed marker to DB: {db_err}")
+                            else:
+                                log.warning(
+                                    f"  ❌ post {post_id} → {platform} "
+                                    f"(attempt {fail_count}/{_MAX_PUBLISH_ATTEMPTS}): {err_msg}"
+                                )
+                else:
+                    err = resp.json().get("error", resp.text[:200]) if resp.content else f"HTTP {resp.status_code}"
+                    log.warning(f"  ❌ Publish request failed for post {post_id}: {err}")
+            except Exception as e:
+                log.error(f"  ❌ Exception publishing post {post_id}: {e}")
 
     except Exception as e:
         log.error(f"check_auto_publish error: {e}")

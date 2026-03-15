@@ -131,6 +131,7 @@ def _kie_image_edit(target_url: str, editing_prompt: str) -> Image.Image | None:
     """Edit a news photo using KIE AI GPT-Image-1.5.
 
     Sends the target image plus BOTH THE ECHO reference images.
+    Retries createTask once (2 total attempts, 10s wait) on any error.
     Returns edited PIL image or None on failure.
     """
     import time
@@ -164,29 +165,43 @@ def _kie_image_edit(target_url: str, editing_prompt: str) -> Image.Image | None:
     }
 
     try:
-        print("[create_post_image] Calling KIE AI API (createTask)...")
-        resp = requests.post(
-            "https://api.kie.ai/api/v1/jobs/createTask",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=60,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        # Retry 2: attempt createTask up to 2 times with 10s wait
+        task_id = None
+        for create_attempt in range(1, 3):
+            try:
+                print(f"[create_post_image] Calling KIE AI API (createTask) attempt {create_attempt}/2...")
+                resp = requests.post(
+                    "https://api.kie.ai/api/v1/jobs/createTask",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=60,
+                )
+                resp.raise_for_status()
+                data = resp.json()
 
-        if data.get("code") != 200:
-            print(f"[create_post_image] KIE API Error: {data}")
-            return None
+                if data.get("code") != 200:
+                    raise RuntimeError(f"KIE API returned code {data.get('code')}: {data}")
 
-        task_id = data.get("data", {}).get("taskId")
-        if not task_id:
-            print("[create_post_image] No taskId returned.")
-            return None
+                task_id = data.get("data", {}).get("taskId")
+                if not task_id:
+                    raise RuntimeError("No taskId returned from KIE API")
 
-        print(f"[create_post_image] KIE task created: {task_id}. Polling for completion...")
+                print(f"[create_post_image] KIE task created: {task_id}")
+                break  # success — stop retrying
+
+            except Exception as e:
+                print(f"[create_post_image] createTask attempt {create_attempt}/2 failed: {e}")
+                if create_attempt < 2:
+                    print("[create_post_image] Waiting 10s before retry...")
+                    time.sleep(10)
+                else:
+                    print("[create_post_image] KIE createTask failed after 2 attempts — falling back to raw image.")
+                    return None
+
+        print(f"[create_post_image] Polling for completion (task {task_id})...")
 
         max_attempts = 120
         for i in range(max_attempts):

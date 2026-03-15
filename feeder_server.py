@@ -9,7 +9,7 @@ import json
 import os
 import subprocess
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -58,13 +58,21 @@ class FeederHandler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(body)
-
         elif self.path == "/health":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(b'{"status":"ok"}')
+        else:
+            self.send_response(404)
+            self.end_headers()
 
+    def do_GET(self):
+        if self.path == "/health":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok"}')
         else:
             self.send_response(404)
             self.end_headers()
@@ -72,7 +80,7 @@ class FeederHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
         self.end_headers()
 
     def log_message(self, format, *args):
@@ -83,7 +91,7 @@ class FeederHandler(BaseHTTPRequestHandler):
 # Entry point
 # ---------------------------------------------------------------------------
 def run():
-    server = HTTPServer(("0.0.0.0", 8080), FeederHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", 8080), FeederHandler)
     print("✅ Feeder HTTP server running on port 8080 (scheduling handled by cron_scheduler.py)", flush=True)
     server.serve_forever()
 

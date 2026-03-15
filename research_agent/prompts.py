@@ -569,6 +569,8 @@ This is the LAST tool call of every run. Never skip it.
 1. **Search yourself** — call `linkup_search` directly; never delegate.
 2. **Use `think_tool` after every search AND after every extract** — no exceptions.
 3. **Budget:** maximum 3 `linkup_search` calls + 3 `tavily_extract` calls; exit early when all targets are complete.
+3b. **Search fallback** — if `linkup_search` returns an error or empty result, call `parallel_search` with the SAME query string as a one-time retry. Do not count the fallback call against your 3-search budget.
+3c. **Extract fallback** — if `tavily_extract` returns thin content (fewer than 3 sentences) AND you have no more candidate URLs to retry, call `exa_extract` with the same URLs as a one-time fallback. Do not count it against your tavily budget.
 4. **Reactive queries** — do not pre-plan all 3 search queries upfront; write each query *after* seeing the previous round's results, targeting exactly what is still missing.
 5. **Extract wisely** — only call `tavily_extract` when a target is Partially Complete and a credible URL's snippet already hints at the answer; max 2 URLs per call.
 6. **Cite every fact** — use `[1]`, `[2]`, `[3]` inline citations.
