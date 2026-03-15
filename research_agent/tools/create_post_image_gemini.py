@@ -23,10 +23,11 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-
-_OUTPUT_DIR       = Path("output")
-_MANIFEST_FILE    = Path("output") / "candidate_images" / "manifest.json"
-_LATEST_IMAGE_FILE = Path("output") / "latest_image_path.txt"
+# Use absolute paths anchored to the repo root so they work in Docker/LangGraph
+_REPO_ROOT         = Path(__file__).resolve().parents[2]   # research_agent/tools/ -> repo root
+_OUTPUT_DIR        = _REPO_ROOT / "output"
+_MANIFEST_FILE     = _OUTPUT_DIR / "candidate_images" / "manifest.json"
+_LATEST_IMAGE_FILE = _OUTPUT_DIR / "latest_image_path.txt"
 
 # THE ECHO brand reference images — served from Cloudflare R2
 _R2_BASE = "https://pub-61765db165154158829d1ed1ff18c3e0.r2.dev/ref%20images"

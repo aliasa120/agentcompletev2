@@ -478,23 +478,30 @@ create_post_image_gemini(
 
 **If `analyze_images_gemini` fails** (Gemini vision error or no valid JSON returned):
 - Pick the best candidate image yourself based on text metadata and source quality.
-- Read `design.md` to understand the 6 THE ECHO styles.
-- Choose the most appropriate style (1-6) for the news type.
-- Write your own `editing_prompt` following these rules:
-  1. Start with: "Apply THE ECHO brand style shown in the reference images to this news photo."
-  2. Specify the text layers: KICKER (Mustard Gold `#CBA052`), HEADLINE (white bold serif), SUB (light grey).
-  3. Use exact colors: Deep Teal `#0E4D4A`, Mustard Gold `#CBA052`, White `#FFFFFF`.
-  4. THE ECHO wordmark in the top bar. Website `theecho.news.tv` at the bottom.
-  5. End with: "Preserve original photo quality — only add overlay and text elements."
+- Call `get_design_guide()` to read the full THE ECHO brand guide from disk.
+  ```
+  get_design_guide()
+  ```
+  This tool reads `design.md` directly from the server filesystem. **Do NOT use `glob` or `ls`
+  to find design.md** — they only see the agent's virtual filesystem and will return empty.
+- Read the returned brand guide carefully to understand THE ECHO styles and colors.
+- Choose the most appropriate style for the news type.
+- Write your own `editing_prompt` based on what `get_design_guide()` returned.
 
 **If Gemini editing fails:** The tool automatically saves the raw original image as a 1024×1024 square crop. The post is still saved to Supabase with the fallback image.
 
 One universal square image is produced and saved to the output directory.
-Add it to `social_posts.md` under `## Images` as:
+`create_post_image_gemini` returns the **exact absolute path** to the saved file
+(e.g. `/app/output/paf-f-16s-down-20260315-093732.jpg`).
+
+Add that returned path to `social_posts.md` under `## Images` as:
 ```
 ## Images
-- output/social_post.jpg
+- [exact path returned by create_post_image_gemini]
 ```
+
+**Do NOT write `output/social_post.jpg`** — that is wrong. Always use the actual
+path string that the tool returned.
 
 ---
 

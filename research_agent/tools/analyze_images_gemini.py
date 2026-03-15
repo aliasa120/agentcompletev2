@@ -25,14 +25,16 @@ from langchain_core.tools import tool
 from PIL import Image
 
 # ── Config ────────────────────────────────────────────────────────────────────
-_MANIFEST_FILE = Path("output") / "candidate_images" / "manifest.json"
-_SOCIAL_POSTS  = Path("social_posts.md")
-_DESIGN_MD     = Path("design.md")
-_MODEL         = "google/gemini-3-flash"
-_GATEWAY_BASE  = "https://ai-gateway.vercel.sh/v1"
+# Use absolute paths anchored to the repo root (parent of this file's package)
+_REPO_ROOT      = Path(__file__).resolve().parents[2]   # research_agent/tools/ -> repo root
+_MANIFEST_FILE  = _REPO_ROOT / "output" / "candidate_images" / "manifest.json"
+_SOCIAL_POSTS   = _REPO_ROOT / "social_posts.md"
+_DESIGN_MD      = _REPO_ROOT / "design.md"
+_MODEL          = "google/gemini-3-flash"
+_GATEWAY_BASE   = "https://ai-gateway.vercel.sh/v1"
 
 # Two THE ECHO brand reference images
-_REF_IMAGES_DIR = Path("reference images")
+_REF_IMAGES_DIR = _REPO_ROOT / "reference images"
 _REF_IMAGE_PATHS = [
     _REF_IMAGES_DIR / "ref1.png",
     _REF_IMAGES_DIR / "ref2.png",

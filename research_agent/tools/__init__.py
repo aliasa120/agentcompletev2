@@ -4,6 +4,7 @@ from .analyze_images_gemini import analyze_images_gemini
 from .create_post_image_gemini import create_post_image_gemini
 from .exa_extract import exa_extract
 from .fetch_images_brave import fetch_images_brave
+from .get_design_guide import get_design_guide
 from .linkup_search import linkup_search
 from .parallel_search import parallel_search
 from .save_to_supabase import save_posts_to_supabase
@@ -22,4 +23,5 @@ __all__ = [
     "analyze_images_gemini",
     "create_post_image_gemini",
     "save_posts_to_supabase",
+    "get_design_guide",
 ]

@@ -24,6 +24,9 @@ RUN uv pip install --system -e .
 # Copy application source
 COPY . .
 
+# Create output directories (gitignored so not in source — must exist at runtime)
+RUN mkdir -p output/candidate_images
+
 # Expose the exact port that the Next.js UI expects (2024)
 EXPOSE 2024
 
