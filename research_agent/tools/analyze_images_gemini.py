@@ -102,8 +102,8 @@ The editing_prompt MUST be a valid JSON object with these keys:
     },
     "text_layers": {
         "kicker_tag": "<content from social_posts.md — e.g. '# NEWS' or 'BREAKING'>",
-        "headline": "<actual headline text from social_posts.md>",
-        "sub_headline": "<actual sub-headline or summary text from social_posts.md>"
+        "headline": "<Read ALL three platform posts in social_posts.md carefully. Identify the CORE MESSAGE that the posts are guiding the audience toward (the main action, event, or controversy being communicated). Write a SHORT, PUNCHY, ACCURATE headline (max 10 words) that captures that core message. It must be factually correct based on the posts — do NOT invent or exaggerate. If the posts are about legal action, the headline is about legal action. If the posts are about a purchase, the headline is about the purchase.>",
+        "sub_headline": "<1-sentence supporting detail, max 12 words, from the social posts content>"
     },
     "watermarks_and_logos": {
         "logo": "THE ECHO wordmark with globe/soundwave icon — top header bar, centered, white",
