@@ -1,8 +1,8 @@
 """Research Agent - Standalone script for LangGraph deployment.
 
-This module creates a single self-searching research agent that performs both
-orchestration (gap analysis, file I/O, synthesis, post writing) and web research
-(linkup_search, think_tool) without delegating to any sub-agent.
+This module creates a single self-researching agent with a unified tool set.
+Provider selection (Linkup vs Parallel AI, Tavily vs Exa, KIE vs Gemini Flash)
+is managed automatically by the unified tools based on settings in Supabase.
 
 NOTE: Thread persistence is handled automatically by the LangGraph API platform.
 Do NOT add a custom checkpointer here — LangGraph uses POSTGRES_URI from .env.
@@ -16,40 +16,43 @@ from deepagents import create_deep_agent
 
 from research_agent.prompts import MAIN_AGENT_INSTRUCTIONS
 from research_agent.tools import (
-    create_post_image_gemini,
-    fetch_images_brave,
-    linkup_search,
-    tavily_extract,
+    # ── Unified orchestrators (primary tools for the agent) ──────────────────
+    unified_search,
+    unified_extract,
+    create_post_image,
+    # ── Support tools ────────────────────────────────────────────────────────
     think_tool,
+    fetch_images_brave,
     view_candidate_images,
     analyze_images_gemini,
+    save_posts_to_supabase,
+    get_design_guide,
 )
-from research_agent.tools.save_to_supabase import save_posts_to_supabase
 
 # Inject today's date into the unified prompt
 INSTRUCTIONS = MAIN_AGENT_INSTRUCTIONS.format(date=datetime.now().strftime("%Y-%m-%d"))
 
 # Model: configured via environment variables
 model = ChatOpenAI(
-    model="kashif",
+    model="MiniMax-M2.7",
     api_key=os.environ.get("OPENAI_API_KEY"),
     base_url=os.environ.get("OPENAI_BASE_URL", "http://47.82.173.134:4000"),
     temperature=0.45,
 )
 
-# Create the single agent — no subagents list
-# Persistence is handled by LangGraph API via POSTGRES_URI in .env
+# Create the single agent
 agent = create_deep_agent(
     model=model,
     tools=[
-        linkup_search,
+        unified_search,
+        unified_extract,
         think_tool,
-        tavily_extract,
         fetch_images_brave,
         view_candidate_images,
         analyze_images_gemini,
-        create_post_image_gemini,
+        create_post_image,
         save_posts_to_supabase,
+        get_design_guide,
     ],
     system_prompt=INSTRUCTIONS,
 )

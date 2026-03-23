@@ -7,20 +7,54 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     Zap, Home, Settings, RefreshCw, Play,
-    Clock, List, ChevronRight, Activity, AlarmClock, CheckCircle2, XCircle, Timer
+    Clock, List, ChevronRight, Activity, AlarmClock, CheckCircle2, XCircle, Timer,
+    Search, FileText, ImageIcon, FlaskConical, Loader2
 } from "lucide-react";
 
 interface Article { id: string; title: string; description: string; url: string; source_domain: string; status: string; created_at: string; }
 
-const AGENT_SETTING_KEYS = ["queue_batch_size", "auto_trigger_enabled", "auto_trigger_interval_minutes", "auto_trigger_last_at"];
+const AGENT_SETTING_KEYS = [
+    "queue_batch_size", "auto_trigger_enabled", "auto_trigger_interval_minutes", "auto_trigger_last_at",
+    "search_provider_primary", "search_provider_secondary", "search_max_retries",
+    "extract_provider_primary", "extract_provider_secondary", "extract_max_retries",
+    "image_provider_primary", "image_provider_secondary", "image_max_retries",
+];
 
 const DEFAULTS: Record<string, string> = {
     queue_batch_size: "2",
     auto_trigger_enabled: "false",
     auto_trigger_interval_minutes: "30",
     auto_trigger_last_at: "",
-    last_trigger_at: "",  // manual trigger timestamp (display only)
+    last_trigger_at: "",
+    // AI Provider defaults
+    search_provider_primary: "linkup",
+    search_provider_secondary: "parallel",
+    search_max_retries: "3",
+    extract_provider_primary: "tavily",
+    extract_provider_secondary: "exa",
+    extract_max_retries: "3",
+    image_provider_primary: "kie",
+    image_provider_secondary: "gemini_flash",
+    image_max_retries: "2",
 };
+
+// Provider options for each category
+const SEARCH_PROVIDERS = [
+    { value: "linkup",   label: "Linkup",      badge: "Standard" },
+    { value: "parallel", label: "Parallel AI",  badge: "Agentic" },
+];
+const EXTRACT_PROVIDERS = [
+    { value: "tavily", label: "Tavily",  badge: "Extract" },
+    { value: "exa",    label: "Exa AI",  badge: "Contents" },
+];
+const IMAGE_PROVIDERS = [
+    { value: "kie",          label: "KIE AI",            badge: "Image-to-Image" },
+    { value: "gemini_flash", label: "Gemini 2.5 Flash",  badge: "Chat Completion" },
+];
+
+type TestStatus = "idle" | "testing" | "ok" | "error";
+type TestState = { status: TestStatus; latency?: number; error?: string };
+type ProviderId = "linkup" | "parallel" | "tavily" | "exa" | "kie" | "gemini_flash";
 
 const INTERVALS = [
     { label: "10 min", value: "10" },
@@ -130,9 +164,38 @@ export default function AgentSettingsPage() {
 
     const setSetting = (key: string, value: string) => setSettings(p => ({ ...p, [key]: value }));
 
+    const [testStates, setTestStates] = useState<Record<string, TestState>>({});
+
+    const testProvider = async (provider: ProviderId) => {
+        setTestStates(prev => ({ ...prev, [provider]: { status: "testing" } }));
+        try {
+            const resp = await fetch("/api/test-provider", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ provider }),
+            });
+            const data = await resp.json();
+            if (resp.status === 429) {
+                setTestStates(prev => ({ ...prev, [provider]: { status: "error", error: data.error } }));
+            } else if (data.success) {
+                setTestStates(prev => ({ ...prev, [provider]: { status: "ok", latency: data.latency_ms } }));
+            } else {
+                setTestStates(prev => ({ ...prev, [provider]: { status: "error", error: data.error } }));
+            }
+        } catch (e) {
+            setTestStates(prev => ({ ...prev, [provider]: { status: "error", error: "Network error" } }));
+        }
+        setTimeout(() => setTestStates(prev => ({ ...prev, [provider]: { status: "idle" } })), 8000);
+    };
+
     const saveSettings = async () => {
         setSaveStatus("saving");
-        const keysToSave = ["queue_batch_size", "auto_trigger_enabled", "auto_trigger_interval_minutes"];
+        const keysToSave = [
+            "queue_batch_size", "auto_trigger_enabled", "auto_trigger_interval_minutes",
+            "search_provider_primary", "search_provider_secondary", "search_max_retries",
+            "extract_provider_primary", "extract_provider_secondary", "extract_max_retries",
+            "image_provider_primary", "image_provider_secondary", "image_max_retries",
+        ];
         try {
             const rows = keysToSave.map(key => ({
                 key,
@@ -366,6 +429,70 @@ export default function AgentSettingsPage() {
                     </section>
                 </div>
 
+                {/* AI Providers & Fallback Configuration */}
+                <section className="rounded-xl border bg-card shadow-sm">
+                    <div className="p-4 border-b flex items-center gap-2">
+                        <Zap className="h-4 w-4 text-primary" />
+                        <h2 className="font-semibold">AI Providers &amp; Fallback</h2>
+                        <span className="ml-auto text-xs text-muted-foreground">Settings cached 60s in backend</span>
+                    </div>
+                    <div className="p-5 space-y-6">
+
+                        {/* Search Providers */}
+                        <ProviderRow
+                            icon={<Search className="h-4 w-4 text-primary" />}
+                            label="Search"
+                            description="Primary provider for web search. Fallback triggers after max retries."
+                            providers={SEARCH_PROVIDERS}
+                            primaryKey="search_provider_primary"
+                            secondaryKey="search_provider_secondary"
+                            retriesKey="search_max_retries"
+                            settings={settings}
+                            setSetting={setSetting}
+                            testStates={testStates}
+                            onTest={testProvider}
+                        />
+
+                        {/* Extract Providers */}
+                        <ProviderRow
+                            icon={<FileText className="h-4 w-4 text-primary" />}
+                            label="Extract"
+                            description="Primary provider for URL content extraction."
+                            providers={EXTRACT_PROVIDERS}
+                            primaryKey="extract_provider_primary"
+                            secondaryKey="extract_provider_secondary"
+                            retriesKey="extract_max_retries"
+                            settings={settings}
+                            setSetting={setSetting}
+                            testStates={testStates}
+                            onTest={testProvider}
+                        />
+
+                        {/* Image Providers */}
+                        <ProviderRow
+                            icon={<ImageIcon className="h-4 w-4 text-primary" />}
+                            label="Image Generation"
+                            description="KIE AI uses image-to-image editing. Gemini 2.5 Flash uses chat completions."
+                            providers={IMAGE_PROVIDERS}
+                            primaryKey="image_provider_primary"
+                            secondaryKey="image_provider_secondary"
+                            retriesKey="image_max_retries"
+                            settings={settings}
+                            setSetting={setSetting}
+                            testStates={testStates}
+                            onTest={testProvider}
+                        />
+
+                        <div className="flex items-center gap-3 pt-2 border-t">
+                            <Button onClick={saveSettings} disabled={saveStatus === "saving" || !isDirty} className="flex-1">
+                                {saveStatus === "saving" ? "Saving…" : isDirty ? "Save Provider Settings" : "No Changes"}
+                            </Button>
+                            {saveStatus === "saved" && <span className="flex items-center gap-1 text-sm text-green-600 font-medium"><CheckCircle2 className="h-4 w-4" />Saved</span>}
+                            {saveStatus === "error" && <span className="flex items-center gap-1 text-sm text-red-600 font-medium"><XCircle className="h-4 w-4" />Error</span>}
+                        </div>
+                    </div>
+                </section>
+
                 {/* Queue Preview + Manual Trigger */}
                 <section className="rounded-xl border bg-card shadow-sm">
                     <div className="p-4 border-b flex items-center gap-2">
@@ -441,6 +568,90 @@ export default function AgentSettingsPage() {
                     </div>
                 </section>
             </main>
+        </div>
+    );
+}
+
+// -- ProviderRow sub-component -------------------------------------------------
+
+type ProviderOption = { value: string; label: string; badge: string };
+
+function ProviderRow({
+    icon, label, description, providers,
+    primaryKey, secondaryKey, retriesKey,
+    settings, setSetting, testStates, onTest,
+}: {
+    icon: React.ReactNode;
+    label: string;
+    description: string;
+    providers: ProviderOption[];
+    primaryKey: string;
+    secondaryKey: string;
+    retriesKey: string;
+    settings: Record<string, string>;
+    setSetting: (k: string, v: string) => void;
+    testStates: Record<string, TestState>;
+    onTest: (p: ProviderId) => void;
+}) {
+    const hasSameProviders = settings[primaryKey] === settings[secondaryKey];
+    return (
+        <div className="space-y-3 p-4 rounded-lg border bg-muted/20">
+            <div className="flex items-center gap-2">
+                {icon}
+                <span className="font-semibold text-sm">{label}</span>
+                <span className="text-xs text-muted-foreground ml-1">{description}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+                <ProviderSelector role="Primary" settingKey={primaryKey} providers={providers} settings={settings} setSetting={setSetting} testStates={testStates} onTest={onTest} />
+                <ProviderSelector role="Fallback" settingKey={secondaryKey} providers={providers} settings={settings} setSetting={setSetting} testStates={testStates} onTest={onTest} />
+            </div>
+            {hasSameProviders && (
+                <p className="text-xs text-orange-500 flex items-center gap-1">
+                    <XCircle className="h-3 w-3" />Primary and Fallback must be different providers.
+                </p>
+            )}
+            <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground shrink-0">Max retries per provider:</label>
+                <div className="flex gap-1">
+                    {["1","2","3","4","5"].map(n => (
+                        <button key={n} onClick={() => setSetting(retriesKey, n)}
+                            className={`w-8 h-7 rounded border text-xs font-semibold transition-all ${settings[retriesKey] === n ? "border-primary bg-primary text-primary-foreground" : "border-border bg-muted hover:bg-accent"}`}
+                        >{n}</button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ProviderSelector({
+    role, settingKey, providers, settings, setSetting, testStates, onTest,
+}: {
+    role: string;
+    settingKey: string;
+    providers: ProviderOption[];
+    settings: Record<string, string>;
+    setSetting: (k: string, v: string) => void;
+    testStates: Record<string, TestState>;
+    onTest: (p: ProviderId) => void;
+}) {
+    const currentValue = settings[settingKey];
+    const ts: TestState = testStates[currentValue] ?? { status: "idle" };
+    return (
+        <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">{role}</label>
+            <select value={currentValue} onChange={e => setSetting(settingKey, e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                {providers.map(p => <option key={p.value} value={p.value}>{p.label} ({p.badge})</option>)}
+            </select>
+            <button onClick={() => onTest(currentValue as ProviderId)} disabled={ts.status === "testing"}
+                className={`w-full flex items-center justify-center gap-1.5 h-8 rounded-md border text-xs font-medium transition-all ${ts.status === "ok" ? "border-green-400 bg-green-50 text-green-700" : ts.status === "error" ? "border-red-400 bg-red-50 text-red-700" : ts.status === "testing" ? "border-primary bg-primary/5 text-primary" : "border-border bg-muted hover:bg-accent text-muted-foreground"}`}>
+                {ts.status === "testing" && <Loader2 className="h-3 w-3 animate-spin" />}
+                {ts.status === "ok"      && <CheckCircle2 className="h-3 w-3" />}
+                {ts.status === "error"   && <XCircle className="h-3 w-3" />}
+                {ts.status === "idle"    && <FlaskConical className="h-3 w-3" />}
+                {ts.status === "testing" ? "Testing..." : ts.status === "ok" ? `${ts.latency}ms OK` : ts.status === "error" ? (ts.error?.substring(0, 28) ?? "Error") : "Test API"}
+            </button>
         </div>
     );
 }
