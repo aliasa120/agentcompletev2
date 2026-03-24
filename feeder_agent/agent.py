@@ -20,7 +20,7 @@ from feeder.db import supabase_client
 # ── Model (cerebras via LiteLLM proxy) ───────────────────────────────────────
 def _make_model() -> ChatOpenAI:
     return ChatOpenAI(
-        model="cerebras/gpt-oss-120b",
+        model="openai/gpt-oss-120b",
         api_key=os.environ.get("OPENAI_API_KEY", ""),
         base_url=os.environ.get("OPENAI_BASE_URL", "http://47.82.173.134:4000"),
         temperature=0.0,           # deterministic decisions

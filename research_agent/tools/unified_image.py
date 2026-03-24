@@ -192,12 +192,19 @@ async def _gemini_generate(
     source_img: Image.Image | None = None,
     **_,
 ) -> Image.Image:
-    """Call Gemini 2.5 Flash Image via Vercel AI Gateway (Chat Completions API)."""
+    """Call Gemini 3.1 Flash Image via Vercel AI Gateway (Chat Completions API).
+
+    Sends all 3 images as multimodal content:
+      - source_img: the target news photo (base64 JPEG)
+      - _REF_URLS[0], _REF_URLS[1]: THE ECHO brand reference images (base64 PNG)
+    """
     from .gemini_flash_image import gemini_flash_generate
 
     result = await gemini_flash_generate(
         prompt=editing_prompt,
-        timeout=180,  # image gen takes longer
+        source_img=source_img,
+        ref_urls=_REF_URLS,
+        timeout=180,
     )
     img = Image.open(io.BytesIO(result["image_bytes"])).convert("RGB")
     logger.info(f"[unified_image] Gemini Flash image received: {img.size}")

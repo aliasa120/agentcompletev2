@@ -49,7 +49,7 @@ const EXTRACT_PROVIDERS = [
 ];
 const IMAGE_PROVIDERS = [
     { value: "kie",          label: "KIE AI",            badge: "Image-to-Image" },
-    { value: "gemini_flash", label: "Gemini 2.5 Flash",  badge: "Chat Completion" },
+    { value: "gemini_flash", label: "Gemini 3.1 Flash",  badge: "Chat Completion" },
 ];
 
 type TestStatus = "idle" | "testing" | "ok" | "error";

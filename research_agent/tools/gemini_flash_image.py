@@ -1,8 +1,12 @@
-"""Gemini 2.5 Flash Image provider — via Vercel AI Gateway Chat Completions API.
+"""Gemini 3.1 Flash Image provider — via Vercel AI Gateway Chat Completions API.
 
-IMPORTANT: google/gemini-2.5-flash-image is a MULTIMODAL LLM. It does NOT use
+IMPORTANT: google/gemini-3.1-flash-image-preview is a MULTIMODAL LLM. It does NOT use
 the /v1/images/generations endpoint. Images are returned inside the message
 object under `message.images[]` in the chat completions response.
+
+Input images (source news photo + brand reference images) are sent as base64-encoded
+multimodal content parts — the same 3-image approach as KIE AI, but via Chat Completions
+instead of URL-based image-to-image.
 
 The OpenAI Python SDK silently drops unknown fields from the response, so this
 module uses raw httpx HTTP calls and reads the JSON directly.
@@ -10,27 +14,65 @@ module uses raw httpx HTTP calls and reads the JSON directly.
 
 import base64
 import io
+import logging
 import os
+from typing import List, Optional
 
 import httpx
+import requests
 from PIL import Image
 
+logger = logging.getLogger("gemini_flash_image")
+
 _GATEWAY_BASE = "https://ai-gateway.vercel.sh/v1"
-_MODEL = "google/gemini-2.5-flash-image"
+_MODEL = "google/gemini-3.1-flash-image-preview"
+_OUTPUT_SIZE = 1024  # target output resolution (width and height)
+
+
+def _pil_to_base64(img: Image.Image, fmt: str = "JPEG") -> str:
+    """Encode a PIL image to a base64 data URI string."""
+    buf = io.BytesIO()
+    img.save(buf, format=fmt, quality=92)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    mime = "image/jpeg" if fmt.upper() == "JPEG" else "image/png"
+    return f"data:{mime};base64,{b64}"
+
+
+def _url_to_base64(url: str) -> str | None:
+    """Download an image from a URL and encode it as a base64 data URI."""
+    try:
+        resp = requests.get(url, timeout=20,
+                            headers={"User-Agent": "Mozilla/5.0 (compatible; NewsBot/1.0)"})
+        resp.raise_for_status()
+        img = Image.open(io.BytesIO(resp.content)).convert("RGB")
+        return _pil_to_base64(img, fmt="PNG")
+    except Exception as e:
+        logger.warning(f"[gemini_flash_image] Could not load ref image {url}: {e}")
+        return None
 
 
 async def gemini_flash_generate(
     prompt: str,
-    timeout: int = 120,
+    source_img: Optional[Image.Image] = None,
+    ref_urls: Optional[List[str]] = None,
+    timeout: int = 180,
 ) -> dict:
-    """Call Gemini 2.5 Flash Image via Vercel AI Gateway and return raw image bytes.
+    """Call Gemini 3.1 Flash Image via Vercel AI Gateway and return raw image bytes.
 
-    Uses raw httpx instead of the OpenAI SDK because the SDK does not parse
-    the `images` field in the message object (it silently drops unknown fields).
+    Sends a multimodal message containing:
+      [0] Text prompt with editing instructions
+      [1] Source news photo (the target image to edit) — base64 JPEG
+      [2] Brand reference image ref1.png — base64 PNG
+      [3] Brand reference image ref2.png — base64 PNG
+
+    This mirrors KIE AI's 3-image approach (target + 2 refs) but via Chat Completions
+    with base64-encoded images instead of URLs.
 
     Args:
-        prompt: Full text prompt describing the image to generate/edit.
-        timeout: Request timeout in seconds (default 120 for image generation).
+        prompt: Full editing instruction text from analyze_images_gemini.
+        source_img: The target news photo as a PIL Image (required for editing).
+        ref_urls: List of R2 CDN URLs for THE ECHO brand reference images.
+        timeout: Request timeout in seconds.
 
     Returns:
         Dict with keys: image_bytes (bytes), format (str), text_response (str)
@@ -42,19 +84,62 @@ async def gemini_flash_generate(
     if not api_key:
         raise RuntimeError("AI_GATEWAY_API_KEY not set — Gemini Flash Image unavailable.")
 
-    # Prepend aspect ratio instruction — Gemini has no native aspect_ratio param
-    square_prompt = (
-        "IMPORTANT: The output image MUST be a perfect square (1:1 aspect ratio). "
-        "Do NOT produce a wide or tall image. Square format only.\n\n"
-        + prompt
-    )
+    # ── Build multimodal content list ─────────────────────────────────────────
+    # Order: text prompt → source image → ref images (same as KIE AI URL order)
+    content: list = [
+        {
+            "type": "text",
+            "text": (
+                "TASK: Apply THE ECHO brand style from the REFERENCE IMAGES to the TARGET NEWS IMAGE.\n"
+                "CRITICAL: Keep the original photographic content of the TARGET NEWS IMAGE exactly as it is.\n"
+                "DO NOT blend photographic elements from the reference images.\n"
+                "ONLY apply the layout, typography, color overlays, and brand elements from the references.\n"
+                "Output must be exactly 1024x1024 pixels, square (1:1 aspect ratio).\n\n"
+                "EDITING INSTRUCTIONS:\n"
+                + prompt
+            ),
+        }
+    ]
+
+    # Add source (target) news image
+    if source_img is not None:
+        b64_source = _pil_to_base64(source_img, fmt="JPEG")
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": b64_source},
+        })
+        logger.info(f"[gemini_flash_image] Source image attached: {source_img.size}")
+    else:
+        logger.warning("[gemini_flash_image] No source_img provided — Gemini will generate without target photo.")
+
+    # Add reference brand images
+    for i, ref_url in enumerate(ref_urls or []):
+        b64_ref = _url_to_base64(ref_url)
+        if b64_ref:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": b64_ref},
+            })
+            logger.info(f"[gemini_flash_image] Reference image {i+1} attached from: {ref_url[:60]}")
+
+    logger.info(f"[gemini_flash_image] Sending {len(content)} content parts to {_MODEL} "
+                f"(1 text + {len(content)-1} images)")
 
     payload = {
         "model": _MODEL,
         "messages": [
-            {"role": "user", "content": square_prompt}
+            {"role": "user", "content": content}
         ],
         "temperature": 0.4,
+        # Native Gemini image config — forwarded by Vercel AI Gateway to generationConfig
+        # imageSize: "1K" = 1024×1024, aspectRatio: "1:1" explicitly set
+        "generationConfig": {
+            "responseModalities": ["TEXT", "IMAGE"],
+            "imageConfig": {
+                "aspectRatio": "1:1",
+                "imageSize": "1K",
+            },
+        },
     }
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as client:
@@ -112,7 +197,7 @@ async def gemini_flash_generate(
     except Exception as e:
         raise RuntimeError(f"Failed to decode Gemini image base64: {e}")
 
-    # Decode, validate, and force 1:1 center-crop (matches KIE AI "aspect_ratio": "1:1")
+    # Decode, validate, force 1:1 center-crop, then resize to exactly 1024x1024
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     except Exception as e:
@@ -124,6 +209,10 @@ async def gemini_flash_generate(
         left  = (w - side) // 2
         top   = (h - side) // 2
         img   = img.crop((left, top, left + side, top + side))
+
+    # Resize to target output size (1024x1024)
+    if img.size != (_OUTPUT_SIZE, _OUTPUT_SIZE):
+        img = img.resize((_OUTPUT_SIZE, _OUTPUT_SIZE), Image.LANCZOS)
 
     # Re-encode to bytes
     buf = io.BytesIO()

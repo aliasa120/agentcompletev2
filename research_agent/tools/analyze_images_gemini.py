@@ -30,7 +30,7 @@ _REPO_ROOT      = Path(__file__).resolve().parents[2]   # research_agent/tools/ 
 _MANIFEST_FILE  = _REPO_ROOT / "output" / "candidate_images" / "manifest.json"
 _SOCIAL_POSTS   = _REPO_ROOT / "social_posts.md"
 _DESIGN_MD      = _REPO_ROOT / "design.md"
-_MODEL          = "google/gemini-3-flash"
+_MODEL          = "moonshotai/kimi-k2.5"
 _GATEWAY_BASE   = "https://ai-gateway.vercel.sh/v1"
 
 # Two THE ECHO brand reference images
