@@ -135,16 +135,31 @@ def save_posts_to_supabase(social_posts_markdown: str) -> str:
     print(f"[save_to_supabase] Instagram chars: {len(parsed['instagram'])}")
     print(f"[save_to_supabase] Facebook chars: {len(parsed['facebook'])}")
 
-    # ── Image path: markdown Images section OR fallback to latest_image_path.txt ──
-    img_path = parsed["image_path"]
-    if not img_path and _LATEST_IMAGE_FILE.exists():
+    # ── Image path: latest_image_path.txt is machine-written and always accurate.
+    # The markdown Images section is agent-written and prone to hallucinated/truncated filenames.
+    # Priority: latest_image_path.txt FIRST, markdown Images section as secondary fallback. ──
+    img_path = None
+
+    # 1. Trust the machine-written file first
+    if _LATEST_IMAGE_FILE.exists():
         try:
-            fallback = _LATEST_IMAGE_FILE.read_text(encoding="utf-8").strip()
-            if fallback and Path(fallback).exists():
-                img_path = fallback
-                print(f"[save_to_supabase] Using fallback image from latest_image_path.txt: {img_path}")
+            machine_path = _LATEST_IMAGE_FILE.read_text(encoding="utf-8").strip()
+            if machine_path and Path(machine_path).exists():
+                img_path = machine_path
+                print(f"[save_to_supabase] Using image from latest_image_path.txt: {img_path}")
+            else:
+                print(f"[save_to_supabase] latest_image_path.txt path not found on disk: {machine_path!r}")
         except Exception as e:
             print(f"[save_to_supabase] Could not read latest_image_path.txt: {e}")
+
+    # 2. Fall back to agent-written markdown Images section (may be wrong filename)
+    if not img_path:
+        img_path = parsed["image_path"]
+        if img_path:
+            print(f"[save_to_supabase] Falling back to markdown Images path: {img_path}")
+            if not Path(img_path).exists():
+                print(f"[save_to_supabase] ⚠️ Markdown image path also not found on disk — skipping upload.")
+                img_path = None
 
     # Upload image (optional — run in thread so SSL hangs can't block the DB insert)
     image_url = None
