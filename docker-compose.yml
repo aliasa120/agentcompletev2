@@ -44,6 +44,7 @@ services:
     environment:
       - FEEDER_SERVER_URL=http://feeder_svc:8080
       - LANGGRAPH_URL=http://backend:2024
+      - NEXT_PUBLIC_APP_URL=http://frontend:3000
     depends_on:
       - backend
       - feeder_svc
