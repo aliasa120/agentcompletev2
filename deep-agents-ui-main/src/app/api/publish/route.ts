@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { TwitterApi } from "twitter-api-v2";
 
 const SUPABASE_URL =
     process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -139,80 +140,86 @@ async function publishInstagram(
     return publishData.id;
 }
 
-async function loginTwitter(
-    apiKey: string,
-    username: string,
-    email: string,
-    password: string,
-    proxy: string,
-    totp: string
-): Promise<string> {
-    const payload: Record<string, string> = { user_name: username, email, password };
-    if (proxy) payload.proxy = proxy;
-    if (totp) payload.totp_secret = totp;
-    const loginRes = await fetch("https://api.twitterapi.io/twitter/user_login_v2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
-        body: JSON.stringify(payload),
-    });
-    const loginData = await loginRes.json();
-    console.error("[twitter-login] response:", JSON.stringify(loginData));
-    if (loginData.status !== "success" || !loginData.login_cookie) {
-        const detail = loginData.msg || loginData.message || loginData.error || JSON.stringify(loginData);
-        throw new Error(`Twitter login failed: ${detail}`);
-    }
-    return loginData.login_cookie;
-}
-
 async function publishTwitter(
     settings: Record<string, string>,
-    tweetText: string
+    tweetText: string,
+    imageUrl: string | null
 ): Promise<string> {
-    const apiKey = cred("TWITTER_API_KEY", settings.social_twitter_api_key);
-    const username = cred("TWITTER_USERNAME", settings.social_twitter_username);
-    const email = cred("TWITTER_EMAIL", settings.social_twitter_email);
-    const password = cred("TWITTER_PASSWORD", settings.social_twitter_password);
-    const proxy = cred("TWITTER_PROXY", settings.social_twitter_proxy);
-    const totp = cred("TWITTER_TOTP", settings.social_twitter_totp);
+    const appKey = cred("TWITTER_API_KEY", settings.social_twitter_api_key);
+    const appSecret = cred("TWITTER_API_SECRET", settings.social_twitter_api_secret);
+    const accessToken = cred("TWITTER_ACCESS_TOKEN", settings.social_twitter_access_token);
+    const accessSecret = cred("TWITTER_ACCESS_SECRET", settings.social_twitter_access_secret);
 
-    if (!apiKey || !username || !email || !password) {
-        throw new Error("Twitter credentials incomplete (API key, username, email, password required). Configure them in .env.local.");
+    if (!appKey || !appSecret || !accessToken || !accessSecret) {
+        throw new Error("Twitter credentials incomplete (Consumer Key, Consumer Secret, Access Token, Access Secret required). Configure them in .env.local.");
     }
 
-    let loginCookie = settings.social_twitter_cookie || "";
+    const client = new TwitterApi({
+        appKey,
+        appSecret,
+        accessToken,
+        accessSecret,
+    });
 
-    if (!loginCookie) {
-        loginCookie = await loginTwitter(apiKey, username, email, password, proxy, totp);
-        await upsertSetting("social_twitter_cookie", loginCookie);
+    // Twitter hard limit is 280 characters. Truncate at a word boundary if needed.
+    const TWITTER_MAX_CHARS = 280;
+    let safeTweetText = tweetText.trim();
+    if (safeTweetText.length > TWITTER_MAX_CHARS) {
+        // Cut at last space before the limit to avoid splitting a word
+        const cutoff = safeTweetText.lastIndexOf(" ", TWITTER_MAX_CHARS - 1);
+        safeTweetText = (cutoff > 0 ? safeTweetText.slice(0, cutoff) : safeTweetText.slice(0, TWITTER_MAX_CHARS - 1)) + "…";
+        console.log(`[publish] Tweet truncated to ${safeTweetText.length} chars (original: ${tweetText.length})`);
     }
 
-    const doTweet = async (cookie: string) => {
-        const payload: Record<string, string> = { login_cookies: cookie, tweet_text: tweetText };
-        if (proxy) payload.proxy = proxy;
-        const res = await fetch("https://api.twitterapi.io/twitter/create_tweet_v2", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
-            body: JSON.stringify(payload),
-        });
-        return res.json();
-    };
+    // Supported MIME types for Twitter media upload
+    const TWITTER_SUPPORTED_MIME = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
-    let tweetData = await doTweet(loginCookie);
+    try {
+        const rwClient = client.readWrite;
 
-    if (tweetData.status !== "success") {
-        const msg = (tweetData.msg || "").toLowerCase();
-        if (msg.includes("cookie") || msg.includes("expired") || msg.includes("login")) {
-            await upsertSetting("social_twitter_cookie", "");
-            loginCookie = await loginTwitter(apiKey, username, email, password, proxy, totp);
-            await upsertSetting("social_twitter_cookie", loginCookie);
-            tweetData = await doTweet(loginCookie);
+        let mediaId: string | undefined;
+        if (imageUrl) {
+            try {
+                const imgRes = await fetch(imageUrl);
+                if (!imgRes.ok) {
+                    console.warn(`[publish] Failed to fetch image for Twitter: ${imgRes.statusText}`);
+                } else {
+                    const contentType = imgRes.headers.get("content-type") || "";
+                    // Strip parameters like "; charset=utf-8" from the MIME type
+                    const mimeType = contentType.split(";")[0].trim() || "image/jpeg";
+
+                    if (!TWITTER_SUPPORTED_MIME.includes(mimeType)) {
+                        console.warn(`[publish] Skipping Twitter media upload — unsupported type: ${mimeType}`);
+                    } else {
+                        const arrayBuffer = await imgRes.arrayBuffer();
+                        const buffer = Buffer.from(arrayBuffer);
+                        mediaId = await client.v1.uploadMedia(buffer, { mimeType });
+                        console.log(`[publish] Twitter media uploaded, id=${mediaId}`);
+                    }
+                }
+            } catch (mediaErr: any) {
+                console.warn(`[publish] Twitter media upload failed, falling back to text only:`, mediaErr.data?.detail || mediaErr.message || String(mediaErr));
+            }
         }
-        if (tweetData.status !== "success") {
-            throw new Error(`Twitter post failed: ${tweetData.msg || "Unknown error"}`);
-        }
-    }
 
-    return tweetData.tweet_id;
+        const tweetPayload: any = { text: safeTweetText };
+        if (mediaId) {
+            tweetPayload.media = { media_ids: [mediaId] };
+        }
+
+        const { data } = await rwClient.v2.tweet(tweetPayload);
+        return data.id;
+    } catch (e: any) {
+        const errDetail: string = e.data?.detail || e.data?.title || e.message || String(e);
+        // Twitter throws 403 "duplicate content" when the same tweet is posted twice.
+        // This typically happens when the cron retries an attempt that already succeeded.
+        // Treat it as already-published so we don't permanently mark the post as failed.
+        if (errDetail.toLowerCase().includes("duplicate")) {
+            console.warn(`[publish] Twitter duplicate content detected — post likely already published. Treating as success.`);
+            return "already_published_duplicate";
+        }
+        throw new Error(`Twitter post failed: ${errDetail}`);
+    }
 }
 
 export async function POST(req: Request) {
@@ -286,7 +293,7 @@ export async function POST(req: Request) {
             results.twitter = { success: false, error: "Twitter/X publishing is disabled in settings." };
         } else {
             try {
-                const tweetId = await publishTwitter(settings, post.twitter || post.facebook || "");
+                const tweetId = await publishTwitter(settings, post.twitter || post.facebook || "", post.image_url ?? null);
                 results.twitter = { success: true, post_id: tweetId };
                 currentPublishedTo.twitter = true;
             } catch (e: unknown) {
@@ -296,7 +303,7 @@ export async function POST(req: Request) {
     }
 
     if (Object.values(results).some((r) => r.success)) {
-        await fetch(`${SUPABASE_URL}/rest/v1/social_posts?id=eq.${encodeURIComponent(post_id)}`, {
+        const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/social_posts?id=eq.${encodeURIComponent(post_id)}`, {
             method: "PATCH",
             headers: {
                 apikey: SUPABASE_ANON_KEY,
@@ -306,6 +313,12 @@ export async function POST(req: Request) {
             },
             body: JSON.stringify({ published_to: currentPublishedTo }),
         });
+        if (!patchRes.ok) {
+            const patchErr = await patchRes.text().catch(() => patchRes.status.toString());
+            console.error(`[publish] ❌ Supabase PATCH failed for post ${post_id}: ${patchErr}`);
+        } else {
+            console.log(`[publish] ✅ Supabase updated published_to for post ${post_id}:`, JSON.stringify(currentPublishedTo));
+        }
     }
 
     const anySuccess = Object.values(results).some((r) => r.success);
@@ -352,15 +365,28 @@ export async function GET(req: Request) {
         }
 
         if (platform === "twitter") {
-            const apiKey = cred("TWITTER_API_KEY", settings.social_twitter_api_key);
-            const username = cred("TWITTER_USERNAME", settings.social_twitter_username);
-            if (!apiKey || !username) throw new Error("Twitter API key or username not configured.");
-            const res = await fetch(`https://api.twitterapi.io/twitter/user/info?userName=${username}`, {
-                headers: { "x-api-key": apiKey },
+            const appKey = cred("TWITTER_API_KEY", settings.social_twitter_api_key);
+            const appSecret = cred("TWITTER_API_SECRET", settings.social_twitter_api_secret);
+            const accessToken = cred("TWITTER_ACCESS_TOKEN", settings.social_twitter_access_token);
+            const accessSecret = cred("TWITTER_ACCESS_SECRET", settings.social_twitter_access_secret);
+            
+            if (!appKey || !appSecret || !accessToken || !accessSecret) {
+                throw new Error("Twitter API credentials incomplete.");
+            }
+            
+            const client = new TwitterApi({
+                appKey,
+                appSecret,
+                accessToken,
+                accessSecret,
             });
-            const data = await res.json();
-            if (data.status === "error") throw new Error(data.msg || "Failed to get Twitter user info.");
-            return NextResponse.json({ success: true, info: `Connected as: @${username}` });
+            
+            try {
+                const user = await client.v2.me();
+                return NextResponse.json({ success: true, info: `Connected as: @${user.data.username}` });
+            } catch (e: any) {
+                throw new Error(e.data?.detail || e.message || "Failed to verify Twitter credentials.");
+            }
         }
 
         return NextResponse.json({ success: false, error: "Unknown platform" }, { status: 400 });

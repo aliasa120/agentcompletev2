@@ -30,6 +30,14 @@ from dotenv import load_dotenv
 _publish_failures: dict = {}   # {post_id: {platform: int}}
 _MAX_PUBLISH_ATTEMPTS = 3
 
+# Tracks posts currently being published (prevents double-posting on overlapping ticks)
+_publishing_now: set = set()  # {post_id}
+
+# Maximum posts to publish per cron tick (to avoid Twitter rate limits)
+_MAX_POSTS_PER_TICK = 5
+# Delay (seconds) between posts when Twitter is one of the platforms
+_TWITTER_POST_DELAY_SECONDS = 15
+
 # ── Load env ────────────────────────────────────────────────────────────────
 load_dotenv()           # root .env
 load_dotenv("deep-agents-ui-main/.env.local", override=False)   # frontend .env
@@ -351,13 +359,16 @@ def check_auto_publish() -> None:
                 except Exception:
                     published_to = {}
 
-            # Skip: already succeeded (True) OR permanently failed ("failed" string)
+            # Skip: already succeeded (True/"true") OR permanently failed ("failed") OR currently being published
+            def _is_published(val) -> bool:
+                return val is True or val == "true" or val == True  # noqa: E712
+
             pending_platforms = [
                 p for p in enabled_platforms
-                if published_to.get(p) is not True
+                if not _is_published(published_to.get(p))
                 and published_to.get(p) != "failed"
             ]
-            if pending_platforms:
+            if pending_platforms and post.get("id") not in _publishing_now:
                 publish_candidates.append((post, pending_platforms))
 
         if not publish_candidates:
@@ -365,8 +376,14 @@ def check_auto_publish() -> None:
 
         log.info(f"📣 Auto-publish: {len(publish_candidates)} post(s) with pending platforms.")
 
-        for post, platforms in publish_candidates:
+        # Cap per-tick to avoid hitting Twitter rate limits when many posts are queued
+        batch = publish_candidates[:_MAX_POSTS_PER_TICK]
+        if len(publish_candidates) > _MAX_POSTS_PER_TICK:
+            log.info(f"   (capping to {_MAX_POSTS_PER_TICK} per tick; {len(publish_candidates) - _MAX_POSTS_PER_TICK} deferred to next tick)")
+
+        for idx, (post, platforms) in enumerate(batch):
             post_id = post.get("id", "?")
+            _publishing_now.add(post_id)  # Guard against concurrent tick double-publish
             published_to = post.get("published_to") or {}
             if isinstance(published_to, str):
                 try:
@@ -426,6 +443,13 @@ def check_auto_publish() -> None:
                     log.warning(f"  ❌ Publish request failed for post {post_id}: {err}")
             except Exception as e:
                 log.error(f"  ❌ Exception publishing post {post_id}: {e}")
+            finally:
+                _publishing_now.discard(post_id)  # Always release the guard
+
+            # Throttle between posts when Twitter is included to avoid rate-limiting
+            if "twitter" in platforms and idx < len(batch) - 1:
+                log.info(f"   ⏳ Waiting {_TWITTER_POST_DELAY_SECONDS}s before next post (Twitter rate-limit buffer)...")
+                time.sleep(_TWITTER_POST_DELAY_SECONDS)
 
     except Exception as e:
         log.error(f"check_auto_publish error: {e}")

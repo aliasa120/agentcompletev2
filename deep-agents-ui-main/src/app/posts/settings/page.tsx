@@ -16,11 +16,9 @@ interface SocialSettings {
     social_fb_page_id: string;
     social_ig_account_id: string;
     social_twitter_api_key: string;
-    social_twitter_username: string;
-    social_twitter_email: string;
-    social_twitter_password: string;
-    social_twitter_proxy: string;
-    social_twitter_totp: string;
+    social_twitter_api_secret: string;
+    social_twitter_access_token: string;
+    social_twitter_access_secret: string;
 }
 
 interface EnvStatus {
@@ -30,12 +28,9 @@ interface EnvStatus {
     ig_account_id_in_env: boolean;
     ig_account_id_value: string | null;
     twitter_api_key_in_env: boolean;
-    twitter_username_in_env: boolean;
-    twitter_username_value: string | null;
-    twitter_email_in_env: boolean;
-    twitter_password_in_env: boolean;
-    twitter_proxy_in_env: boolean;
-    twitter_totp_in_env: boolean;
+    twitter_api_secret_in_env: boolean;
+    twitter_access_token_in_env: boolean;
+    twitter_access_secret_in_env: boolean;
 }
 
 const DEFAULT_SETTINGS: SocialSettings = {
@@ -47,11 +42,9 @@ const DEFAULT_SETTINGS: SocialSettings = {
     social_fb_page_id: "",
     social_ig_account_id: "",
     social_twitter_api_key: "",
-    social_twitter_username: "",
-    social_twitter_email: "",
-    social_twitter_password: "",
-    social_twitter_proxy: "",
-    social_twitter_totp: "",
+    social_twitter_api_secret: "",
+    social_twitter_access_token: "",
+    social_twitter_access_secret: "",
 };
 
 type TestStatus = "idle" | "loading" | "success" | "error";
@@ -195,13 +188,6 @@ export default function PostSettingsPage() {
     const toggle = async (key: keyof SocialSettings) => {
         const nextVal = settings[key] === "true" ? "false" : "true";
         setSettings((prev) => ({ ...prev, [key]: nextVal }));
-        // When enabling auto-publish, record the timestamp so we only publish posts created after this moment
-        if (key === "social_auto_publish" && nextVal === "true") {
-            await supabase.from("agent_settings").upsert(
-                { key: "auto_publish_since", value: new Date().toISOString(), updated_at: new Date().toISOString() },
-                { onConflict: "key" }
-            );
-        }
     };
 
     const saveToggles = async () => {
@@ -212,8 +198,7 @@ export default function PostSettingsPage() {
         ];
         const credKeys: (keyof SocialSettings)[] = [
             "social_fb_token", "social_fb_page_id", "social_ig_account_id",
-            "social_twitter_api_key", "social_twitter_username", "social_twitter_email",
-            "social_twitter_password", "social_twitter_proxy", "social_twitter_totp",
+            "social_twitter_api_key", "social_twitter_api_secret", "social_twitter_access_token", "social_twitter_access_secret",
         ];
         // Save toggles always; save credential fields only if not in env
         const keysToSave = [...toggleKeys, ...credKeys.filter((k) => {
@@ -221,28 +206,14 @@ export default function PostSettingsPage() {
             if (k === "social_fb_page_id" && envStatus?.fb_page_id_in_env) return false;
             if (k === "social_ig_account_id" && envStatus?.ig_account_id_in_env) return false;
             if (k === "social_twitter_api_key" && envStatus?.twitter_api_key_in_env) return false;
-            if (k === "social_twitter_username" && envStatus?.twitter_username_in_env) return false;
-            if (k === "social_twitter_email" && envStatus?.twitter_email_in_env) return false;
-            if (k === "social_twitter_password" && envStatus?.twitter_password_in_env) return false;
-            if (k === "social_twitter_proxy" && envStatus?.twitter_proxy_in_env) return false;
-            if (k === "social_twitter_totp" && envStatus?.twitter_totp_in_env) return false;
+            if (k === "social_twitter_api_secret" && envStatus?.twitter_api_secret_in_env) return false;
+            if (k === "social_twitter_access_token" && envStatus?.twitter_access_token_in_env) return false;
+            if (k === "social_twitter_access_secret" && envStatus?.twitter_access_secret_in_env) return false;
             return true;
         })];
         const upserts = keysToSave.map((key) =>
             supabase.from("agent_settings").upsert({ key, value: settings[key], updated_at: new Date().toISOString() })
         );
-
-        // Also save or clear auto_publish_since depending on the auto-publish toggle
-        if (settings.social_auto_publish === "true") {
-            // Only set a new timestamp if it doesn't already exist in the DB, to prevent overriding the original "since" time
-            // For simplicity in this UI, we just update it to now if it's being saved as true
-            upserts.push(
-                supabase.from("agent_settings").upsert(
-                    { key: "auto_publish_since", value: new Date().toISOString(), updated_at: new Date().toISOString() },
-                    { onConflict: "key" }
-                )
-            );
-        }
 
         await Promise.all(upserts);
         setSaving(false);
@@ -294,7 +265,7 @@ export default function PostSettingsPage() {
                         </div>
                         <div className="flex-1">
                             <p className="font-semibold text-[15px]">Auto-Publish</p>
-                            <p className="text-xs text-muted-foreground">Automatically publish new posts when the Posts page is open</p>
+                            <p className="text-xs text-muted-foreground">Automatically publish new posts via the background cron scheduler. Toggle per-platform below.</p>
                         </div>
                         <span className="text-sm text-muted-foreground mr-1">{settings.social_auto_publish === "true" ? "ON" : "OFF"}</span>
                         <Toggle enabled={settings.social_auto_publish === "true"} onToggle={() => toggle("social_auto_publish")} />
@@ -354,7 +325,7 @@ export default function PostSettingsPage() {
                         <div className="flex-1">
                             <p className="font-semibold text-[15px]">Instagram</p>
                             <p className="text-xs text-muted-foreground">
-                                {envStatus?.twitter_username_value ? `@${envStatus.twitter_username_value}` : "@legendgamerz9999"} · ID: {envStatus?.ig_account_id_value || settings.social_ig_account_id || "Not set"}
+                                Instagram connected · ID: {envStatus?.ig_account_id_value || settings.social_ig_account_id || "Not set"}
                             </p>
                         </div>
                         <span className="text-sm text-muted-foreground mr-1">{settings.social_ig_enabled === "true" ? "Enabled" : "Disabled"}</span>
@@ -390,57 +361,34 @@ export default function PostSettingsPage() {
                         <div className="flex-1">
                             <p className="font-semibold text-[15px]">X (Twitter)</p>
                             <p className="text-xs text-muted-foreground">
-                                via twitterapi.io · {envStatus?.twitter_username_value ? `@${envStatus.twitter_username_value}` : settings.social_twitter_username ? `@${settings.social_twitter_username}` : "Not configured"}
+                                Official OAuth 1.0a API Link
                             </p>
                         </div>
                         <span className="text-sm text-muted-foreground mr-1">{settings.social_twitter_enabled === "true" ? "Enabled" : "Disabled"}</span>
                         <Toggle enabled={settings.social_twitter_enabled === "true"} onToggle={() => toggle("social_twitter_enabled")} />
                     </div>
                     <div className="px-5 py-5 space-y-4">
-                        <div className="rounded-lg bg-yellow-50 border border-yellow-100 px-3 py-2 text-xs text-yellow-800">
-                            Posting to X uses <a href="https://twitterapi.io" target="_blank" className="underline font-medium">twitterapi.io</a>. A residential proxy is <strong>required</strong>. Set credentials in <code>.env.local</code> for security.
+                        <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-800">
+                            Posting to X involves the official API. Provide developer OAuth 1.0 credentials here or in <code>.env.local</code>.
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <div className="flex items-center gap-2 mb-1"><label className="text-sm font-medium">API Key</label><EnvBadge set={!!envStatus?.twitter_api_key_in_env} /></div>
-                                <PasswordInput value={settings.social_twitter_api_key} onChange={(v) => set("social_twitter_api_key", v)} placeholder="twitterapi.io key" envSet={!!envStatus?.twitter_api_key_in_env} />
+                                <div className="flex items-center gap-2 mb-1"><label className="text-sm font-medium">Consumer Key (API Key)</label><EnvBadge set={!!envStatus?.twitter_api_key_in_env} /></div>
+                                <PasswordInput value={settings.social_twitter_api_key} onChange={(v) => set("social_twitter_api_key", v)} placeholder="API Key" envSet={!!envStatus?.twitter_api_key_in_env} />
                             </div>
                             <div>
-                                <div className="flex items-center gap-2 mb-1"><label className="text-sm font-medium">Username</label><EnvBadge set={!!envStatus?.twitter_username_in_env} /></div>
-                                {envStatus?.twitter_username_in_env ? (
-                                    <div className="flex items-center gap-2 mt-1 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
-                                        <ShieldCheck size={14} /><span className="font-mono">{envStatus.twitter_username_value}</span>
-                                    </div>
-                                ) : (
-                                    <Input value={settings.social_twitter_username} onChange={(e) => set("social_twitter_username", e.target.value)} placeholder="handle (no @)" className="mt-1 font-mono text-sm" />
-                                )}
+                                <div className="flex items-center gap-2 mb-1"><label className="text-sm font-medium">Consumer Secret (API Secret)</label><EnvBadge set={!!envStatus?.twitter_api_secret_in_env} /></div>
+                                <PasswordInput value={settings.social_twitter_api_secret} onChange={(v) => set("social_twitter_api_secret", v)} placeholder="API Secret" envSet={!!envStatus?.twitter_api_secret_in_env} />
                             </div>
                             <div>
-                                <div className="flex items-center gap-2 mb-1"><label className="text-sm font-medium">Email</label><EnvBadge set={!!envStatus?.twitter_email_in_env} /></div>
-                                <PasswordInput value={settings.social_twitter_email} onChange={(v) => set("social_twitter_email", v)} placeholder="email@example.com" envSet={!!envStatus?.twitter_email_in_env} />
+                                <div className="flex items-center gap-2 mb-1"><label className="text-sm font-medium">Access Token</label><EnvBadge set={!!envStatus?.twitter_access_token_in_env} /></div>
+                                <PasswordInput value={settings.social_twitter_access_token} onChange={(v) => set("social_twitter_access_token", v)} placeholder="Access Token" envSet={!!envStatus?.twitter_access_token_in_env} />
                             </div>
                             <div>
-                                <div className="flex items-center gap-2 mb-1"><label className="text-sm font-medium">Password</label><EnvBadge set={!!envStatus?.twitter_password_in_env} /></div>
-                                <PasswordInput value={settings.social_twitter_password} onChange={(v) => set("social_twitter_password", v)} placeholder="password" envSet={!!envStatus?.twitter_password_in_env} />
+                                <div className="flex items-center gap-2 mb-1"><label className="text-sm font-medium">Access Token Secret</label><EnvBadge set={!!envStatus?.twitter_access_secret_in_env} /></div>
+                                <PasswordInput value={settings.social_twitter_access_secret} onChange={(v) => set("social_twitter_access_secret", v)} placeholder="Access Secret" envSet={!!envStatus?.twitter_access_secret_in_env} />
                             </div>
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2 mb-1"><label className="text-sm font-medium">Proxy URL <span className="text-red-500">*</span></label><EnvBadge set={!!envStatus?.twitter_proxy_in_env} /></div>
-                            {envStatus?.twitter_proxy_in_env ? (
-                                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
-                                    <ShieldCheck size={14} /><span>Set in .env.local</span>
-                                </div>
-                            ) : (
-                                <>
-                                    <p className="text-xs text-muted-foreground mb-1">Residential proxy required. Format: <code>http://user:pass@ip:port</code></p>
-                                    <Input value={settings.social_twitter_proxy} onChange={(e) => set("social_twitter_proxy", e.target.value)} placeholder="http://username:password@ip:port" className="font-mono text-sm" />
-                                </>
-                            )}
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2 mb-1"><label className="text-sm font-medium">2FA TOTP Secret <span className="text-muted-foreground font-normal text-xs">(recommended)</span></label><EnvBadge set={!!envStatus?.twitter_totp_in_env} /></div>
-                            <PasswordInput value={settings.social_twitter_totp} onChange={(v) => set("social_twitter_totp", v)} placeholder="TOTP secret key" envSet={!!envStatus?.twitter_totp_in_env} />
                         </div>
                         <TestButton platform="twitter" />
                     </div>

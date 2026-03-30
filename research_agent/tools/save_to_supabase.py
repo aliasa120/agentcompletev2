@@ -3,6 +3,7 @@
 Uses Supabase REST API directly (no extra Python package needed).
 Accepts the social_posts.md content as a string parameter (the agent passes it directly),
 uploads the image to Supabase Storage, then inserts a row into social_posts.
+Also reads blog_post.md (if present) and saves a linked row to blog_posts.
 """
 
 import json
@@ -16,6 +17,7 @@ from langchain_core.tools import tool
 
 _OUTPUT_DIR = Path("output")
 _LATEST_IMAGE_FILE = _OUTPUT_DIR / "latest_image_path.txt"  # written by create_post_image_gemini
+_BLOG_POST_FILE    = Path("blog_post.md")
 
 
 def _supabase_headers(content_type: str = "application/json") -> dict[str, str]:
@@ -72,6 +74,48 @@ def _parse_posts(md: str) -> dict:
     }
 
 
+def _parse_blog_post(md: str) -> dict:
+    """Parse blog_post.md frontmatter and extract key fields."""
+    result = {
+        "title": "",
+        "slug": "",
+        "meta_description": "",
+        "focus_keyword": "",
+        "category_hint": "",
+        "excerpt": "",
+        "content_md": md,
+        "wp_post_url": None,
+        "wp_post_id": None,
+        "wp_edit_url": None,
+        "wp_status": "draft",
+        "image_1_url": None,
+        "image_2_url": None,
+    }
+
+    # Parse YAML frontmatter
+    if md.startswith("---"):
+        end = md.find("\n---", 3)
+        if end != -1:
+            frontmatter = md[3:end].strip()
+            for line in frontmatter.split("\n"):
+                if ":" in line:
+                    key, _, val = line.partition(":")
+                    result[key.strip()] = val.strip()
+
+    # Extract excerpt from meta_description if not set explicitly
+    if not result.get("excerpt"):
+        result["excerpt"] = result.get("meta_description", "")[:300]
+
+    # Extract image source URLs from <!-- source_url: ... --> comments
+    source_urls = re.findall(r"<!-- source_url: (https?://[^\s>]+) -->", md)
+    if len(source_urls) >= 1:
+        result["image_1_url"] = source_urls[0]
+    if len(source_urls) >= 2:
+        result["image_2_url"] = source_urls[1]
+
+    return result
+
+
 def _upload_image(supabase_url: str, img_path_str: str | None) -> str | None:
     """Upload the specified image to Supabase Storage."""
     if not img_path_str:
@@ -102,20 +146,32 @@ def _upload_image(supabase_url: str, img_path_str: str | None) -> str | None:
 
 
 @tool(parse_docstring=True)
-def save_posts_to_supabase(social_posts_markdown: str) -> str:
-    """Save the generated social posts to Supabase for display in the web UI.
+def save_posts_to_supabase(
+    social_posts_markdown: str,
+    wp_post_url: str = "",
+    wp_post_id: str = "",
+    wp_edit_url: str = "",
+    wp_status: str = "draft",
+) -> str:
+    """Save the generated social posts and blog post to Supabase.
 
     Accepts the full content of social_posts.md as a string, uploads the
-    post image to Supabase Storage (if available), then inserts a row into
-    the social_posts table.
+    post image to Supabase Storage (if available), inserts a row into
+    social_posts, and also reads blog_post.md to insert a linked row
+    into blog_posts.
 
-    Call this as the FINAL step after writing the social posts.
+    Call this as the FINAL step after writing the social posts and blog post.
     Pass the COMPLETE text of the social_posts.md file you just created.
+    If you successfully published to WordPress, pass the WordPress metadata
+    as arguments too.
 
     Args:
         social_posts_markdown: The complete markdown content of social_posts.md,
-            including all platform sections (X/Twitter, Instagram, Facebook),
-            the Sources section, and any Images section.
+            including all platform sections (X/Twitter, Instagram, Facebook).
+        wp_post_url: The live URL of the published WordPress post (if any).
+        wp_post_id: The integer ID of the WordPress post (if any).
+        wp_edit_url: The admin edit URL of the WordPress post (if any).
+        wp_status: The publish status of the WordPress post ('publish' or 'draft').
 
     Returns:
         Confirmation message with the Supabase row ID, or an error description.
@@ -135,9 +191,7 @@ def save_posts_to_supabase(social_posts_markdown: str) -> str:
     print(f"[save_to_supabase] Instagram chars: {len(parsed['instagram'])}")
     print(f"[save_to_supabase] Facebook chars: {len(parsed['facebook'])}")
 
-    # ── Image path: latest_image_path.txt is machine-written and always accurate.
-    # The markdown Images section is agent-written and prone to hallucinated/truncated filenames.
-    # Priority: latest_image_path.txt FIRST, markdown Images section as secondary fallback. ──
+    # ── Image path resolution (same as before) ────────────────────────────────
     img_path = None
 
     # 1. Trust the machine-written file first
@@ -152,7 +206,7 @@ def save_posts_to_supabase(social_posts_markdown: str) -> str:
         except Exception as e:
             print(f"[save_to_supabase] Could not read latest_image_path.txt: {e}")
 
-    # 2. Fall back to agent-written markdown Images section (may be wrong filename)
+    # 2. Fall back to agent-written markdown Images section
     if not img_path:
         img_path = parsed["image_path"]
         if img_path:
@@ -163,7 +217,7 @@ def save_posts_to_supabase(social_posts_markdown: str) -> str:
 
     # Upload image (optional — run in thread so SSL hangs can't block the DB insert)
     image_url = None
-    _result_box: list = []  # mutable box so the thread can pass back the URL
+    _result_box: list = []
 
     def _upload_in_thread():
         try:
@@ -174,13 +228,13 @@ def save_posts_to_supabase(social_posts_markdown: str) -> str:
 
     t = threading.Thread(target=_upload_in_thread, daemon=True)
     t.start()
-    t.join(timeout=20)  # give upload at most 20 s; abandon if SSL hangs
+    t.join(timeout=20)
     if t.is_alive():
         print("[save_to_supabase] ⚠️ Image upload timed out (20 s) — skipping.")
     else:
         image_url = _result_box[0] if _result_box else None
 
-    # Insert row
+    # ── Insert social_posts row ───────────────────────────────────────────────
     row = {
         "title": parsed["title"],
         "twitter": parsed["twitter"],
@@ -197,18 +251,70 @@ def save_posts_to_supabase(social_posts_markdown: str) -> str:
     headers["Prefer"] = "return=representation"
 
     resp = requests.post(insert_url, headers=headers, json=row, timeout=15)
-    if resp.ok:
-        result = resp.json()
-        row_id = result[0].get("id", "?") if result else "?"
-        print(f"[save_to_supabase] ✅ Row inserted: {row_id}")
-        return (
-            f"✅ Posts saved to Supabase (id={row_id}). "
-            f"Image: {'uploaded' if image_url else 'not available'}. "
-            "The web UI will now show this post on the /posts page."
-        )
-    else:
-        print(f"[save_to_supabase] ❌ Insert failed ({resp.status_code}): {resp.text[:400]}")
+    if not resp.ok:
+        print(f"[save_to_supabase] ❌ social_posts insert failed ({resp.status_code}): {resp.text[:400]}")
         return (
             f"❌ Supabase insert failed ({resp.status_code}): {resp.text[:200]}. "
             "Posts are still available in memory."
         )
+
+    result = resp.json()
+    social_row_id = result[0].get("id", "?") if result else "?"
+    print(f"[save_to_supabase] ✅ social_posts row inserted: {social_row_id}")
+
+    # ── Insert blog_posts row (optional — don't fail hard if missing) ─────────
+    blog_row_id = None
+    if _BLOG_POST_FILE.exists():
+        try:
+            blog_md = _BLOG_POST_FILE.read_text(encoding="utf-8").strip()
+            blog_data = _parse_blog_post(blog_md)
+
+            blog_row = {
+                "social_post_id":  social_row_id if social_row_id != "?" else None,
+                "title":           blog_data.get("title", ""),
+                "slug":            blog_data.get("slug", ""),
+                "content_md":      blog_md,
+                "excerpt":         blog_data.get("excerpt", ""),
+                "focus_keyword":   blog_data.get("focus_keyword", ""),
+                "meta_description": blog_data.get("meta_description", ""),
+                "category_hint":   blog_data.get("category_hint", ""),
+                "wp_post_url":     wp_post_url or blog_data.get("wp_post_url"),
+                "wp_post_id":      int(wp_post_id) if str(wp_post_id).isdigit() else blog_data.get("wp_post_id"),
+                "wp_edit_url":     wp_edit_url or blog_data.get("wp_edit_url"),
+                "wp_status":       wp_status if wp_post_url else blog_data.get("wp_status", "draft"),
+                "has_image_1":     blog_data.get("image_1_url") is not None,
+                "has_image_2":     blog_data.get("image_2_url") is not None,
+                "image_1_url":     blog_data.get("image_1_url"),
+                "image_2_url":     blog_data.get("image_2_url"),
+            }
+
+            blog_headers = _supabase_headers()
+            blog_headers["Prefer"] = "return=representation"
+            blog_resp = requests.post(
+                f"{supabase_url}/rest/v1/blog_posts",
+                headers=blog_headers,
+                json=blog_row,
+                timeout=15,
+            )
+            if blog_resp.ok:
+                blog_result = blog_resp.json()
+                blog_row_id = blog_result[0].get("id", "?") if blog_result else "?"
+                print(f"[save_to_supabase] ✅ blog_posts row inserted: {blog_row_id}")
+            else:
+                print(
+                    f"[save_to_supabase] ⚠️ blog_posts insert failed "
+                    f"({blog_resp.status_code}): {blog_resp.text[:200]}"
+                )
+        except Exception as e:
+            print(f"[save_to_supabase] ⚠️ blog_posts save error (non-fatal): {e}")
+    else:
+        print("[save_to_supabase] blog_post.md not found — skipping blog_posts row.")
+
+    return (
+        f"✅ Posts saved to Supabase.\n"
+        f"  social_posts id: {social_row_id}\n"
+        f"  blog_posts id:   {blog_row_id or 'not saved (blog_post.md missing or error)'}\n"
+        f"  Image: {'uploaded → ' + (image_url or '') if image_url else 'not available'}.\n"
+        "The web UI will now show this post on the /posts page."
+    )
+

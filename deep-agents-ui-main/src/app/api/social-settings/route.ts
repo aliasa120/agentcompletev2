@@ -8,11 +8,8 @@ export async function GET() {
         ig_account_id_in_env: !!process.env.IG_ACCOUNT_ID?.trim(),
         ig_account_id_value: process.env.IG_ACCOUNT_ID?.trim() || null,
         twitter_api_key_in_env: !!process.env.TWITTER_API_KEY?.trim(),
-        twitter_username_in_env: !!process.env.TWITTER_USERNAME?.trim(),
-        twitter_username_value: process.env.TWITTER_USERNAME?.trim() || null,
-        twitter_email_in_env: !!process.env.TWITTER_EMAIL?.trim(),
-        twitter_password_in_env: !!process.env.TWITTER_PASSWORD?.trim(),
-        twitter_proxy_in_env: !!process.env.TWITTER_PROXY?.trim(),
-        twitter_totp_in_env: !!process.env.TWITTER_TOTP?.trim(),
+        twitter_api_secret_in_env: !!process.env.TWITTER_API_SECRET?.trim(),
+        twitter_access_token_in_env: !!process.env.TWITTER_ACCESS_TOKEN?.trim(),
+        twitter_access_secret_in_env: !!process.env.TWITTER_ACCESS_SECRET?.trim(),
     });
 }

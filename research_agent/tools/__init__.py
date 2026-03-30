@@ -19,6 +19,11 @@ from .parallel_search import parallel_search
 from .tavily_extract import tavily_extract
 from .create_post_image_gemini import create_post_image_gemini
 
+# ── Blog + WordPress tools (new) ──────────────────────────────────────────────
+from .read_skill import read_skill
+from .embed_blog_images import embed_images_in_blog
+from .wordpress_publisher import get_wordpress_categories, publish_to_wordpress
+
 __all__ = [
     # ── Unified tools (exposed to agent) ─────────────────────────────────────
     "unified_search",
@@ -31,6 +36,11 @@ __all__ = [
     "analyze_images_gemini",
     "save_posts_to_supabase",
     "get_design_guide",
+    # ── Blog + WordPress tools ─────────────────────────────────────────────────
+    "read_skill",
+    "embed_images_in_blog",
+    "get_wordpress_categories",
+    "publish_to_wordpress",
     # ── Raw providers (not exposed to agent directly) ─────────────────────────
     "linkup_search",
     "tavily_extract",

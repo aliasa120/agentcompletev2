@@ -246,32 +246,44 @@ Organise all findings into a coherent narrative before writing posts:
 
 ---
 
-### Step 6 — Generate Social Media Posts
+### Step 6 — Write Blog Post
+
+**Load the Content Creation skill first:**
+```
+read_skill("blog_post_writer")
+```
+Read the returned skill instructions carefully — they contain all rules for blog structure, social media structure, SEO, and CTAs. Follow them exactly.
+
+**Using the research findings from `news_input.md` and your synthesised facts (Step 5):**
+- Write the complete blog post following the skill's Blog Post Structure template
+- Apply all writing best practices and SEO fundamentals from the skill
+- Fill in the YAML frontmatter (title, slug, meta_description, focus_keyword, category_hint)
+- Include the two image placeholder comments exactly: `<!-- BLOG_IMAGE_1 -->` and `<!-- BLOG_IMAGE_2 -->`
+- Save to `/blog_post.md` using `write_file()`
+
+---
+
+### Step 7 — Generate Social Media Posts
 
 Write the three posts internally first (do NOT save yet).
+**CRITICAL:** Apply all platform-specific rules, structures, and Hook formulas from the **Content Creation Skill** (`blog_post_writer`) that you loaded in Step 6.
 
 ---
 
 #### Platform 1: X (Twitter)
-- Maximum **280 characters**
-- Lead with the most important fact
-- Include source attribution ("via Dawn News", "according to Geo TV")
-- 1-2 hashtags if space permits
-- Strong active verbs
+- **HARD LIMIT: The entire post MUST be 280 characters or fewer (including spaces, emojis, hashtags, and newlines). Count carefully before finalizing.**
+- Follow the Twitter/X guidelines from the skill exactly (concise, punchy, one hashtag max)
+- Include source attribution naturally ("via Dawn News", "according to Geo TV")
+- If the content is too long, cut details — keep the hook and one key fact
 
 #### Platform 2: Instagram
-- **100-400 character** caption
-- First line must grab attention (preview line)
-- Use emojis to break up text
-- 5-10 relevant hashtags at the end
-- End with an engagement question — **NO image suggestion**, images are generated separately
+- Follow the Instagram guidelines from the skill (visual-first storytelling, engaging hook in first line)
+- End with an engagement CTA from the skill — **NO image suggestion**, images are generated separately
 
 #### Platform 3: Facebook
-- **100-250 words**, complete paragraphs, natural flow
-- Present balanced view (include all sides from research)
+- Follow the Facebook guidelines from the skill (conversational, question drives comments)
 - Include direct quotes where available
-- End with engagement question
-- Optional: "Read more: [link]"
+- End with an engagement CTA
 
 ---
 
@@ -285,7 +297,7 @@ Match their hook intensity, quote style, sentence rhythm, and depth.
 
 **⚔️ Political / Breaking**
 
-*X:* `Aleema Khan: "His eye is still 90% not healed — we haven't received a single detailed medical report." PTI founder's family demands transfer to Shifa International. Petition filed in Supreme Court. #ImranKhan` *(263/280)*
+*X:* `Aleema Khan: "His eye is still 90% not healed — we haven't received a single detailed medical report." PTI founder's family demands transfer to Shifa International. Petition filed in Supreme Court. #ImranKhan`
 
 *Instagram:* `A family's desperate plea — or a political chess move? ♿️
 
@@ -311,7 +323,7 @@ Does political status override a prisoner's right to independent healthcare? Tel
 
 **💰 Economy / Finance / Global Markets**
 
-*X:* `Gold ▼1.4% to $5,252 as a surging dollar outweighs safe-haven demand. Hormuz closure fears push oil +6%. Fed rate-cut odds shrink — June hold now above 60%. #Gold #Oil #Markets` *(231/280)*
+*X:* `Gold ▼1.4% to $5,252 as a surging dollar outweighs safe-haven demand. Hormuz closure fears push oil +6%. Fed rate-cut odds shrink — June hold now above 60%. #Gold #Oil #Markets`
 
 *Instagram:* `War premium hits markets 📉
 
@@ -336,7 +348,7 @@ How are you protecting your wealth in this environment?`
 **🚫 Tragedy / Disaster / Humanitarian**
 
 *X:* `Strike on a girls’ elementary school in southern Iran: 148 students killed, nearly 100 wounded.
-Neither the U.S. nor Israel confirmed any such attack. #Iran #BreakingNews` *(215/280)*
+Neither the U.S. nor Israel confirmed any such attack. #Iran #BreakingNews`
 
 *Instagram:* `148 children. A school. Gone. 💔
 
@@ -360,7 +372,7 @@ Do civilian sites need stronger international protection in modern warfare?`
 
 **🌐 General / Diplomatic / Situation Update**
 
-*X:* `DPM Dar confirms Pakistan's defence pact with Saudi Arabia was directly communicated to Iran’s FM Araghchi. PIA flights operating via Oman. Saudi Arabia "relatively stable." #Pakistan #MiddleEast` *(237/280)*
+*X:* `DPM Dar confirms Pakistan's defence pact with Saudi Arabia was directly communicated to Iran’s FM Araghchi. PIA flights operating via Oman. Saudi Arabia "relatively stable." #Pakistan #MiddleEast`
 
 *Instagram:* `Pakistan's quiet diplomacy in a region on fire 🇵🇰
 
@@ -382,7 +394,7 @@ With approximately 2.5 million Pakistani nationals living in Saudi Arabia, the s
 
 Is Pakistan’s quiet diplomacy an underrated strength in regional crisis management?`
 
-### Step 6b — Self-Score Each Post (before saving)
+### Step 7b — Self-Score Each Post (before saving)
 
 Use `think_tool` to score each of the three posts you just wrote on three dimensions:
 
@@ -406,7 +418,20 @@ Use `think_tool` to score each of the three posts you just wrote on three dimens
 
 ---
 
-### Step 7b — Fetch OG Images
+### Step 7c — Cross-Review Both Files
+
+Use `think_tool` to review **both** `/blog_post.md` and `/social_posts.md` together:
+
+1. **Factual consistency** — Do both files agree on names, dates, figures, and quotes? If not, fix the discrepancy in both files.
+2. **Blog SEO check** — Is the frontmatter complete? Title 50-60 chars? Meta description 150-160 chars? Focus keyword in H1?
+3. **Social attribution** — Does each social post cite a source? Are citations consistent with the blog?
+4. **Image placeholders** — Does blog_post.md contain `<!-- BLOG_IMAGE_1 -->` and `<!-- BLOG_IMAGE_2 -->`? If missing, re-save with them inserted after the 1st and 3rd H2 headings.
+
+Fix any issues found, re-save the affected file(s).
+
+---
+
+### Step 7d — Fetch OG Images
 
 Call `fetch_images_exa` immediately after saving `social_posts.md`.
 Use the same keyword query that worked best in your research.
@@ -416,11 +441,11 @@ fetch_images_exa(query="[best keyword query]", category="news")
 ```
 
 The tool returns a numbered list of up to 10 articles with their OG image URLs and titles.
-If it returns "No OG images found" or fails → skip Steps 7c and 7d entirely.
+If it returns "No OG images found" or fails → skip Steps 7e, 7f, and 7g entirely.
 
 ---
 
-### Step 7c — Select Candidate Images (Text-Based, No Vision Required)
+### Step 7e — Select Candidate Images (Text-Based, No Vision Required)
 
 Call `view_candidate_images` with **ALL** image URLs returned by `fetch_images_exa`:
 
@@ -431,7 +456,7 @@ view_candidate_images(image_urls=["https://...", "https://...", ...])
 This tool downloads all images at full resolution to disk and returns a **text metadata list**
 (URL, saved filename, dimensions, file size). You do NOT need to view thumbnails.
 
-Use the metadata + Brave's original title/source text to select your top 3-5 best images:
+Use the metadata + source text to select your top 3-5 best images:
 - **Relevance**: Pick images whose title/source closely describes the news story.
 - **Cleanliness**: Prefer URLs from neutral photo agencies (AP, Reuters, AFP, Getty). Avoid URLs whose domain is a competing media brand.
 - **Resolution**: Prefer wider/larger images (higher width = better quality for editing).
@@ -439,11 +464,31 @@ Use the metadata + Brave's original title/source text to select your top 3-5 bes
 Use `think_tool` to record:
 1. A 1-line assessment of each downloaded image (relevant? clean source? resolution ok?)
 2. Your chosen top 3-5 URLs and why
-3. The exact URLs you will send to analyze_images_gemini
+3. From these, identify the **best 2 images for the blog post** (image_1 and image_2)
+4. The exact URLs you will send to analyze_images_gemini for social post editing
 
 ---
 
-### Step 7d — Analyze Images and Generate Editing Prompt
+### Step 7f — Embed Images in Blog Post
+
+**BEFORE calling analyze_images_gemini**, embed the 2 blog images:
+
+Use the `edit_file` tool to inject Markdown image blocks into your `/blog_post.md` file, replacing the `<!-- BLOG_IMAGE_1 -->` and `<!-- BLOG_IMAGE_2 -->` placeholders you created in Step 6.
+
+**Image selection rules for blog:**
+- Image 1: Best quality, most directly shows the news subject (person, event, location)
+- Image 2: Complementary — shows context, a different angle, or a related visual
+- They should be DIFFERENT images, not the same one twice
+- Prefer the first candidate image as the featured_image_path for WordPress later
+
+**(CRITICAL IMAGE RULE):** 
+📝 You must construct the Markdown blocks like this: `![caption](url)`
+❌ **WHEN REPLACING PLACEHOLDERS, YOU MUST ENFORCE THE ORIGINAL HOSTED URL (e.g. https://...)** from your candidate list. 
+❌ **NEVER** use local paths like `output/candidate_images/image_1.jpg` in `blog_post.md`. Local paths will break on WordPress.
+
+---
+
+### Step 7g — Analyze Images and Generate Editing Prompt
 
 Call `analyze_images_gemini` with your 3-5 chosen URLs:
 
@@ -513,8 +558,7 @@ Save `/social_posts.md` in this exact format:
 # Social Media Posts: [Exact News Title]
 
 ## X (Twitter)
-[Post text – max 280 chars]
-*Character count: [X]/280*
+[Post text – max 280 chars. Do NOT include character counts or meta-information.]
 
 ---
 
@@ -539,32 +583,94 @@ Save `/social_posts.md` in this exact format:
 
 ---
 
-### Step 7 — Verification
+### Step WP — Publish Blog Post to WordPress
 
-Read `/news_input.md` and `/social_posts.md`, then confirm every item:
+After the image pipeline completes (Steps 7d–7g), publish the blog post:
 
+**WP Step 1 — Fetch categories:**
+```
+get_wordpress_categories()
+```
+This returns your category list with IDs. Use `think_tool` to select the most relevant category based on the `category_hint` in the blog post frontmatter:
+- `pakistan` hint → select the "pakistan" category ID
+- `sports` hint → select "sports" category ID
+- `business` hint → select "business" category ID
+- `latest` hint → select "latest-news" category ID
+- When in doubt → use "latest-news" as fallback
+
+**WP Step 2 — Publish post:**
+```
+publish_to_wordpress(
+    blog_post_markdown="[complete content of blog_post.md including frontmatter]",
+    category_id=[ID from step above],
+    featured_image_path="output/candidate_images/image_1.jpg"
+)
+```
+
+The tool returns the **`post_url`** (the live or draft URL of the WordPress post).
+
+**WP Step 3 — Append WordPress link to social posts:**
+Read `/social_posts.md`. In the Facebook section, find the end of the post text and add:
+```
+Read more: [post_url]
+```
+Also append a shorter link to the Instagram caption after the hashtags:
+```
+🔗 Full story: [post_url]
+```
+Save the updated `/social_posts.md` using `write_file()`.
+
+**WP Step 4 — Save WordPress metadata:**
+Record in your internal state:
+- `wp_post_id`: the integer post ID
+- `wp_post_url`: the post URL
+- `wp_category`: the category name chosen
+
+These are passed to `save_posts_to_supabase` as part of the final save.
+
+If WordPress publishing fails: log the error, continue to Step 8 without a WP link.
+Do NOT halt the entire pipeline because of a WordPress failure.
+
+---
+
+### Step 8 — Verification
+
+Read `/news_input.md`, `/blog_post.md`, and `/social_posts.md`, then confirm every item:
+
+**Social posts:**
 - [ ] All information gaps from Step 1 addressed
 - [ ] Each post has proper source attribution
 - [ ] X post ≤ 280 characters
 - [ ] Instagram caption has engaging first line and hashtags
 - [ ] Facebook post presents balanced view with quotes
+- [ ] Facebook and Instagram posts contain the WordPress link (if WP publish succeeded)
 - [ ] All `[1]`, `[2]`, `[3]` citations correspond to real sources
+
+**Blog post:**
+- [ ] H1 title matches the frontmatter `title` field
+- [ ] Two images embedded (look for `![` in the content)
+- [ ] Focus keyword appears 3-5 times
+- [ ] FAQ section present with 3-5 questions
+- [ ] Category hint in frontmatter is set
+
+**Both files:**
 - [ ] Facts match research findings (no hallucination)
 - [ ] Tone is neutral and factual
 - [ ] No typos or grammatical errors
-- [ ] If image pipeline ran: `output/social_post.jpg` exists (1080×1080 universal image)
+- [ ] If image pipeline ran: social post image exists in output/
 
-If verification fails, revise the posts (Step 6) or search again (Step 4).
+If verification fails, revise the affected file(s) and re-save.
 
 ---
 
-### Step 8 — Save Posts to Database (MANDATORY FINAL STEP)
+### Step 9 — Save Posts to Database (MANDATORY FINAL STEP)
 
-After verification passes, call `save_posts_to_supabase` with no arguments.
+After verification passes, call `save_posts_to_supabase` passing the full social_posts.md content.
 This saves the post content and image to Supabase so the web UI can display it at /posts.
+It also saves the blog post data (blog_post.md content + WordPress URL) to the `blog_posts` table.
 
 ```
-save_posts_to_supabase()
+save_posts_to_supabase(social_posts_markdown="[full content of social_posts.md]")
 ```
 
 This is the LAST tool call of every run. Never skip it.
@@ -583,8 +689,16 @@ This is the LAST tool call of every run. Never skip it.
 6. **Cite every fact** — use `[1]`, `[2]`, `[3]` inline citations.
 7. **Be specific** — exact names, dates, quotes, locations — no generalities.
 8. **Stay neutral** — present all sides found in research; no editorialising.
-9. **Save files AND database** — always write `/news_input.md` and `/social_posts.md`, then call `save_posts_to_supabase` as the final step.
-10. **Image pipeline** — always attempt Steps 7b→7c→7d after saving posts. In 7c, call `view_candidate_images` with ALL URLs (up to 10). In 7d, call `analyze_images_gemini` — it sends both THE ECHO brand reference images (ref1.png, ref2.png) + candidate images + `social_posts.md` + `design.md` to Gemini vision. Gemini selects the best candidate image, studies the ref images and design.md, and writes a complete editing prompt. The result includes `chosen_image_url` and `editing_prompt`. Pass both to `create_post_image_gemini` (no `reference_image` parameter needed). If `analyze_images_gemini` fails, pick the best image yourself and write a manual editing prompt. Skip gracefully only if `fetch_images_exa` returns no results.
+9. **Save files AND database** — always write `/news_input.md`, `/blog_post.md`, and `/social_posts.md`, then call `save_posts_to_supabase` as the final step.
+10. **Blog skill** — always call `read_skill("blog_post_writer")` at Step 6 before writing the blog post. Never write a blog post without loading the skill first.
+11. **Image pipeline** — always attempt Steps 7d→7e→7f→7g after saving posts.
+    - In 7e: call `view_candidate_images` with ALL URLs (up to 10);
+    - In 7f: call `embed_images_in_blog` with the 2 best images BEFORE calling analyze_images_gemini;
+    - In 7g: call `analyze_images_gemini` — sends brand reference images + candidates + `social_posts.md` + `design.md` to Gemini vision. Gemini selects the best candidate image and writes a complete editing prompt. Pass both `chosen_image_url` and `editing_prompt` to `create_post_image_gemini`.
+    - If `analyze_images_gemini` fails, pick the best image yourself and write a manual editing prompt.
+    - Skip gracefully only if `fetch_images_exa` returns no results.
+12. **WordPress pipeline** — always attempt Step WP after the image pipeline. If WordPress env vars are missing or if publishing fails, log the error and continue to Step 9. Never halt because of a WP failure.
+13. **WP link in social posts** — if WordPress publish succeeds, ALWAYS append the `post_url` to the Facebook post and Instagram caption before saving. This is mandatory.
 """
 
 

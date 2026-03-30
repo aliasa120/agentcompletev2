@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -415,9 +415,6 @@ export default function PostsPage() {
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const [enabledPlatforms, setEnabledPlatforms] = useState<string[]>([]);
-    const [autoPublish, setAutoPublish] = useState(false);
-    const [autoPublishSince, setAutoPublishSince] = useState<string | null>(null);
-    const autoPublishRanRef = useRef(false);
 
     const fetchPosts = useCallback(async () => {
         setLoading(true);
@@ -447,9 +444,6 @@ export default function PostsPage() {
             if (settingsMap.social_ig_enabled === "true") enabled.push("instagram");
             if (settingsMap.social_twitter_enabled === "true") enabled.push("twitter");
             setEnabledPlatforms(enabled);
-            setAutoPublish(settingsMap.social_auto_publish === "true");
-            // auto_publish_since: ISO timestamp set when user toggled ON — only publish posts after this time
-            setAutoPublishSince(settingsMap.auto_publish_since ?? null);
         } catch {
             setError("Failed to fetch posts. Make sure the agent has run.");
         } finally {
@@ -477,37 +471,6 @@ export default function PostsPage() {
     }, []);
 
     useEffect(() => { fetchPosts(); }, [fetchPosts]);
-
-    // Auto-publish: only publish posts created AFTER auto_publish_since (set when toggle was turned ON)
-    useEffect(() => {
-        if (!autoPublish || loading || posts.length === 0 || enabledPlatforms.length === 0) return;
-        if (autoPublishRanRef.current) return;
-        autoPublishRanRef.current = true;
-
-        // Only publish posts created after the toggle-on timestamp (or all if no timestamp set)
-        const cutoff = autoPublishSince ? new Date(autoPublishSince).getTime() : null;
-        const unpublishedPosts = posts.filter((p) => {
-            const postTime = new Date(p.created_at).getTime();
-            // Respect the cutoff: skip posts created before auto-publish was enabled
-            if (cutoff && postTime < cutoff) return false;
-            return enabledPlatforms.some((platform) => !p.published_to[platform]);
-        });
-        if (!unpublishedPosts.length) return;
-
-        unpublishedPosts.forEach(async (post) => {
-            const platforms = enabledPlatforms.filter((pl) => !post.published_to[pl]);
-            if (!platforms.length) return;
-            try {
-                const res = await fetch("/api/publish", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ post_id: post.id, platforms }),
-                });
-                const json = await res.json();
-                if (json.published_to) handlePublished(post.id, json.published_to);
-            } catch { }
-        });
-    }, [autoPublish, autoPublishSince, loading, posts, enabledPlatforms, handlePublished]);
 
     const visiblePosts = posts.filter((p) => p[activeTab]?.trim());
 
@@ -541,11 +504,6 @@ export default function PostsPage() {
                     </div>
 
                     <div className="flex items-center gap-2 ml-auto shrink-0">
-                        {autoPublish && (
-                            <span className="flex items-center gap-1 rounded-full bg-purple-100 px-2 py-1 text-[11px] font-semibold text-purple-700">
-                                <Send size={10} />Auto-publish ON
-                            </span>
-                        )}
                         <Link href="/posts/settings">
                             <Button variant="outline" size="sm" className="gap-1.5 text-gray-600 text-[13px]">
                                 <Settings size={13} />Settings

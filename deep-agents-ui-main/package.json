@@ -49,6 +49,7 @@
     "sonner": "^2.0.7",
     "swr": "^2.3.6",
     "tailwind-merge": "^2.6",
+    "twitter-api-v2": "^1.29.0",
     "use-stick-to-bottom": "^1.1.1",
     "uuid": "^9.0.1"
   },

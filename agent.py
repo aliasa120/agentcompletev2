@@ -27,6 +27,9 @@ from research_agent.tools import (
     analyze_images_gemini,
     save_posts_to_supabase,
     get_design_guide,
+    read_skill,
+    get_wordpress_categories,
+    publish_to_wordpress,
 )
 
 # Inject today's date into the unified prompt
@@ -53,6 +56,9 @@ agent = create_deep_agent(
         create_post_image,
         save_posts_to_supabase,
         get_design_guide,
+        read_skill,
+        get_wordpress_categories,
+        publish_to_wordpress,
     ],
     system_prompt=INSTRUCTIONS,
 )
