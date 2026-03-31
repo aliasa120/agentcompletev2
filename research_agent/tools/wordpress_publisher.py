@@ -17,6 +17,8 @@ from pathlib import Path
 import requests
 from langchain_core.tools import tool
 
+from .provider_engine import get_settings
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -355,7 +357,24 @@ def publish_to_wordpress(
             print("[wp_publisher] ⚠️  Featured image upload failed — continuing without it.")
 
     # ── Build post payload ─────────────────────────────────────────────────────
-    post_status = os.environ.get("WP_POST_STATUS", "draft")
+    supabase_settings = get_settings()
+    wp_auto_publish = supabase_settings.get("wp_auto_publish", "")
+
+    # Priority order (highest to lowest):
+    #   1. Supabase UI setting (wp_auto_publish) — set from Posts Settings page
+    #   2. WP_POST_STATUS env var — legacy / .env fallback
+    #   3. Default: "draft" (safe default)
+    if wp_auto_publish:
+        # UI toggle is authoritative — "true" → publish, anything else → draft
+        post_status = "publish" if wp_auto_publish == "true" else "draft"
+    else:
+        # No Supabase setting found — fall back to env var or safe default
+        post_status = os.environ.get("WP_POST_STATUS", "draft")
+
+    print(f"[wp_publisher] Post status: {post_status!r} "
+          f"(wp_auto_publish={wp_auto_publish!r}, "
+          f"WP_POST_STATUS env={os.environ.get('WP_POST_STATUS', 'not set')!r})")
+
     payload: dict = {
         "title":      title,
         "content":    html_content,

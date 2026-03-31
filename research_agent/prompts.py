@@ -241,8 +241,17 @@ Organise all findings into a coherent narrative before writing posts:
 
 1. Note which targets are Complete / Partial / Not Found
 2. Extract key facts, quotes, dates, locations
-3. Assign each unique URL a citation number `[1]`, `[2]`, `[3]`
+3. Assign each unique URL a citation number `[1]`, `[2]`, `[3]` **for your internal notes and the Sources section of `social_posts.md` ONLY**
 4. Identify the single most newsworthy element (the hook)
+
+> ⚠️ **CITATION RULE — READ CAREFULLY:**
+> `[1]`, `[2]`, `[3]` citation numbers are for **your internal research notes** and the **`## Sources` section of `social_posts.md`** ONLY.
+> They must **NEVER appear in `blog_post.md`** — not in paragraphs, not after sentences, nowhere.
+> In the blog post, attribute facts naturally inside the sentence itself:
+> - ✅ `"Finance Minister Aurangzeb warned in a high-level briefing that..."`
+> - ✅ `"According to Dawn News, the government raised petrol prices by Rs55/litre."`
+> - ❌ `"Petrol prices rose by Rs55/litre [2] amid soaring crude costs [3]."`
+> Violating this rule creates broken text that must be manually fixed — do not do it.
 
 ---
 
@@ -426,6 +435,10 @@ Use `think_tool` to review **both** `/blog_post.md` and `/social_posts.md` toget
 2. **Blog SEO check** — Is the frontmatter complete? Title 50-60 chars? Meta description 150-160 chars? Focus keyword in H1?
 3. **Social attribution** — Does each social post cite a source? Are citations consistent with the blog?
 4. **Image placeholders** — Does blog_post.md contain `<!-- BLOG_IMAGE_1 -->` and `<!-- BLOG_IMAGE_2 -->`? If missing, re-save with them inserted after the 1st and 3rd H2 headings.
+5. **Citation scan (CRITICAL)** — Scan the **entire body** of `blog_post.md` for any `[1]`, `[2]`, `[3]`...`[99]` patterns. If ANY are found:
+   - Remove them ALL in a single `edit_file` call using `replace_all=true` for each pattern found
+   - Also fix trailing spaces before periods left behind (e.g. `word .` → `word.`) in the same pass
+   - These must be zero in the final blog post — they break the published article
 
 Fix any issues found, re-save the affected file(s).
 
@@ -686,7 +699,7 @@ This is the LAST tool call of every run. Never skip it.
 3c. **Extract fallback** — if `tavily_extract` returns thin content (fewer than 3 sentences) AND you have no more candidate URLs to retry, call `exa_extract` with the same URLs as a one-time fallback. Do not count it against your tavily budget.
 4. **Reactive queries** — do not pre-plan all 3 search queries upfront; write each query *after* seeing the previous round's results, targeting exactly what is still missing.
 5. **Extract wisely** — only call `tavily_extract` when a target is Partially Complete and a credible URL's snippet already hints at the answer; max 2 URLs per call.
-6. **Cite every fact** — use `[1]`, `[2]`, `[3]` inline citations.
+6. **Citation placement** — `[1]`, `[2]`, `[3]` citations belong ONLY in your internal synthesis notes and the `## Sources` section of `social_posts.md`. **NEVER place `[N]` inline in `blog_post.md`.** Attribute every blog fact naturally in the sentence (e.g. "according to Finance Minister Aurangzeb...", "Dawn News reported..."). Inline citation numbers in blog_post.md break the published article — this is a hard rule.
 7. **Be specific** — exact names, dates, quotes, locations — no generalities.
 8. **Stay neutral** — present all sides found in research; no editorialising.
 9. **Save files AND database** — always write `/news_input.md`, `/blog_post.md`, and `/social_posts.md`, then call `save_posts_to_supabase` as the final step.

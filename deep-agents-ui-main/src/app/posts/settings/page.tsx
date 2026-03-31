@@ -12,6 +12,7 @@ interface SocialSettings {
     social_ig_enabled: string;
     social_twitter_enabled: string;
     social_auto_publish: string;
+    wp_auto_publish: string;
     social_fb_token: string;
     social_fb_page_id: string;
     social_ig_account_id: string;
@@ -38,6 +39,7 @@ const DEFAULT_SETTINGS: SocialSettings = {
     social_ig_enabled: "true",
     social_twitter_enabled: "false",
     social_auto_publish: "false",
+    wp_auto_publish: "false",
     social_fb_token: "",
     social_fb_page_id: "",
     social_ig_account_id: "",
@@ -194,7 +196,7 @@ export default function PostSettingsPage() {
         setSaving(true);
         setSaveMsg("");
         const toggleKeys: (keyof SocialSettings)[] = [
-            "social_fb_enabled", "social_ig_enabled", "social_twitter_enabled", "social_auto_publish",
+            "social_fb_enabled", "social_ig_enabled", "social_twitter_enabled", "social_auto_publish", "wp_auto_publish"
         ];
         const credKeys: (keyof SocialSettings)[] = [
             "social_fb_token", "social_fb_page_id", "social_ig_account_id",
@@ -269,6 +271,21 @@ export default function PostSettingsPage() {
                         </div>
                         <span className="text-sm text-muted-foreground mr-1">{settings.social_auto_publish === "true" ? "ON" : "OFF"}</span>
                         <Toggle enabled={settings.social_auto_publish === "true"} onToggle={() => toggle("social_auto_publish")} />
+                    </div>
+                </section>
+
+                {/* WordPress Auto-Publish */}
+                <section className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                            <span className="font-bold text-blue-600 text-lg">W</span>
+                        </div>
+                        <div className="flex-1">
+                            <p className="font-semibold text-[15px]">WordPress Auto-Publish</p>
+                            <p className="text-xs text-muted-foreground">Publish posts immediately (Live) instead of creating Drafts.</p>
+                        </div>
+                        <span className="text-sm text-muted-foreground mr-1">{settings.wp_auto_publish === "true" ? "Live" : "Draft"}</span>
+                        <Toggle enabled={settings.wp_auto_publish === "true"} onToggle={() => toggle("wp_auto_publish")} />
                     </div>
                 </section>
 
