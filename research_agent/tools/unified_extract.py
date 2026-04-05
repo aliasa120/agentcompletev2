@@ -80,7 +80,7 @@ _PROVIDER_MAP = {
 _DEFAULTS = {
     "extract_provider_primary": "tavily",
     "extract_provider_secondary": "exa",
-    "extract_max_retries": "3",
+    "extract_max_retries": "4",   # 4 attempts × 15 s per provider
 }
 
 
@@ -141,6 +141,11 @@ def unified_extract(urls: List[str], query: str = "") -> str:
             query=query,
         )
     )
+
+    # If all providers failed, result.data is already a graceful error string.
+    # Return it as-is so the agent can decide to skip this step and continue.
+    if result.failed:
+        return result.data
 
     prefix = ""
     if result.fallback_used:

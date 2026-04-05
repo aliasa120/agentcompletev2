@@ -42,7 +42,7 @@ _REF_URLS = [f"{_R2_BASE}/ref1.png", f"{_R2_BASE}/ref2.png"]
 _DEFAULTS = {
     "image_provider_primary": "kie",
     "image_provider_secondary": "gemini_flash",
-    "image_max_retries": "2",
+    "image_max_retries": "2",    # 2 attempts × 15 s per provider
 }
 
 
@@ -293,12 +293,16 @@ def create_post_image(
                 source_img=source_img,
             )
         )
-        result_img = result.data
-        if result.fallback_used:
-            logger.warning(f"[unified_image] Used fallback provider: {result.provider_used}")
-
+        if result.failed:
+            # All image providers failed — fall through to raw-source fallback below
+            logger.error(f"[unified_image] All image providers failed: {result.data}")
+            result_img = None
+        else:
+            result_img = result.data
+            if result.fallback_used:
+                logger.warning(f"[unified_image] Used fallback provider: {result.provider_used}")
     except RuntimeError as e:
-        logger.error(f"[unified_image] All providers failed: {e}")
+        logger.error(f"[unified_image] Unexpected error: {e}")
         result_img = None
 
     # Save output

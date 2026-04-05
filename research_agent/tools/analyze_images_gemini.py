@@ -2,11 +2,11 @@
 
 Simplified Flow (single Gemini call):
 1. Receives a list of candidate image URLs (already on disk from view_candidate_images).
-2. Reads social_posts.md and design.md from disk.
+2. Reads blog_post.md and design.md from disk.
 3. Loads both THE ECHO reference images (ref1.png, ref2.png) from local disk.
 4. Sends ALL candidate images + both ref images + markdown files to Gemini Flash vision.
 5. Gemini:
-   - Reads social_posts.md to understand the story
+   - Reads blog_post.md to understand the story
    - Evaluates each candidate image for quality and relevance
    - Selects the single BEST candidate image
    - Studies the reference images (ref1.png, ref2.png) and design.md carefully
@@ -28,7 +28,7 @@ from PIL import Image
 # Use absolute paths anchored to the repo root (parent of this file's package)
 _REPO_ROOT      = Path(__file__).resolve().parents[2]   # research_agent/tools/ -> repo root
 _MANIFEST_FILE  = _REPO_ROOT / "output" / "candidate_images" / "manifest.json"
-_SOCIAL_POSTS   = _REPO_ROOT / "social_posts.md"
+_BLOG_POST_MD   = _REPO_ROOT / "blog_post.md"
 _DESIGN_MD      = _REPO_ROOT / "design.md"
 _MODEL          = "moonshotai/kimi-k2.5"
 _GATEWAY_BASE   = "https://ai-gateway.vercel.sh/v1"
@@ -46,9 +46,15 @@ ROLE: You are an expert Visual Editor for THE ECHO news brand.
 Your job: choose the best news photo from the candidates, then write a precise editing prompt.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  HEADLINE RULE — READ THIS FIRST AND NEVER FORGET IT:
+The [BLOG TITLE] field at the top of the context is the ONLY source for the image headline.
+You MUST rephrase/shorten the blog title into a catchy 8–10 word headline.
+DO NOT invent a new angle. DO NOT use image captions. DO NOT use random blog body facts.
+The headline must make a reader immediately understand what the blog post is about.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 STEP 1 — Understand the News Story
-Read social_posts.md carefully:
+Read the [BLOG TITLE] first. Then read blog_post.md:
 - What is the topic, urgency level, and tone?
 - What kind of visual best matches the story (person, place, event, protest, etc.)?
 
@@ -101,9 +107,9 @@ The editing_prompt MUST be a valid JSON object with these keys:
         "text_sub": "#CBA052"
     },
     "text_layers": {
-        "kicker_tag": "<content from social_posts.md — e.g. '# NEWS' or 'BREAKING'>",
-        "headline": "<SOURCE: Read the first '# ...' line of social_posts.md — that is the story title. Also read the full social posts to understand the context. Then write a CATCHY, SHORT (max 10 words) headline based on that title and post content. IMPORTANT: The headline must reflect what the TEXT says, not what you see in the target image. Never derive the headline from the image — the image may show a person or object that is only part of the story.>",
-        "sub_headline": "<1-sentence supporting detail, max 12 words, taken from the social posts text>"
+        "kicker_tag": "<choose from blog_post.md — e.g. '# NEWS', 'OPINION', 'BREAKING', or 'ANALYSIS'>",
+        "headline": "<<CRITICAL RULE>> The headline MUST be derived ONLY from the BLOG TITLE provided in the [BLOG TITLE] field above. DO NOT use the image content. DO NOT use a random fact from the blog body. Your ONLY job here is to transform the exact blog title into a SHORT (max 8-10 words), PUNCHY, CATCHY visual headline that preserves the core meaning of the title. Example: if title is 'Pakistan's Engineered Stability: Economic Gains and Political Risks in 2026', write something like 'Pakistan's Engineered Stability: Gains, Risks & 2026'. Stay faithful to the title.",
+        "sub_headline": "<1-sentence supporting detail, max 12 words, taken directly from the blog post body — NOT from image content>"
     },
     "watermarks_and_logos": {
         "logo": "THE ECHO wordmark with globe/soundwave icon — top header bar, centered, white",
@@ -190,6 +196,23 @@ def _read_file(path: Path, fallback: str) -> str:
     return fallback
 
 
+def _extract_blog_title(blog_content: str) -> str:
+    """Extract the first H1 or H2 heading from blog_post.md as the blog title."""
+    import re
+    # Try to find '# Title' or '## Title' on any line
+    for line in blog_content.splitlines():
+        stripped = line.strip()
+        m = re.match(r'^#{1,2}\s+(.+)$', stripped)
+        if m:
+            return m.group(1).strip()
+    # Fallback: return first non-empty line
+    for line in blog_content.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped[:120]
+    return "(title not found)"
+
+
 # ── Main Tool ─────────────────────────────────────────────────────────────────
 
 @tool(parse_docstring=True)
@@ -200,7 +223,7 @@ def analyze_images_gemini(image_urls: list[str]) -> str:
     and the design guide to Gemini Flash vision in ONE request.
 
     Gemini:
-    1. Reads social_posts.md to understand the story.
+    1. Reads blog_post.md to understand the story.
     2. Evaluates all candidate images for quality and relevance.
     3. Selects the single best candidate image.
     4. Studies both reference images and design.md to understand THE ECHO brand.
@@ -220,21 +243,27 @@ def analyze_images_gemini(image_urls: list[str]) -> str:
         return "No image URLs provided."
 
     # ── Load context files ────────────────────────────────────────────────────
-    social_posts_content = _read_file(
-        _SOCIAL_POSTS,
-        "(social_posts.md not found — proceeding without post context)"
+    blog_post_content = _read_file(
+        _BLOG_POST_MD,
+        "(blog_post.md not found — proceeding without post context)"
     )
     design_content = _read_file(
         _DESIGN_MD,
         "(design.md not found — use THE ECHO brand colors: #0E4D4A, #CBA052, #FFFFFF)"
     )
 
+    # ── Extract blog title explicitly ────────────────────────────────────────
+    blog_title = _extract_blog_title(blog_post_content)
+    print(f"[analyze_images_gemini] 📰 Extracted blog title: {blog_title}")
+
     # ── Build message content ─────────────────────────────────────────────────
     content_parts: list[dict] = []
 
-    # Context text first
+    # Context text first — inject blog title at the very top so the model cannot miss it
     context_text = (
-        f"=== SOCIAL POST CONTENT (social_posts.md) ===\n\n{social_posts_content}\n\n"
+        f"=== [BLOG TITLE] (USE THIS — AND ONLY THIS — AS THE BASIS FOR THE IMAGE HEADLINE) ===\n"
+        f"{blog_title}\n\n"
+        f"=== BLOG POST CONTENT (blog_post.md) ===\n\n{blog_post_content}\n\n"
         f"=== DESIGN GUIDE (design.md) ===\n\n{design_content}\n\n"
     )
     content_parts.append({"type": "text", "text": context_text})

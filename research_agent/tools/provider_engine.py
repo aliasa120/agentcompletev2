@@ -1,11 +1,29 @@
 """Core provider engine — retry, fallback, timeout, and error classification.
 
 All unified tools (unified_search, unified_extract, unified_image) use this module
-to execute provider functions with exponential backoff, structured error classification,
-per-request timeouts, and fallback to a secondary provider if the primary exhausts all retries.
+to execute provider functions.
 
-Settings are read from Supabase `agent_settings` and cached for 60 seconds to avoid
-hammering the DB on every agent tool call.
+Retry strategy (Round-based flat delay):
+  We perform `max_retries` rounds.
+  In each round:
+    1. Try Primary provider.
+    2. If it fails, try Secondary provider.
+    3. If BOTH fail in this round, wait `retry_delay_seconds` (default 15s).
+  
+  If all rounds are exhausted, return a graceful ProviderResult with failed=True
+  (never raises — prevents pipeline crashes).
+
+Default retry counts:
+  Search / Extract : 4 rounds (Primary -> Secondary -> wait 15s)
+  Image            : 2 rounds (Primary -> Secondary -> wait 15s)
+
+All defaults are overridable via Supabase ``agent_settings`` keys:
+  search_max_retries     (int, default 4)
+  extract_max_retries    (int, default 4)
+  image_max_retries      (int, default 2)
+  retry_delay_seconds    (int, default 15)
+
+Settings are cached for 60 s to avoid hammering the DB on every tool call.
 """
 
 import asyncio
@@ -22,7 +40,7 @@ logger = logging.getLogger("provider_engine")
 
 _settings_cache: dict[str, str] = {}
 _cache_loaded_at: float = 0.0
-_CACHE_TTL_SECONDS = 60  # refresh from Supabase every 60s
+_CACHE_TTL_SECONDS = 60  # refresh from Supabase every 60 s
 
 
 def _fetch_settings_from_supabase() -> dict[str, str]:
@@ -42,7 +60,7 @@ def _fetch_settings_from_supabase() -> dict[str, str]:
 
 
 def get_settings() -> dict[str, str]:
-    """Return provider settings, using in-process cache (refreshes every 60s)."""
+    """Return provider settings, using in-process cache (refreshes every 60 s)."""
     global _settings_cache, _cache_loaded_at
     now = time.time()
     if now - _cache_loaded_at >= _CACHE_TTL_SECONDS or not _settings_cache:
@@ -60,11 +78,20 @@ def invalidate_settings_cache():
     _cache_loaded_at = 0.0
 
 
+def get_retry_delay() -> int:
+    """Return the configured flat retry delay in seconds (default 15)."""
+    settings = get_settings()
+    try:
+        return int(settings.get("retry_delay_seconds", "15"))
+    except (ValueError, TypeError):
+        return 15
+
+
 # ── Error Classification ───────────────────────────────────────────────────────
 
 class ErrorType(Enum):
     RETRYABLE = "retryable"  # 429, 500, 502, 503, timeout — worth retrying
-    FATAL = "fatal"          # 401, 403, 404, bad config — skip to fallback immediately
+    FATAL = "fatal"          # 401, 403, bad config — skip to fallback immediately
 
 
 def classify_error(exception: Exception) -> ErrorType:
@@ -89,6 +116,7 @@ class ProviderResult:
     provider_used: str
     attempts_total: int
     fallback_used: bool
+    failed: bool = False          # True when all providers exhausted
 
 
 # ── Core Execution Engine ──────────────────────────────────────────────────────
@@ -100,101 +128,107 @@ async def execute_with_fallback(
     secondary_name: str,
     max_retries: int,
     timeout_seconds: int = 30,
+    retry_delay_seconds: int | None = None,  # None → read from settings
     **kwargs,
 ) -> ProviderResult:
-    """Run primary_fn with retry+backoff. Fall back to secondary_fn if needed.
+    """Run with round-based retries (Primary -> Secondary -> Wait 15s).
 
-    Retry strategy (exponential backoff):
-      Attempt 1 → fail → wait 1s
-      Attempt 2 → fail → wait 2s
-      Attempt 3 → fail → move to secondary
-
-    Fatal errors (401, 403) skip immediately to the secondary without waiting.
-
-    Args:
-        primary_fn: Async callable for the primary provider.
-        secondary_fn: Async callable for the fallback provider, or None if no fallback.
-        primary_name: Human-readable name (for logs).
-        secondary_name: Human-readable name of fallback (for logs).
-        max_retries: Number of attempts for each provider.
-        timeout_seconds: Per-attempt timeout. Raises asyncio.TimeoutError if exceeded.
-        **kwargs: Arguments passed to the provider functions.
-
-    Returns:
-        ProviderResult with the data, provider name, total attempts, and fallback flag.
+    IMPORTANT: This function NEVER raises. On total failure it returns a
+    ProviderResult with failed=True and a descriptive error message in .data,
+    so the calling tool can pass it to the agent gracefully.
     """
-    total_attempts = 0
+    if retry_delay_seconds is None:
+        retry_delay_seconds = get_retry_delay()
 
-    # ── Primary attempts ─────────────────────────────────────────────────────
-    for attempt in range(1, max_retries + 1):
+    total_attempts = 0
+    errors: list[str] = []
+
+    for round_ in range(1, max_retries + 1):
+        # ── 1. Primary Attempt ─────────────────────────────────────────────
         total_attempts += 1
+        primary_fatal = False
         try:
-            logger.info(f"[{primary_name}] Attempt {attempt}/{max_retries} (timeout={timeout_seconds}s)")
-            result = await asyncio.wait_for(
-                primary_fn(**kwargs),
-                timeout=timeout_seconds,
-            )
-            logger.info(f"[{primary_name}] ✅ Success on attempt {attempt}")
+            logger.info(f"[{primary_name}] Round {round_}/{max_retries} (timeout={timeout_seconds}s)")
+            result = await asyncio.wait_for(primary_fn(**kwargs), timeout=timeout_seconds)
+            logger.info(f"[{primary_name}] ✅ Success on round {round_}")
             return ProviderResult(
                 data=result,
                 provider_used=primary_name,
                 attempts_total=total_attempts,
                 fallback_used=False,
+                failed=False,
             )
         except asyncio.TimeoutError:
-            logger.warning(f"[{primary_name}] ⏱ Attempt {attempt} timed out after {timeout_seconds}s")
+            msg = f"Round {round_} timed out after {timeout_seconds}s"
+            logger.warning(f"[{primary_name}] ⏱ {msg}")
+            errors.append(f"{primary_name}: {msg}")
         except Exception as e:
             error_type = classify_error(e)
             if error_type == ErrorType.FATAL:
-                logger.error(f"[{primary_name}] ⛔ Fatal error on attempt {attempt}: {e} — skipping to fallback")
-                break  # No point retrying a bad API key
-            logger.warning(f"[{primary_name}] ⚠️ Attempt {attempt} failed: {e}")
+                logger.error(f"[{primary_name}] ⛔ Fatal config error on round {round_}: {e}")
+                errors.append(f"{primary_name} fatal: {e}")
+                primary_fatal = True
+            else:
+                msg = f"Round {round_} failed: {e}"
+                logger.warning(f"[{primary_name}] ⚠️ {msg}")
+                errors.append(f"{primary_name}: {msg}")
 
-        if attempt < max_retries:
-            wait = 2 ** (attempt - 1)  # 1s, 2s, 4s …
-            logger.info(f"[{primary_name}] Waiting {wait}s before next attempt…")
-            await asyncio.sleep(wait)
-
-    # ── Fallback attempts ────────────────────────────────────────────────────
-    if secondary_fn is None:
-        raise RuntimeError(
-            f"❌ Provider [{primary_name}] exhausted {max_retries} attempts. "
-            "No fallback configured."
-        )
-
-    logger.warning(f"[{primary_name}] Exhausted. Falling back to [{secondary_name}]")
-
-    for attempt in range(1, max_retries + 1):
-        total_attempts += 1
-        try:
-            logger.info(f"[{secondary_name}] Fallback attempt {attempt}/{max_retries} (timeout={timeout_seconds}s)")
-            result = await asyncio.wait_for(
-                secondary_fn(**kwargs),
-                timeout=timeout_seconds,
-            )
-            logger.info(f"[{secondary_name}] ✅ Fallback success on attempt {attempt}")
-            return ProviderResult(
-                data=result,
-                provider_used=secondary_name,
-                attempts_total=total_attempts,
-                fallback_used=True,
-            )
-        except asyncio.TimeoutError:
-            logger.warning(f"[{secondary_name}] ⏱ Fallback attempt {attempt} timed out")
-        except Exception as e:
-            error_type = classify_error(e)
-            if error_type == ErrorType.FATAL:
-                logger.error(f"[{secondary_name}] ⛔ Fatal fallback error: {e}")
+        # ── 2. Secondary Attempt ───────────────────────────────────────────
+        secondary_fatal = False
+        if secondary_fn is not None:
+            total_attempts += 1
+            try:
+                logger.info(f"[{secondary_name}] Fallback round {round_}/{max_retries} (timeout={timeout_seconds}s)")
+                result = await asyncio.wait_for(secondary_fn(**kwargs), timeout=timeout_seconds)
+                logger.info(f"[{secondary_name}] ✅ Fallback success on round {round_}")
+                return ProviderResult(
+                    data=result,
+                    provider_used=secondary_name,
+                    attempts_total=total_attempts,
+                    fallback_used=True,
+                    failed=False,
+                )
+            except asyncio.TimeoutError:
+                msg = f"Fallback round {round_} timed out after {timeout_seconds}s"
+                logger.warning(f"[{secondary_name}] ⏱ {msg}")
+                errors.append(f"{secondary_name}: {msg}")
+            except Exception as e:
+                error_type = classify_error(e)
+                if error_type == ErrorType.FATAL:
+                    logger.error(f"[{secondary_name}] ⛔ Fatal config error on round {round_}: {e}")
+                    errors.append(f"{secondary_name} fatal: {e}")
+                    secondary_fatal = True
+                else:
+                    msg = f"Fallback round {round_} failed: {e}"
+                    logger.warning(f"[{secondary_name}] ⚠️ {msg}")
+                    errors.append(f"{secondary_name}: {msg}")
+                    
+            if primary_fatal and secondary_fatal:
+                logger.error("[provider_engine] Both primary and secondary returned FATAL errors. Aborting early.")
                 break
-            logger.warning(f"[{secondary_name}] ⚠️ Fallback attempt {attempt} failed: {e}")
+        else:
+            if primary_fatal:
+                logger.error("[provider_engine] Primary returned FATAL error. No fallback configured. Aborting early.")
+                break
 
-        if attempt < max_retries:
-            wait = 2 ** (attempt - 1)
-            logger.info(f"[{secondary_name}] Waiting {wait}s before next attempt…")
-            await asyncio.sleep(wait)
+        # ── 3. Delay Before Next Round ─────────────────────────────────────
+        if round_ < max_retries:
+            logger.info(f"Both providers failed this round. Waiting {retry_delay_seconds}s before round {round_ + 1}...")
+            await asyncio.sleep(retry_delay_seconds)
 
-    raise RuntimeError(
-        f"❌ All providers failed after {total_attempts} total attempts. "
-        f"[{primary_name}] × {max_retries}, [{secondary_name}] × {max_retries}. "
-        "Check API keys and service availability."
+    # ── All rounds exhausted — return graceful error (never raise) ─────────
+    summary = "; ".join(errors[-4:])  # last 4 errors for brevity
+    error_msg = (
+        f"⚠️ All API attempts failed after {max_retries} full rounds. "
+        f"Last errors: {summary}. "
+        "Please continue with the information you have already gathered or mark it Not Found. "
+        "Skip this tool call and move to the next step."
+    )
+    logger.error(f"[provider_engine] {error_msg}")
+    return ProviderResult(
+        data=error_msg,
+        provider_used=f"{primary_name}+{secondary_name}",
+        attempts_total=total_attempts,
+        fallback_used=True if secondary_fn else False,
+        failed=True,
     )

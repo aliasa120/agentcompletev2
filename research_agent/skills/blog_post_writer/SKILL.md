@@ -301,5 +301,19 @@ Structure the file with clear platform sections:
 ## Images
 - [image path or URL]
 ```
-
 Apply all platform-specific rules from Section 2. Each post must have a hook, body, and CTA following the formulas in Section 4.
+
+---
+
+## 8 — Agent Resilience & Pipeline Fallbacks
+
+If a tool or provider returns a complete failure message (e.g., all search retries failed), **do not stop**. 
+- The tools handle timeouts and multiple retries automatically (up to 4 attempts with 15s delays).
+- If a step completely exhausts its retries, gracefully degrade: skip the step or mark the information as `Not Found` and continue writing the post with what you already have.
+- Always finish the pipeline by saving the files and calling `save_posts_to_supabase`.
+
+### Approved Tool Reference (Do not use raw provider names):
+- `unified_search` (Search orchestrator)
+- `unified_extract` (Read article orchestrator)
+- `fetch_images_brave` (Find news images)
+- `create_post_image` (Image composition orchestrator)

@@ -79,10 +79,20 @@ def _load_image(image_url: str) -> Image.Image:
     return Image.open(io.BytesIO(resp.content)).convert("RGB")
 
 
-def _make_image_filename(headline: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", headline.lower()).strip("-")[:50]
+def _make_image_filename(editing_prompt: str) -> str:
+    """Extract headline from editing_prompt JSON for filename slug. Falls back to timestamp-only."""
+    try:
+        # editing_prompt may be a JSON string or already a dict
+        data = json.loads(editing_prompt) if isinstance(editing_prompt, str) else editing_prompt
+        headline = data.get("text_layers", {}).get("headline", "")
+        if headline:
+            slug = re.sub(r"[^a-z0-9]+", "-", headline.lower()).strip("-")[:50]
+            ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+            return f"{slug}-{ts}.jpg"
+    except Exception:
+        pass
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    return f"{slug}-{ts}.jpg"
+    return f"post-image-{ts}.jpg"
 
 
 def _upload_target_to_supabase(pil_img: Image.Image, slug: str) -> str | None:
@@ -267,7 +277,6 @@ def _kie_image_edit(target_url: str, editing_prompt: str) -> Image.Image | None:
 @tool(parse_docstring=True)
 def create_post_image_gemini(
     image_url: str,
-    headline_text: str,
     editing_prompt: str,
 ) -> str:
     """Edit the chosen news image using KIE AI and save as a social post.
@@ -276,18 +285,21 @@ def create_post_image_gemini(
     (to avoid hotlink blocking), then calls KIE AI with the editing prompt and BOTH
     THE ECHO reference images (ref1.png, ref2.png) as style guides.
 
+    The headline is already embedded inside editing_prompt (written by analyze_images_gemini
+    from the blog title). Do NOT pass a separate headline_text — it is not needed.
+
     Output is saved as output/<headline-slug>-<timestamp>.jpg.
 
     Args:
         image_url: URL of the chosen image (used to look up the full-res file on disk).
-        headline_text: Short headline (max 10 words) — used for filename generation.
         editing_prompt: Full editing instruction JSON string from analyze_images_gemini.
+                        Contains the headline inside text_layers.headline.
 
     Returns:
         Absolute POSIX path to the saved output image.
     """
     _OUTPUT_DIR.mkdir(exist_ok=True)
-    output_filename = _make_image_filename(headline_text)
+    output_filename = _make_image_filename(editing_prompt)
     output_path = _OUTPUT_DIR / output_filename
 
     # Load target image (full-res from disk or download)
@@ -297,8 +309,14 @@ def create_post_image_gemini(
     except Exception as e:
         return f"❌ Could not load image: {e}"
 
-    # Upload target to Supabase to get a reliable public URL for KIE AI
-    slug = re.sub(r"[^a-z0-9]+", "-", headline_text.lower())[:40].strip("-")
+    # Derive slug from the headline embedded in editing_prompt (for Supabase path)
+    try:
+        ep_data = json.loads(editing_prompt) if isinstance(editing_prompt, str) else editing_prompt
+        headline_for_slug = ep_data.get("text_layers", {}).get("headline", "post-image")
+    except Exception:
+        headline_for_slug = "post-image"
+    slug = re.sub(r"[^a-z0-9]+", "-", headline_for_slug.lower())[:40].strip("-")
+
     kie_target_url = _upload_target_to_supabase(source_img, slug) or image_url
     print(f"[create_post_image] KIE AI target URL: {kie_target_url[:80]}...")
     print(f"[create_post_image] KIE AI reference URLs: {_REF_URLS}")
@@ -309,8 +327,7 @@ def create_post_image_gemini(
     if result_img is not None:
         result_img.save(str(output_path), "JPEG", quality=92)
         _LATEST_IMAGE_FILE.write_text(str(output_path), encoding="utf-8")
-        absolute_posix_path = output_path.resolve().as_posix()
-        return absolute_posix_path
+        return output_path.resolve().as_posix()
 
     # Fallback: save raw target image
     print("[create_post_image] ⚠️ KIE AI edit failed — using raw image fallback.")
