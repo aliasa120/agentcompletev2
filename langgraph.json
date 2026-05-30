@@ -1,0 +1,12 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "research": "./agent.py:agent"
+  },
+  "env": ".env",
+  "config": {
+    "recursion_limit": 200
+  }
+}

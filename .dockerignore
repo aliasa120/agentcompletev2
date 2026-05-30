@@ -1,0 +1,15 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+.git
+output
+research_agent.ipynb
+*.egg-info
+.ruff_cache
+deep-agents-ui-main/node_modules
+deep-agents-ui-main/.next
+deep-agents-ui-main/.git
+deep-agents-ui-main/.git_disabled
+.langgraph_api
+uv.lock
