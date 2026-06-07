@@ -144,6 +144,7 @@ function HomePageInner({
             messages: [...(prev.messages ?? []), newMessage],
           }),
           config: { ...(assistant?.config ?? {}), recursion_limit: 200 },
+          streamSubgraphs: true,
         }
       );
       mutateThreads?.();
@@ -235,6 +236,7 @@ function HomePageInner({
                   messages: [...(prev.messages ?? []), newMessage],
                 }),
                 config: { ...(assistant.config ?? {}), recursion_limit: 200 },
+                streamSubgraphs: true,
               }
             );
           };

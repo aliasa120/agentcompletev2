@@ -83,6 +83,7 @@ export function useChat({
             messages: [...(prev.messages ?? []), newMessage],
           }),
           config: { ...(activeAssistant?.config ?? {}), recursion_limit: 200 },
+          streamSubgraphs: true,  // enable live subagent streaming
         }
       );
       // Update thread list immediately when sending a message
@@ -105,6 +106,7 @@ export function useChat({
             : {}),
           config: activeAssistant?.config,
           checkpoint: checkpoint,
+          streamSubgraphs: true,
           ...(isRerunningSubagent
             ? { interruptAfter: ["tools"] }
             : { interruptBefore: ["tools"] }),
@@ -112,7 +114,7 @@ export function useChat({
       } else {
         stream.submit(
           { messages },
-          { config: activeAssistant?.config, interruptBefore: ["tools"] }
+          { config: activeAssistant?.config, interruptBefore: ["tools"], streamSubgraphs: true }
         );
       }
     },
@@ -136,6 +138,7 @@ export function useChat({
           ...(activeAssistant?.config || {}),
           recursion_limit: 200,
         },
+        streamSubgraphs: true,
         ...(hasTaskToolCall
           ? { interruptAfter: ["tools"] }
           : { interruptBefore: ["tools"] }),

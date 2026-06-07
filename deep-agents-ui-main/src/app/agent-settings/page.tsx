@@ -8,21 +8,30 @@ import { Input } from "@/components/ui/input";
 import {
     Zap, Home, Settings, RefreshCw, Play,
     Clock, List, ChevronRight, Activity, AlarmClock, CheckCircle2, XCircle, Timer,
-    Search, FileText, ImageIcon, FlaskConical, Loader2, Bot, Eye, EyeOff, Plus, Cpu
+    Search, FileText, ImageIcon, FlaskConical, Loader2, Bot, Plus, Cpu,
+    KeyRound, Shield, ChevronDown, ChevronUp,
 } from "lucide-react";
 
+// ── Types ──────────────────────────────────────────────────────────────────────
 interface Article { id: string; title: string; description: string; url: string; source_domain: string; status: string; created_at: string; }
+interface ProviderMeta { id: string; label: string; badgeColor: string; keySet: boolean; defaultModels: { value: string; label: string; badge: string }[]; }
+type TestStatus = "idle" | "testing" | "ok" | "error";
+type TestState = { status: TestStatus; latency?: number; error?: string };
+type ProviderId = "linkup" | "parallel" | "tavily" | "exa" | "kie" | "gemini_flash";
 
+// ── Supabase setting keys (non-secret only — no API keys!) ─────────────────────
 const AGENT_SETTING_KEYS = [
     "queue_batch_size", "auto_trigger_enabled", "auto_trigger_interval_minutes", "auto_trigger_last_at",
     "search_provider_primary", "search_provider_secondary", "search_max_retries",
     "extract_provider_primary", "extract_provider_secondary", "extract_max_retries",
     "image_provider_primary", "image_provider_secondary", "image_max_retries",
-    // AI Model Config (new)
+    // AI Model selection (provider name + model name — NO API keys)
     "main_agent_provider", "main_agent_model",
     "analyzer_provider", "analyzer_model",
     "feeder_provider", "feeder_model",
-    "vercel_api_key", "litellm_api_key", "litellm_base_url",
+    // Subagent model selection
+    "research_subagent_provider", "research_subagent_model",
+    "content_subagent_provider", "content_subagent_model",
 ];
 
 const DEFAULTS: Record<string, string> = {
@@ -31,7 +40,6 @@ const DEFAULTS: Record<string, string> = {
     auto_trigger_interval_minutes: "30",
     auto_trigger_last_at: "",
     last_trigger_at: "",
-    // AI Provider defaults
     search_provider_primary: "linkup",
     search_provider_secondary: "parallel",
     search_max_retries: "3",
@@ -41,57 +49,39 @@ const DEFAULTS: Record<string, string> = {
     image_provider_primary: "kie",
     image_provider_secondary: "gemini_flash",
     image_max_retries: "2",
-    // AI Model Config defaults
     main_agent_provider: "vercel",
     main_agent_model: "xiaomi/mimo-v2.5-pro",
     analyzer_provider: "vercel",
     analyzer_model: "moonshotai/kimi-k2.5",
     feeder_provider: "vercel",
     feeder_model: "minimax/minimax-m2.7",
-    vercel_api_key: "",
-    litellm_api_key: "sk-K5orHn7W09iq2mul3ZZULw",
-    litellm_base_url: "http://47.82.164.26:4000",
+    // Subagents — default to same model as main agent
+    research_subagent_provider: "vercel",
+    research_subagent_model: "xiaomi/mimo-v2.5-pro",
+    content_subagent_provider: "vercel",
+    content_subagent_model: "xiaomi/mimo-v2.5-pro",
 };
 
-// Provider options for each category
+// ── Search / Extract / Image providers ────────────────────────────────────────
 const SEARCH_PROVIDERS = [
-    { value: "linkup",   label: "Linkup",      badge: "Standard" },
-    { value: "parallel", label: "Parallel AI",  badge: "Agentic" },
+    { value: "linkup", label: "Linkup", badge: "Standard" },
+    { value: "parallel", label: "Parallel AI", badge: "Agentic" },
 ];
 const EXTRACT_PROVIDERS = [
-    { value: "tavily", label: "Tavily",  badge: "Extract" },
-    { value: "exa",    label: "Exa AI",  badge: "Contents" },
+    { value: "tavily", label: "Tavily", badge: "Extract" },
+    { value: "exa", label: "Exa AI", badge: "Contents" },
 ];
 const IMAGE_PROVIDERS = [
-    { value: "kie",          label: "KIE AI",            badge: "Image-to-Image" },
-    { value: "gemini_flash", label: "Gemini 3.1 Flash",  badge: "Chat Completion" },
+    { value: "kie", label: "KIE AI", badge: "Image-to-Image" },
+    { value: "gemini_flash", label: "Gemini 2.5 Flash", badge: "Chat Completion" },
 ];
 
-// AI Model provider options
-const AI_PROVIDERS = [
-    { value: "vercel",   label: "Vercel AI Gateway", color: "from-blue-500 to-indigo-600" },
-    { value: "litellm",  label: "LiteLLM",            color: "from-purple-500 to-pink-600" },
-];
-
-const VERCEL_MODELS = [
-    { value: "xiaomi/mimo-v2.5-pro",              label: "Mimo v2.5 Pro",          badge: "Recommended" },
-    { value: "moonshotai/kimi-k2.5",              label: "Kimi K2.5",              badge: "Vision" },
-    { value: "minimax/minimax-m2.7",              label: "MiniMax M2.7",           badge: "Fast" },
-    { value: "google/gemini-2.5-flash",           label: "Gemini 2.5 Flash",       badge: "Google" },
-    { value: "openai/gpt-4o",                     label: "GPT-4o",                 badge: "OpenAI" },
-];
-
-const LITELLM_MODELS = [
-    { value: "mimo-v2.5-pro",        label: "Mimo v2.5 Pro",     badge: "LiteLLM" },
-    { value: "openai/gpt-oss-120b",  label: "GPT OSS 120B",      badge: "LiteLLM" },
-];
-
-// Per-agent config
+// ── Per-agent config ───────────────────────────────────────────────────────────
 const AGENT_CONFIGS = [
     {
         key: "main_agent",
         label: "Main Agent",
-        description: "Research & content writing agent",
+        description: "Manager: planning, synthesis, WP, DB",
         icon: <Bot className="h-4 w-4 text-primary" />,
         providerKey: "main_agent_provider",
         modelKey: "main_agent_model",
@@ -99,7 +89,7 @@ const AGENT_CONFIGS = [
     {
         key: "analyzer",
         label: "Gemini Analyzer",
-        description: "Image scanning & visual analysis agent",
+        description: "Image scanning & visual analysis",
         icon: <ImageIcon className="h-4 w-4 text-violet-500" />,
         providerKey: "analyzer_provider",
         modelKey: "analyzer_model",
@@ -107,16 +97,28 @@ const AGENT_CONFIGS = [
     {
         key: "feeder",
         label: "Feeder Agent",
-        description: "Article deduplication & ingestion agent",
+        description: "Article deduplication",
         icon: <Cpu className="h-4 w-4 text-emerald-500" />,
         providerKey: "feeder_provider",
         modelKey: "feeder_model",
     },
+    {
+        key: "research_subagent",
+        label: "Research Subagent",
+        description: "Web search & extraction (Step 4)",
+        icon: <Search className="h-4 w-4 text-blue-500" />,
+        providerKey: "research_subagent_provider",
+        modelKey: "research_subagent_model",
+    },
+    {
+        key: "content_subagent",
+        label: "Content Subagent",
+        description: "Blog, social posts & images (Steps 6-7)",
+        icon: <FileText className="h-4 w-4 text-orange-500" />,
+        providerKey: "content_subagent_provider",
+        modelKey: "content_subagent_model",
+    },
 ];
-
-type TestStatus = "idle" | "testing" | "ok" | "error";
-type TestState = { status: TestStatus; latency?: number; error?: string };
-type ProviderId = "linkup" | "parallel" | "tavily" | "exa" | "kie" | "gemini_flash";
 
 const INTERVALS = [
     { label: "10 min", value: "10" },
@@ -127,6 +129,7 @@ const INTERVALS = [
 ];
 const BATCH_SIZES = ["1", "2", "5", "10", "15", "20"];
 
+// ── Helper components ──────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
     const color: Record<string, string> = {
         Pending: "bg-yellow-100 text-yellow-800",
@@ -141,6 +144,19 @@ function StatusBadge({ status }: { status: string }) {
     );
 }
 
+function KeyStatusPill({ keySet }: { keySet: boolean }) {
+    return keySet ? (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200">
+            <CheckCircle2 className="h-2.5 w-2.5" />KEY SET
+        </span>
+    ) : (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+            <XCircle className="h-2.5 w-2.5" />NOT SET
+        </span>
+    );
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────────────
 export default function AgentSettingsPage() {
     const [settings, setSettings] = useState<Record<string, string>>(DEFAULTS);
     const [dbSettings, setDbSettings] = useState<Record<string, string>>(DEFAULTS);
@@ -153,26 +169,26 @@ export default function AgentSettingsPage() {
     const [nextTriggerAt, setNextTriggerAt] = useState<string | null>(null);
     const [pktTime, setPktTime] = useState("");
 
-    // Custom model inputs per agent
+    // Provider registry from /api/provider-status
+    const [providerRegistry, setProviderRegistry] = useState<ProviderMeta[]>([]);
+    const [providersLoading, setProvidersLoading] = useState(true);
+
+    // Per-agent custom model input
     const [customModelInputs, setCustomModelInputs] = useState<Record<string, string>>({
-        main_agent: "",
-        analyzer: "",
-        feeder: "",
+        main_agent: "", analyzer: "", feeder: "",
+        research_subagent: "", content_subagent: "",
     });
-    // Extra models added by user per agent (per session)
     const [extraModels, setExtraModels] = useState<Record<string, { value: string; label: string; badge: string }[]>>({
-        main_agent: [],
-        analyzer: [],
-        feeder: [],
+        main_agent: [], analyzer: [], feeder: [],
+        research_subagent: [], content_subagent: [],
     });
-    // Model test states per agent
     const [modelTestStates, setModelTestStates] = useState<Record<string, TestState>>({});
-    // Show/hide API keys
-    const [showVercelKey, setShowVercelKey] = useState(false);
-    const [showLitellmKey, setShowLitellmKey] = useState(false);
-    // Langgraph reload state
+    const [testStates, setTestStates] = useState<Record<string, TestState>>({});
     const [reloadStatus, setReloadStatus] = useState<"idle" | "reloading" | "done" | "error">("idle");
     const [reloadMsg, setReloadMsg] = useState("");
+
+    // Collapsible sections
+    const [showProviderDetails, setShowProviderDetails] = useState<Record<string, boolean>>({});
 
     // Live PKT clock
     useEffect(() => {
@@ -184,6 +200,20 @@ export default function AgentSettingsPage() {
         tick();
         const id = setInterval(tick, 1000);
         return () => clearInterval(id);
+    }, []);
+
+    // Fetch provider registry (key status + model lists)
+    const loadProviderRegistry = useCallback(async () => {
+        setProvidersLoading(true);
+        try {
+            const resp = await fetch("/api/provider-status");
+            const data = await resp.json();
+            setProviderRegistry(data.providers ?? []);
+        } catch {
+            console.error("Failed to load provider registry");
+        } finally {
+            setProvidersLoading(false);
+        }
     }, []);
 
     // Dirty tracking
@@ -241,12 +271,11 @@ export default function AgentSettingsPage() {
         }
     }, []);
 
-    useEffect(() => { loadAll(); }, [loadAll]);
+    useEffect(() => { loadAll(); loadProviderRegistry(); }, [loadAll, loadProviderRegistry]);
 
     const setSetting = (key: string, value: string) => setSettings(p => ({ ...p, [key]: value }));
 
-    const [testStates, setTestStates] = useState<Record<string, TestState>>({});
-
+    // ── Test search/extract/image provider ─────────────────────────────────────
     const testProvider = async (provider: ProviderId) => {
         setTestStates(prev => ({ ...prev, [provider]: { status: "testing" } }));
         try {
@@ -269,52 +298,18 @@ export default function AgentSettingsPage() {
         setTimeout(() => setTestStates(prev => ({ ...prev, [provider]: { status: "idle" } })), 8000);
     };
 
-    // Test an AI model for a given agent
+    // ── Test AI model (env-key resolved server-side) ───────────────────────────
     const testAiModel = async (agentKey: string) => {
         const provider = settings[`${agentKey}_provider`] || "vercel";
         const model = settings[`${agentKey}_model`] || "";
-        const apiKey = provider === "litellm" ? settings.litellm_api_key : settings.vercel_api_key;
-        const baseUrl = provider === "litellm" ? settings.litellm_base_url : "";
-
         const testKey = `${agentKey}_model`;
         setModelTestStates(prev => ({ ...prev, [testKey]: { status: "testing" } }));
-
         try {
             const resp = await fetch("/api/test-ai-model", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ provider, model, apiKey, baseUrl }),
-            });
-            const data = await resp.json();
-            if (resp.status === 429) {
-                setModelTestStates(prev => ({ ...prev, [testKey]: { status: "error", error: data.error } }));
-            } else if (data.success) {
-                setModelTestStates(prev => ({ ...prev, [testKey]: { status: "ok", latency: data.latency_ms } }));
-            } else {
-                setModelTestStates(prev => ({ ...prev, [testKey]: { status: "error", error: data.error } }));
-            }
-        } catch {
-            setModelTestStates(prev => ({ ...prev, [testKey]: { status: "error", error: "Network error" } }));
-        }
-        setTimeout(() => setModelTestStates(prev => ({ ...prev, [testKey]: { status: "idle" } })), 25000);
-    };
-
-    // Test custom model input for an agent
-    const testCustomModel = async (agentKey: string) => {
-        const customModel = customModelInputs[agentKey]?.trim();
-        if (!customModel) return;
-        const provider = settings[`${agentKey}_provider`] || "vercel";
-        const apiKey = provider === "litellm" ? settings.litellm_api_key : settings.vercel_api_key;
-        const baseUrl = provider === "litellm" ? settings.litellm_base_url : "";
-
-        const testKey = `${agentKey}_custom`;
-        setModelTestStates(prev => ({ ...prev, [testKey]: { status: "testing" } }));
-
-        try {
-            const resp = await fetch("/api/test-ai-model", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ provider, model: customModel, apiKey, baseUrl }),
+                // No apiKey sent — server resolves from env
+                body: JSON.stringify({ provider, model }),
             });
             const data = await resp.json();
             if (data.success) {
@@ -328,7 +323,31 @@ export default function AgentSettingsPage() {
         setTimeout(() => setModelTestStates(prev => ({ ...prev, [testKey]: { status: "idle" } })), 25000);
     };
 
-    // Add custom model to the list for an agent
+    // ── Test custom model ──────────────────────────────────────────────────────
+    const testCustomModel = async (agentKey: string) => {
+        const customModel = customModelInputs[agentKey]?.trim();
+        if (!customModel) return;
+        const provider = settings[`${agentKey}_provider`] || "vercel";
+        const testKey = `${agentKey}_custom`;
+        setModelTestStates(prev => ({ ...prev, [testKey]: { status: "testing" } }));
+        try {
+            const resp = await fetch("/api/test-ai-model", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ provider, model: customModel }),
+            });
+            const data = await resp.json();
+            if (data.success) {
+                setModelTestStates(prev => ({ ...prev, [testKey]: { status: "ok", latency: data.latency_ms } }));
+            } else {
+                setModelTestStates(prev => ({ ...prev, [testKey]: { status: "error", error: data.error } }));
+            }
+        } catch {
+            setModelTestStates(prev => ({ ...prev, [testKey]: { status: "error", error: "Network error" } }));
+        }
+        setTimeout(() => setModelTestStates(prev => ({ ...prev, [testKey]: { status: "idle" } })), 25000);
+    };
+
     const addCustomModel = (agentKey: string) => {
         const customModel = customModelInputs[agentKey]?.trim();
         if (!customModel) return;
@@ -338,11 +357,11 @@ export default function AgentSettingsPage() {
             ...prev,
             [agentKey]: [...(prev[agentKey] || []).filter(m => m.value !== customModel), newModel],
         }));
-        // Also set it as selected
         setSetting(`${agentKey}_model`, customModel);
         setCustomModelInputs(prev => ({ ...prev, [agentKey]: "" }));
     };
 
+    // ── Save settings (no API keys — only provider/model selections) ───────────
     const saveSettings = async () => {
         setSaveStatus("saving");
         const keysToSave = [
@@ -350,11 +369,13 @@ export default function AgentSettingsPage() {
             "search_provider_primary", "search_provider_secondary", "search_max_retries",
             "extract_provider_primary", "extract_provider_secondary", "extract_max_retries",
             "image_provider_primary", "image_provider_secondary", "image_max_retries",
-            // AI Model Config
+            // Model config — NO API keys here
             "main_agent_provider", "main_agent_model",
             "analyzer_provider", "analyzer_model",
             "feeder_provider", "feeder_model",
-            "vercel_api_key", "litellm_api_key", "litellm_base_url",
+            // Subagent model config
+            "research_subagent_provider", "research_subagent_model",
+            "content_subagent_provider", "content_subagent_model",
         ];
         try {
             const rows = keysToSave.map(key => ({
@@ -379,7 +400,6 @@ export default function AgentSettingsPage() {
         }
     };
 
-    // Touch agent.py files → langgraph watchfiles detects change → hot-reloads with fresh Supabase config
     const reloadAgent = async () => {
         setReloadStatus("reloading");
         setReloadMsg("Triggering langgraph reload...");
@@ -400,7 +420,6 @@ export default function AgentSettingsPage() {
         setTimeout(() => { setReloadStatus("idle"); setReloadMsg(""); }, 8000);
     };
 
-    // Save settings to Supabase, then immediately reload langgraph agents
     const saveAndReload = async () => {
         await saveSettings();
         await reloadAgent();
@@ -443,6 +462,10 @@ export default function AgentSettingsPage() {
 
     const autoEnabled = settings.auto_trigger_enabled === "true";
 
+    // ── Get provider meta for a given provider id ─────────────────────────────
+    const getProviderMeta = (id: string): ProviderMeta | undefined =>
+        providerRegistry.find(p => p.id === id);
+
     return (
         <div className="flex h-screen flex-col bg-background overflow-hidden">
             <header className="flex h-16 shrink-0 items-center justify-between border-b px-6">
@@ -480,33 +503,18 @@ export default function AgentSettingsPage() {
                                 <p className="text-xs text-muted-foreground mb-2">Articles sent per trigger. Each runs in its own thread (FIFO).</p>
                                 <div className="flex gap-2 flex-wrap mb-2">
                                     {BATCH_SIZES.map(n => (
-                                        <button
-                                            key={n}
-                                            onClick={() => setSetting("queue_batch_size", n)}
+                                        <button key={n} onClick={() => setSetting("queue_batch_size", n)}
                                             className={`w-12 h-10 rounded-lg border text-sm font-semibold transition-all
                                                 ${settings.queue_batch_size === n
                                                     ? "border-primary bg-primary text-primary-foreground shadow"
                                                     : "border-border bg-muted hover:bg-accent"}`}
                                         >{n}</button>
                                     ))}
-                                    <Input
-                                        type="number" min={1} max={30}
-                                        className="h-10 w-20 text-sm"
+                                    <Input type="number" min={1} max={30} className="h-10 w-20 text-sm"
                                         value={settings.queue_batch_size}
-                                        onChange={e => setSetting("queue_batch_size", e.target.value)}
-                                    />
+                                        onChange={e => setSetting("queue_batch_size", e.target.value)} />
                                 </div>
                             </div>
-
-                            <div className="p-3 rounded-lg bg-muted/50 border text-xs text-muted-foreground">
-                                <p className="font-medium text-foreground mb-1">How the Queue Works</p>
-                                <ul className="space-y-1">
-                                    <li><ChevronRight className="inline h-3 w-3 mr-1" />Fetches <strong>{batchSize}</strong> oldest Pending articles (FIFO)</li>
-                                    <li><ChevronRight className="inline h-3 w-3 mr-1" />Each article → one separate agent thread</li>
-                                    <li><ChevronRight className="inline h-3 w-3 mr-1" />When batch completes → next batch ready on next trigger</li>
-                                </ul>
-                            </div>
-
                             <div className="flex items-center gap-3">
                                 <Button onClick={saveSettings} disabled={saveStatus === "saving" || !isDirty} className="flex-1">
                                     {saveStatus === "saving" ? "Saving…" : isDirty ? "Save Settings" : "No Changes"}
@@ -531,29 +539,19 @@ export default function AgentSettingsPage() {
                                         {autoEnabled ? "Agent runs automatically on schedule" : "Only runs when fired manually"}
                                     </p>
                                 </div>
-                                <button
-                                    onClick={toggleAutoTrigger}
-                                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors
-                                        ${autoEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-                                >
-                                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform
-                                        ${autoEnabled ? "translate-x-6" : "translate-x-1"}`} />
+                                <button onClick={toggleAutoTrigger}
+                                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${autoEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
+                                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${autoEnabled ? "translate-x-6" : "translate-x-1"}`} />
                                 </button>
                             </div>
-
                             <div className={autoEnabled ? "" : "opacity-50 pointer-events-none"}>
                                 <div className="flex items-center justify-between mb-1">
                                     <label className="text-sm font-medium">Trigger Interval</label>
-                                    <span className="text-xs font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">
-                                        every {settings.auto_trigger_interval_minutes}min
-                                    </span>
+                                    <span className="text-xs font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">every {settings.auto_trigger_interval_minutes}min</span>
                                 </div>
-                                <p className="text-xs text-muted-foreground mb-2">Agent runs automatically every N minutes</p>
                                 <div className="flex gap-2 flex-wrap mb-2">
                                     {INTERVALS.map(iv => (
-                                        <button
-                                            key={iv.value}
-                                            onClick={() => setSetting("auto_trigger_interval_minutes", iv.value)}
+                                        <button key={iv.value} onClick={() => setSetting("auto_trigger_interval_minutes", iv.value)}
                                             className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all
                                                 ${settings.auto_trigger_interval_minutes === iv.value
                                                     ? "border-primary bg-primary text-primary-foreground"
@@ -561,17 +559,7 @@ export default function AgentSettingsPage() {
                                         >{iv.label}</button>
                                     ))}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        type="number" min={1}
-                                        className="h-8 w-24 text-sm"
-                                        value={settings.auto_trigger_interval_minutes}
-                                        onChange={e => setSetting("auto_trigger_interval_minutes", e.target.value)}
-                                    />
-                                    <span className="text-xs text-muted-foreground">minutes (custom)</span>
-                                </div>
                             </div>
-
                             <div className="rounded-lg border bg-muted/40 p-3 flex items-center gap-3">
                                 <Clock className="h-4 w-4 text-primary" />
                                 <div>
@@ -579,7 +567,6 @@ export default function AgentSettingsPage() {
                                     <p className="text-sm font-mono font-bold">{pktTime}</p>
                                 </div>
                             </div>
-
                             {autoEnabled && nextTriggerAt && (
                                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center gap-2 text-sm">
                                     <Timer className="h-4 w-4 text-primary shrink-0" />
@@ -591,108 +578,59 @@ export default function AgentSettingsPage() {
                                     </div>
                                 </div>
                             )}
-
-                            {settings.last_trigger_at && (
-                                <p className="text-xs text-muted-foreground">
-                                    Last triggered:{" "}
-                                    {new Date(settings.last_trigger_at).toLocaleString("en-PK", {
-                                        timeZone: "Asia/Karachi", hour12: false,
-                                        year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"
-                                    })} PKT
-                                </p>
-                            )}
-
-                            <div className="flex items-center gap-3">
-                                <Button onClick={saveSettings} disabled={saveStatus === "saving" || !isDirty} variant="outline" className="flex-1">
-                                    {saveStatus === "saving" ? "Saving…" : isDirty ? "Save Interval" : "No Changes"}
-                                </Button>
-                                {saveStatus === "saved" && <span className="flex items-center gap-1 text-sm text-green-600 font-medium"><CheckCircle2 className="h-4 w-4" />Saved</span>}
-                            </div>
                         </div>
                     </section>
                 </div>
 
-                {/* ── AI Model Config (new section) ───────────────────────────────────────── */}
+                {/* ── Enterprise AI Model Config ─────────────────────────────────────────── */}
                 <section className="rounded-xl border bg-card shadow-sm overflow-hidden">
                     <div className="p-4 border-b flex items-center gap-2 bg-gradient-to-r from-primary/5 to-violet-500/5">
                         <Cpu className="h-4 w-4 text-primary" />
                         <h2 className="font-semibold">AI Model Config</h2>
-                        <span className="ml-auto text-xs text-muted-foreground">Choose provider & model per agent</span>
+                        <span className="ml-auto text-xs text-muted-foreground">Provider & model per agent — keys from .env only</span>
+                        <Button size="sm" variant="outline" className="ml-2 h-7 text-xs" onClick={loadProviderRegistry} disabled={providersLoading}>
+                            <RefreshCw className={`h-3 w-3 mr-1 ${providersLoading ? "animate-spin" : ""}`} />Refresh Keys
+                        </Button>
                     </div>
 
                     <div className="p-5 space-y-6">
-                        {/* API Keys row */}
-                        <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">API Keys & Connection</p>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                {/* Vercel Key */}
-                                <div className="space-y-1">
-                                    <label className="text-xs font-medium flex items-center gap-1">
-                                        <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
-                                        Vercel AI Gateway Key
-                                    </label>
-                                    <div className="relative">
-                                        <Input
-                                            type={showVercelKey ? "text" : "password"}
-                                            placeholder="v1_xxxx…"
-                                            value={settings.vercel_api_key}
-                                            onChange={e => setSetting("vercel_api_key", e.target.value)}
-                                            className="h-8 text-xs pr-8 font-mono"
-                                        />
-                                        <button
-                                            onClick={() => setShowVercelKey(v => !v)}
-                                            className="absolute right-2 top-1.5 text-muted-foreground hover:text-foreground"
-                                        >
-                                            {showVercelKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                                        </button>
-                                    </div>
-                                </div>
-                                {/* LiteLLM Key */}
-                                <div className="space-y-1">
-                                    <label className="text-xs font-medium flex items-center gap-1">
-                                        <span className="inline-block w-2 h-2 rounded-full bg-purple-500"></span>
-                                        LiteLLM API Key
-                                    </label>
-                                    <div className="relative">
-                                        <Input
-                                            type={showLitellmKey ? "text" : "password"}
-                                            placeholder="sk-xxxx…"
-                                            value={settings.litellm_api_key}
-                                            onChange={e => setSetting("litellm_api_key", e.target.value)}
-                                            className="h-8 text-xs pr-8 font-mono"
-                                        />
-                                        <button
-                                            onClick={() => setShowLitellmKey(v => !v)}
-                                            className="absolute right-2 top-1.5 text-muted-foreground hover:text-foreground"
-                                        >
-                                            {showLitellmKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                                        </button>
-                                    </div>
-                                </div>
-                                {/* LiteLLM Base URL */}
-                                <div className="space-y-1">
-                                    <label className="text-xs font-medium flex items-center gap-1">
-                                        <span className="inline-block w-2 h-2 rounded-full bg-purple-500"></span>
-                                        LiteLLM Base URL
-                                    </label>
-                                    <Input
-                                        type="text"
-                                        placeholder="http://..."
-                                        value={settings.litellm_base_url}
-                                        onChange={e => setSetting("litellm_base_url", e.target.value)}
-                                        className="h-8 text-xs font-mono"
-                                    />
-                                </div>
+                        {/* Key Status Panel */}
+                        <div className="rounded-lg border bg-muted/20 p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                                <Shield className="h-4 w-4 text-primary" />
+                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Provider Key Status</p>
+                                <p className="text-xs text-muted-foreground ml-auto">Keys in .env · Never stored in DB</p>
                             </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                                {providersLoading ? (
+                                    <div className="col-span-full flex items-center gap-2 text-xs text-muted-foreground">
+                                        <Loader2 className="h-3 w-3 animate-spin" />Loading providers…
+                                    </div>
+                                ) : (
+                                    providerRegistry.map(p => (
+                                        <div key={p.id} className="flex flex-col gap-1 p-2 rounded-lg border bg-background">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs font-semibold truncate">{p.label}</span>
+                                            </div>
+                                            <KeyStatusPill keySet={p.keySet} />
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
+                                <KeyRound className="h-3 w-3" />
+                                To add a key: set it in <code className="bg-muted px-1 rounded">.env</code> → restart <code className="bg-muted px-1 rounded">langgraph dev</code>
+                            </p>
                         </div>
 
-                        {/* Per-agent cards */}
-                        <div className="grid gap-4 lg:grid-cols-3">
+                        {/* Per-agent cards — 5 total: Main, Analyzer, Feeder, Research Subagent, Content Subagent */}
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                             {AGENT_CONFIGS.map(agent => {
                                 const currentProvider = settings[agent.providerKey] || "vercel";
                                 const currentModel = settings[agent.modelKey] || "";
+                                const provMeta = getProviderMeta(currentProvider);
                                 const availableModels = [
-                                    ...(currentProvider === "litellm" ? LITELLM_MODELS : VERCEL_MODELS),
+                                    ...(provMeta?.defaultModels ?? []),
                                     ...(extraModels[agent.key] || []),
                                 ];
                                 const testKey = `${agent.key}_model`;
@@ -700,6 +638,7 @@ export default function AgentSettingsPage() {
                                 const ts: TestState = modelTestStates[testKey] ?? { status: "idle" };
                                 const customTs: TestState = modelTestStates[customTestKey] ?? { status: "idle" };
                                 const customInput = customModelInputs[agent.key] || "";
+                                const expanded = showProviderDetails[agent.key] ?? false;
 
                                 return (
                                     <div key={agent.key} className="rounded-lg border bg-muted/10 p-4 space-y-3 flex flex-col">
@@ -712,31 +651,42 @@ export default function AgentSettingsPage() {
                                             </div>
                                         </div>
 
-                                        {/* Provider toggle */}
+                                        {/* Provider selector */}
                                         <div>
                                             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Provider</label>
-                                            <div className="flex gap-1.5">
-                                                {AI_PROVIDERS.map(p => (
-                                                    <button
-                                                        key={p.value}
-                                                        onClick={() => {
-                                                            setSetting(agent.providerKey, p.value);
-                                                            // Reset model to first available for this provider
-                                                            const firstModel = p.value === "litellm"
-                                                                ? LITELLM_MODELS[0].value
-                                                                : VERCEL_MODELS[0].value;
-                                                            setSetting(agent.modelKey, firstModel);
-                                                        }}
-                                                        className={`flex-1 py-1.5 px-2 rounded-md text-xs font-semibold border transition-all ${
-                                                            currentProvider === p.value
-                                                                ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                                                                : "border-border bg-background hover:bg-muted text-muted-foreground"
-                                                        }`}
-                                                    >
-                                                        {p.label}
-                                                    </button>
-                                                ))}
+                                            <div className="grid grid-cols-2 gap-1">
+                                                {providersLoading ? (
+                                                    <div className="col-span-2 h-8 rounded-md bg-muted animate-pulse" />
+                                                ) : (
+                                                    providerRegistry.map(p => (
+                                                        <button
+                                                            key={p.id}
+                                                            onClick={() => {
+                                                                setSetting(agent.providerKey, p.id);
+                                                                const firstModel = p.defaultModels[0]?.value ?? "";
+                                                                setSetting(agent.modelKey, firstModel);
+                                                            }}
+                                                            className={`py-1.5 px-2 rounded-md text-[11px] font-semibold border transition-all flex items-center gap-1 ${
+                                                                currentProvider === p.id
+                                                                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                                                                    : "border-border bg-background hover:bg-muted text-muted-foreground"
+                                                            }`}
+                                                        >
+                                                            <span className={`inline-block w-1.5 h-1.5 rounded-full bg-gradient-to-br ${p.badgeColor} shrink-0`} />
+                                                            <span className="truncate">{p.label}</span>
+                                                            {p.keySet && currentProvider === p.id && (
+                                                                <CheckCircle2 className="h-2.5 w-2.5 ml-auto shrink-0 opacity-70" />
+                                                            )}
+                                                        </button>
+                                                    ))
+                                                )}
                                             </div>
+                                            {provMeta && !provMeta.keySet && (
+                                                <p className="text-[10px] text-orange-500 mt-1.5 flex items-center gap-1">
+                                                    <XCircle className="h-2.5 w-2.5" />
+                                                    No key set for {provMeta.label} — add to .env
+                                                </p>
+                                            )}
                                         </div>
 
                                         {/* Model dropdown */}
@@ -760,7 +710,7 @@ export default function AgentSettingsPage() {
                                             onClick={() => testAiModel(agent.key)}
                                             disabled={ts.status === "testing" || !currentModel}
                                             className={`w-full flex items-center justify-center gap-1.5 h-7 rounded-md border text-xs font-medium transition-all ${
-                                                ts.status === "ok" ? "border-green-400 bg-green-50 text-green-700"
+                                                ts.status === "ok"      ? "border-green-400 bg-green-50 text-green-700"
                                                 : ts.status === "error" ? "border-red-400 bg-red-50 text-red-700"
                                                 : ts.status === "testing" ? "border-primary bg-primary/5 text-primary"
                                                 : "border-border bg-muted hover:bg-accent text-muted-foreground"
@@ -772,61 +722,68 @@ export default function AgentSettingsPage() {
                                             {ts.status === "idle"    && <FlaskConical className="h-3 w-3" />}
                                             {ts.status === "testing" ? "Testing…"
                                              : ts.status === "ok"    ? `${ts.latency}ms ✓`
-                                             : ts.status === "error" ? (ts.error?.substring(0, 24) ?? "Error")
+                                             : ts.status === "error" ? (ts.error?.substring(0, 28) ?? "Error")
                                              : "Test Model"}
                                         </button>
 
-                                        {/* Custom model input */}
-                                        <div className="pt-1 border-t">
-                                            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Add Custom Model</label>
-                                            <div className="flex gap-1">
-                                                <Input
-                                                    type="text"
-                                                    placeholder="paste model name…"
-                                                    value={customInput}
-                                                    onChange={e => setCustomModelInputs(prev => ({ ...prev, [agent.key]: e.target.value }))}
-                                                    className="h-7 text-xs flex-1 font-mono"
-                                                    onKeyDown={e => { if (e.key === "Enter") testCustomModel(agent.key); }}
-                                                />
-                                                <button
-                                                    onClick={() => testCustomModel(agent.key)}
-                                                    disabled={!customInput || customTs.status === "testing"}
-                                                    title="Test custom model"
-                                                    className={`h-7 px-2 rounded-md border text-xs font-medium transition-all ${
-                                                        customTs.status === "ok"      ? "border-green-400 bg-green-50 text-green-700"
-                                                        : customTs.status === "error" ? "border-red-400 bg-red-50 text-red-700"
-                                                        : customTs.status === "testing" ? "border-primary bg-primary/5 text-primary"
-                                                        : "border-border bg-muted hover:bg-accent text-muted-foreground"
-                                                    }`}
-                                                >
-                                                    {customTs.status === "testing" ? <Loader2 className="h-3 w-3 animate-spin" /> : <FlaskConical className="h-3 w-3" />}
-                                                </button>
-                                                <button
-                                                    onClick={() => addCustomModel(agent.key)}
-                                                    disabled={!customInput}
-                                                    title="Add to model list"
-                                                    className="h-7 px-2 rounded-md border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary text-xs transition-all"
-                                                >
-                                                    <Plus className="h-3 w-3" />
-                                                </button>
+                                        {/* Expand for custom model */}
+                                        <button
+                                            onClick={() => setShowProviderDetails(p => ({ ...p, [agent.key]: !expanded }))}
+                                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                        >
+                                            {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                            Add custom model
+                                        </button>
+
+                                        {expanded && (
+                                            <div className="pt-1 border-t space-y-1">
+                                                <div className="flex gap-1">
+                                                    <Input
+                                                        type="text"
+                                                        placeholder="paste model name…"
+                                                        value={customInput}
+                                                        onChange={e => setCustomModelInputs(prev => ({ ...prev, [agent.key]: e.target.value }))}
+                                                        className="h-7 text-xs flex-1 font-mono"
+                                                        onKeyDown={e => { if (e.key === "Enter") testCustomModel(agent.key); }}
+                                                    />
+                                                    <button
+                                                        onClick={() => testCustomModel(agent.key)}
+                                                        disabled={!customInput || customTs.status === "testing"}
+                                                        className={`h-7 px-2 rounded-md border text-xs font-medium transition-all ${
+                                                            customTs.status === "ok" ? "border-green-400 bg-green-50 text-green-700"
+                                                            : customTs.status === "error" ? "border-red-400 bg-red-50 text-red-700"
+                                                            : "border-border bg-muted hover:bg-accent text-muted-foreground"
+                                                        }`}
+                                                    >
+                                                        {customTs.status === "testing" ? <Loader2 className="h-3 w-3 animate-spin" /> : <FlaskConical className="h-3 w-3" />}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => addCustomModel(agent.key)}
+                                                        disabled={!customInput}
+                                                        title="Add to model list"
+                                                        className="h-7 px-2 rounded-md border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary text-xs transition-all"
+                                                    >
+                                                        <Plus className="h-3 w-3" />
+                                                    </button>
+                                                </div>
+                                                {customTs.status === "ok" && (
+                                                    <p className="text-xs text-green-600 flex items-center gap-1">
+                                                        <CheckCircle2 className="h-3 w-3" />{customTs.latency}ms — works! Click + to add.
+                                                    </p>
+                                                )}
+                                                {customTs.status === "error" && (
+                                                    <p className="text-xs text-red-500 truncate">{customTs.error}</p>
+                                                )}
                                             </div>
-                                            {customTs.status === "ok" && (
-                                                <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                                                    <CheckCircle2 className="h-3 w-3" /> {customTs.latency}ms — model works! Click + to add.
-                                                </p>
-                                            )}
-                                            {customTs.status === "error" && (
-                                                <p className="text-xs text-red-500 mt-1 truncate">{customTs.error}</p>
-                                            )}
-                                        </div>
+                                        )}
 
                                         {/* Active model badge */}
-                                        <div className={`mt-auto pt-2 flex items-center gap-1.5 text-xs rounded-md px-2 py-1 ${
-                                            currentProvider === "litellm"
-                                                ? "bg-purple-50 text-purple-700 border border-purple-200"
-                                                : "bg-blue-50 text-blue-700 border border-blue-200"
+                                        <div className={`mt-auto pt-2 flex items-center gap-1.5 text-xs rounded-md px-2 py-1 border ${
+                                            provMeta?.keySet
+                                                ? "bg-green-50 text-green-700 border-green-200"
+                                                : "bg-muted text-muted-foreground border-border"
                                         }`}>
-                                            <span className={`w-1.5 h-1.5 rounded-full ${currentProvider === "litellm" ? "bg-purple-500" : "bg-blue-500"}`}></span>
+                                            <span className={`w-1.5 h-1.5 rounded-full bg-gradient-to-br ${provMeta?.badgeColor ?? "from-gray-400 to-gray-500"}`} />
                                             <span className="font-mono truncate">{currentModel || "— not set —"}</span>
                                         </div>
                                     </div>
@@ -837,8 +794,8 @@ export default function AgentSettingsPage() {
                         {/* Reload status banner */}
                         {reloadMsg && (
                             <div className={`text-xs rounded-md px-3 py-2 flex items-center gap-2 ${
-                                reloadStatus === "done"      ? "bg-green-50 text-green-700 border border-green-200"
-                                : reloadStatus === "error"   ? "bg-red-50 text-red-600 border border-red-200"
+                                reloadStatus === "done"    ? "bg-green-50 text-green-700 border border-green-200"
+                                : reloadStatus === "error" ? "bg-red-50 text-red-600 border border-red-200"
                                 : "bg-blue-50 text-blue-700 border border-blue-200"
                             }`}>
                                 {reloadStatus === "reloading" && <Loader2 className="h-3 w-3 animate-spin" />}
@@ -847,12 +804,9 @@ export default function AgentSettingsPage() {
                         )}
 
                         <div className="flex items-center gap-3 pt-2 border-t">
-                            {/* Save only */}
                             <Button onClick={saveSettings} disabled={saveStatus === "saving" || !isDirty} variant="outline" className="flex-1">
                                 {saveStatus === "saving" ? "Saving…" : isDirty ? "Save Config" : "No Changes"}
                             </Button>
-
-                            {/* Save + immediately apply to all running agents */}
                             <Button
                                 onClick={saveAndReload}
                                 disabled={saveStatus === "saving" || reloadStatus === "reloading"}
@@ -861,27 +815,23 @@ export default function AgentSettingsPage() {
                                 {reloadStatus === "reloading" ? (
                                     <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Applying…</>
                                 ) : (
-                                    <><Zap className="h-3.5 w-3.5 mr-1.5" />Save &amp; Apply to Agents</>
+                                    <><Zap className="h-3.5 w-3.5 mr-1.5" />Save & Apply to Agents</>
                                 )}
                             </Button>
-
                             {saveStatus === "saved" && <span className="flex items-center gap-1 text-sm text-green-600 font-medium"><CheckCircle2 className="h-4 w-4" />Saved</span>}
                             {saveStatus === "error"  && <span className="flex items-center gap-1 text-sm text-red-600 font-medium"><XCircle className="h-4 w-4" />Error</span>}
                         </div>
-
                     </div>
                 </section>
 
-                {/* AI Providers & Fallback Configuration */}
+                {/* AI Providers & Fallback */}
                 <section className="rounded-xl border bg-card shadow-sm">
                     <div className="p-4 border-b flex items-center gap-2">
                         <Zap className="h-4 w-4 text-primary" />
-                        <h2 className="font-semibold">AI Providers &amp; Fallback</h2>
+                        <h2 className="font-semibold">Search & Extract Providers</h2>
                         <span className="ml-auto text-xs text-muted-foreground">Settings cached 60s in backend</span>
                     </div>
                     <div className="p-5 space-y-6">
-
-                        {/* Search Providers */}
                         <ProviderRow
                             icon={<Search className="h-4 w-4 text-primary" />}
                             label="Search"
@@ -895,8 +845,6 @@ export default function AgentSettingsPage() {
                             testStates={testStates}
                             onTest={testProvider}
                         />
-
-                        {/* Extract Providers */}
                         <ProviderRow
                             icon={<FileText className="h-4 w-4 text-primary" />}
                             label="Extract"
@@ -910,8 +858,6 @@ export default function AgentSettingsPage() {
                             testStates={testStates}
                             onTest={testProvider}
                         />
-
-                        {/* Image Providers */}
                         <ProviderRow
                             icon={<ImageIcon className="h-4 w-4 text-primary" />}
                             label="Image Generation"
@@ -925,7 +871,6 @@ export default function AgentSettingsPage() {
                             testStates={testStates}
                             onTest={testProvider}
                         />
-
                         <div className="flex items-center gap-3 pt-2 border-t">
                             <Button onClick={saveSettings} disabled={saveStatus === "saving" || !isDirty} className="flex-1">
                                 {saveStatus === "saving" ? "Saving…" : isDirty ? "Save Provider Settings" : "No Changes"}
@@ -936,25 +881,17 @@ export default function AgentSettingsPage() {
                     </div>
                 </section>
 
-                {/* Queue Preview + Manual Trigger */}
+                {/* Queue Preview */}
                 <section className="rounded-xl border bg-card shadow-sm">
                     <div className="p-4 border-b flex items-center gap-2">
                         <Activity className="h-4 w-4 text-primary" />
                         <h2 className="font-semibold">Current Queue</h2>
                         <span className="ml-auto text-xs text-muted-foreground">Next {batchSize} pending articles (FIFO)</span>
-                        <Button
-                            onClick={resetStuckArticles}
-                            size="sm" variant="outline"
-                            className="ml-2 border-yellow-500 text-yellow-600 hover:bg-yellow-50"
-                            title="Revert all Processing articles back to Pending"
-                        >
+                        <Button onClick={resetStuckArticles} size="sm" variant="outline"
+                            className="ml-2 border-yellow-500 text-yellow-600 hover:bg-yellow-50" title="Revert all Processing articles back to Pending">
                             Reset Stuck
                         </Button>
-                        <Button
-                            onClick={fireAgent}
-                            size="sm" className="ml-2"
-                            disabled={queue.length === 0}
-                        >
+                        <Button onClick={fireAgent} size="sm" className="ml-2" disabled={queue.length === 0}>
                             <Play className="mr-2 h-3.5 w-3.5" />
                             Start Agent ({Math.min(queue.length, batchSize)} articles)
                         </Button>
@@ -967,9 +904,7 @@ export default function AgentSettingsPage() {
                         )}
                         {queue.slice(0, batchSize).map((art, i) => (
                             <div key={art.id} className="p-4 flex items-start gap-3">
-                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
-                                    {i + 1}
-                                </div>
+                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">{i + 1}</div>
                                 <div className="flex-1 min-w-0">
                                     <p className="font-medium text-sm truncate">{art.title}</p>
                                     <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{art.description}</p>
@@ -1015,7 +950,7 @@ export default function AgentSettingsPage() {
     );
 }
 
-// -- ProviderRow sub-component -------------------------------------------------
+// ── ProviderRow sub-component ─────────────────────────────────────────────────
 
 type ProviderOption = { value: string; label: string; badge: string };
 

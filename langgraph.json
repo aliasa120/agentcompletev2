@@ -7,6 +7,6 @@
   },
   "env": ".env",
   "config": {
-    "recursion_limit": 200
+    "recursion_limit": 500
   }
 }

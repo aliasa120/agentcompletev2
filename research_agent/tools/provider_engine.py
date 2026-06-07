@@ -9,7 +9,7 @@ Retry strategy (Round-based flat delay):
     1. Try Primary provider.
     2. If it fails, try Secondary provider.
     3. If BOTH fail in this round, wait `retry_delay_seconds` (default 15s).
-  
+
   If all rounds are exhausted, return a graceful ProviderResult with failed=True
   (never raises — prevents pipeline crashes).
 
@@ -23,18 +23,23 @@ All defaults are overridable via Supabase ``agent_settings`` keys:
   image_max_retries      (int, default 2)
   retry_delay_seconds    (int, default 15)
 
-Per-agent LLM config keys (new — LiteLLM + Vercel AI Gateway selection):
-  main_agent_provider    ("vercel" | "litellm", default "vercel")
-  main_agent_model       (model name, default "xiaomi/mimo-v2.5-pro")
-  analyzer_provider      ("vercel" | "litellm", default "vercel")
-  analyzer_model         (model name, default "moonshotai/kimi-k2.5")
-  feeder_provider        ("vercel" | "litellm", default "minimax/minimax-m2.7")
-  feeder_model           (model name, default "minimax/minimax-m2.7")
-  vercel_api_key         (Vercel AI Gateway API key — fallback to env AI_GATEWAY_API_KEY)
-  litellm_api_key        (LiteLLM API key — fallback to env LITELLM_API_KEY)
-  litellm_base_url       (LiteLLM base URL — fallback to env LITELLM_BASE_URL)
+Per-agent LLM config keys (resolved from Supabase, keys from ENV):
+  main_agent_provider         (any key in PROVIDER_REGISTRY, default "vercel")
+  main_agent_model            (model name string)
+  analyzer_provider           (any key in PROVIDER_REGISTRY, default "vercel")
+  analyzer_model              (model name string)
+  feeder_provider             (any key in PROVIDER_REGISTRY, default "vercel")
+  feeder_model                (model name string)
+  research_subagent_provider  (any key in PROVIDER_REGISTRY, defaults to main_agent value)
+  research_subagent_model     (model name string)
+  content_subagent_provider   (any key in PROVIDER_REGISTRY, defaults to main_agent value)
+  content_subagent_model      (model name string)
 
-Settings are cached for 60 s to avoid hammering the DB on every tool call.
+API KEYS ARE NEVER STORED IN SUPABASE. They live only in .env.
+Settings (provider/model selection, retry counts) are cached 60s.
+
+Enterprise pattern:
+  To add a new provider → add it to provider_registry.py + add env var → done.
 """
 
 import asyncio
@@ -44,6 +49,13 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Optional
+
+from .provider_registry import (
+    get_provider_api_key,
+    get_provider_base_url,
+    get_provider_config,
+    get_all_provider_names,
+)
 
 logger = logging.getLogger("provider_engine")
 
@@ -55,7 +67,11 @@ _CACHE_TTL_SECONDS = 60  # refresh from Supabase every 60 s
 
 
 def _fetch_settings_from_supabase() -> dict[str, str]:
-    """Pull agent_settings from Supabase synchronously. Returns {} on failure."""
+    """Pull agent_settings from Supabase synchronously. Returns {} on failure.
+
+    Only fetches non-secret settings (provider/model selection, retry counts).
+    API keys are NEVER stored in Supabase — they come from env only.
+    """
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -83,7 +99,7 @@ def get_settings() -> dict[str, str]:
     return _settings_cache
 
 
-def invalidate_settings_cache():
+def invalidate_settings_cache() -> None:
     """Force next call to get_settings() to re-fetch from Supabase."""
     global _cache_loaded_at
     _cache_loaded_at = 0.0
@@ -98,13 +114,8 @@ def get_retry_delay() -> int:
         return 15
 
 
-# ── Per-Agent LLM Config ───────────────────────────────────────────────────────
+# ── Agent defaults ─────────────────────────────────────────────────────────────
 
-# Provider constants
-_VERCEL_BASE_URL = "https://ai-gateway.vercel.sh/v1"
-_LITELLM_DEFAULT_BASE_URL = "http://47.82.164.26:4000"
-
-# Agent defaults
 _AGENT_DEFAULTS: dict[str, dict[str, str]] = {
     "main_agent": {
         "provider": "vercel",
@@ -118,17 +129,34 @@ _AGENT_DEFAULTS: dict[str, dict[str, str]] = {
         "provider": "vercel",
         "model": "minimax/minimax-m2.7",
     },
+    # Subagents: default to same model as main_agent — configurable in UI
+    "research_subagent": {
+        "provider": "vercel",
+        "model": "xiaomi/mimo-v2.5-pro",
+    },
+    "content_subagent": {
+        "provider": "vercel",
+        "model": "xiaomi/mimo-v2.5-pro",
+    },
 }
 
+
+# ── Per-Agent LLM Config ───────────────────────────────────────────────────────
 
 def get_llm_config(agent: str) -> tuple[str, str, str]:
     """Return (base_url, api_key, model) for the given agent.
 
-    Reads provider/model from Supabase agent_settings (cached 60s),
-    falls back to hardcoded defaults if not configured.
+    Resolution order:
+      1. Provider name → from Supabase agent_settings (e.g. "main_agent_provider")
+      2. Model name    → from Supabase agent_settings (e.g. "main_agent_model")
+      3. base_url      → from PROVIDER_REGISTRY (via env var for dynamic providers)
+      4. api_key       → ALWAYS from environment variables (never Supabase)
+
+    Falls back to hardcoded _AGENT_DEFAULTS if Supabase has nothing configured.
 
     Args:
-        agent: One of "main_agent", "analyzer", "feeder"
+        agent: One of "main_agent", "analyzer", "feeder",
+               "research_subagent", "content_subagent"
 
     Returns:
         (base_url, api_key, model) ready to pass to ChatOpenAI / httpx
@@ -139,28 +167,36 @@ def get_llm_config(agent: str) -> tuple[str, str, str]:
     provider = settings.get(f"{agent}_provider", defaults["provider"]).strip().lower()
     model = settings.get(f"{agent}_model", defaults["model"]).strip()
 
-    if provider == "litellm":
-        base_url = settings.get(
-            "litellm_base_url",
-            os.environ.get("LITELLM_BASE_URL", _LITELLM_DEFAULT_BASE_URL),
-        ).rstrip("/")
-        api_key = settings.get(
-            "litellm_api_key",
-            os.environ.get("LITELLM_API_KEY", ""),
+    # Validate provider is registered
+    if provider not in get_all_provider_names():
+        logger.warning(
+            f"[provider_engine] Unknown provider '{provider}' for agent '{agent}'. "
+            f"Falling back to '{defaults['provider']}'. "
+            f"Valid providers: {get_all_provider_names()}"
         )
-        # LiteLLM uses OpenAI-compatible /v1 prefix
-        if not base_url.endswith("/v1"):
-            base_url = base_url + "/v1"
-    else:
-        # Default: Vercel AI Gateway
-        base_url = _VERCEL_BASE_URL
-        api_key = settings.get(
-            "vercel_api_key",
-            os.environ.get("AI_GATEWAY_API_KEY", ""),
-        )
+        provider = defaults["provider"]
+
+    # Resolve base_url from registry (handles dynamic env-var URLs like LiteLLM)
+    base_url = get_provider_base_url(provider)
+
+    # LiteLLM and similar need /v1 appended
+    cfg = get_provider_config(provider)
+    needs_v1 = cfg and "base_url_env" in cfg  # only dynamic-URL providers need this
+    if needs_v1 and not base_url.endswith("/v1"):
+        base_url = base_url + "/v1"
+
+    # Resolve API key from env ONLY — never from Supabase
+    api_key = get_provider_api_key(provider)
 
     if not model:
         model = defaults["model"]
+
+    if not api_key:
+        logger.warning(
+            f"[provider_engine] ⚠️ No API key found for provider '{provider}' "
+            f"(env var: {get_provider_config(provider).get('env_key', '?')}). "
+            f"Set it in your .env file."
+        )
 
     logger.debug(
         f"[provider_engine] LLM config for '{agent}': provider={provider}, "
@@ -284,7 +320,7 @@ async def execute_with_fallback(
                     msg = f"Fallback round {round_} failed: {e}"
                     logger.warning(f"[{secondary_name}] ⚠️ {msg}")
                     errors.append(f"{secondary_name}: {msg}")
-                    
+
             if primary_fatal and secondary_fatal:
                 logger.error("[provider_engine] Both primary and secondary returned FATAL errors. Aborting early.")
                 break
