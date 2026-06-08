@@ -32,6 +32,8 @@ const AGENT_SETTING_KEYS = [
     // Subagent model selection
     "research_subagent_provider", "research_subagent_model",
     "content_subagent_provider", "content_subagent_model",
+    // Custom model lists per agent (stored as JSON)
+    "custom_models",
 ];
 
 const DEFAULTS: Record<string, string> = {
@@ -60,6 +62,8 @@ const DEFAULTS: Record<string, string> = {
     research_subagent_model: "xiaomi/mimo-v2.5-pro",
     content_subagent_provider: "vercel",
     content_subagent_model: "xiaomi/mimo-v2.5-pro",
+    // Custom model lists — stored as JSON, never undefined
+    custom_models: "{\"main_agent\":[],\"analyzer\":[],\"feeder\":[],\"research_subagent\":[],\"content_subagent\":[]}",
 };
 
 // ── Search / Extract / Image providers ────────────────────────────────────────
@@ -174,21 +178,17 @@ export default function AgentSettingsPage() {
     const [providersLoading, setProvidersLoading] = useState(true);
 
     // Per-agent custom model input
-    const [customModelInputs, setCustomModelInputs] = useState<Record<string, string>>({
-        main_agent: "", analyzer: "", feeder: "",
-        research_subagent: "", content_subagent: "",
-    });
-    const [extraModels, setExtraModels] = useState<Record<string, { value: string; label: string; badge: string }[]>>({
-        main_agent: [], analyzer: [], feeder: [],
-        research_subagent: [], content_subagent: [],
-    });
+    const [customModelInputs, setCustomModelInputs] = useState<Record<string, string>>({});
+    // Global custom models keyed by PROVIDER id (not agent key)
+    // e.g. { vercel: [{value,label,badge},...], novita: [...] }
+    const [extraModels, setExtraModels] = useState<Record<string, { value: string; label: string; badge: string }[]>>({});
     const [modelTestStates, setModelTestStates] = useState<Record<string, TestState>>({});
     const [testStates, setTestStates] = useState<Record<string, TestState>>({});
     const [reloadStatus, setReloadStatus] = useState<"idle" | "reloading" | "done" | "error">("idle");
     const [reloadMsg, setReloadMsg] = useState("");
 
-    // Collapsible sections
-    const [showProviderDetails, setShowProviderDetails] = useState<Record<string, boolean>>({});
+    // Collapsible "add custom model" per agent card
+    const [showCustomInput, setShowCustomInput] = useState<Record<string, boolean>>({});;
 
     // Live PKT clock
     useEffect(() => {
@@ -266,6 +266,17 @@ export default function AgentSettingsPage() {
             setIsDirty(false);
             setQueue(pendRes.data ?? []);
             setAllArticles(artRes.data ?? []);
+
+            // Load persisted custom models from Supabase (now keyed by provider)
+            const rawCustomModels = loaded["custom_models"];
+            if (rawCustomModels) {
+                try {
+                    const parsed = JSON.parse(rawCustomModels) as Record<string, { value: string; label: string; badge: string }[]>;
+                    setExtraModels(parsed);
+                } catch {
+                    console.warn("Failed to parse custom_models from Supabase");
+                }
+            }
         } finally {
             setLoading(false);
         }
@@ -325,16 +336,16 @@ export default function AgentSettingsPage() {
 
     // ── Test custom model ──────────────────────────────────────────────────────
     const testCustomModel = async (agentKey: string) => {
-        const customModel = customModelInputs[agentKey]?.trim();
+        const providerId = settings[`${agentKey}_provider`] || "vercel";
+        const customModel = customModelInputs[providerId]?.trim();
         if (!customModel) return;
-        const provider = settings[`${agentKey}_provider`] || "vercel";
         const testKey = `${agentKey}_custom`;
         setModelTestStates(prev => ({ ...prev, [testKey]: { status: "testing" } }));
         try {
             const resp = await fetch("/api/test-ai-model", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ provider, model: customModel }),
+                body: JSON.stringify({ provider: providerId, model: customModel }),
             });
             const data = await resp.json();
             if (data.success) {
@@ -348,20 +359,33 @@ export default function AgentSettingsPage() {
         setTimeout(() => setModelTestStates(prev => ({ ...prev, [testKey]: { status: "idle" } })), 25000);
     };
 
-    const addCustomModel = (agentKey: string) => {
-        const customModel = customModelInputs[agentKey]?.trim();
+    const addCustomModel = async (agentKey: string) => {
+        const providerId = settings[`${agentKey}_provider`] || "vercel";
+        const customModel = customModelInputs[providerId]?.trim();
         if (!customModel) return;
         const label = customModel.split("/").pop() ?? customModel;
         const newModel = { value: customModel, label, badge: "Custom" };
-        setExtraModels(prev => ({
-            ...prev,
-            [agentKey]: [...(prev[agentKey] || []).filter(m => m.value !== customModel), newModel],
-        }));
+
+        const updatedModels = {
+            ...extraModels,
+            [providerId]: [
+                ...(extraModels[providerId] || []).filter(m => m.value !== customModel),
+                newModel,
+            ],
+        };
+
+        setExtraModels(updatedModels);
         setSetting(`${agentKey}_model`, customModel);
-        setCustomModelInputs(prev => ({ ...prev, [agentKey]: "" }));
+        setCustomModelInputs(prev => ({ ...prev, [providerId]: "" }));
+
+        // Persist the full per-provider custom models map to Supabase immediately
+        await supabase.from("agent_settings").upsert(
+            { key: "custom_models", value: JSON.stringify(updatedModels), updated_at: new Date().toISOString() },
+            { onConflict: "key" }
+        );
     };
 
-    // ── Save settings (no API keys — only provider/model selections) ───────────
+    // ── Save settings ──────────────────────────────────────────────────────────
     const saveSettings = async () => {
         setSaveStatus("saving");
         const keysToSave = [
@@ -369,11 +393,9 @@ export default function AgentSettingsPage() {
             "search_provider_primary", "search_provider_secondary", "search_max_retries",
             "extract_provider_primary", "extract_provider_secondary", "extract_max_retries",
             "image_provider_primary", "image_provider_secondary", "image_max_retries",
-            // Model config — NO API keys here
             "main_agent_provider", "main_agent_model",
             "analyzer_provider", "analyzer_model",
             "feeder_provider", "feeder_model",
-            // Subagent model config
             "research_subagent_provider", "research_subagent_model",
             "content_subagent_provider", "content_subagent_model",
         ];
@@ -462,7 +484,6 @@ export default function AgentSettingsPage() {
 
     const autoEnabled = settings.auto_trigger_enabled === "true";
 
-    // ── Get provider meta for a given provider id ─────────────────────────────
     const getProviderMeta = (id: string): ProviderMeta | undefined =>
         providerRegistry.find(p => p.id === id);
 
@@ -490,7 +511,6 @@ export default function AgentSettingsPage() {
 
             <main className="flex-1 overflow-auto p-6 space-y-6">
                 <div className="grid gap-6 lg:grid-cols-2">
-                    {/* Queue Config */}
                     <section className="rounded-xl border bg-card shadow-sm">
                         <div className="p-4 border-b flex items-center gap-2">
                             <List className="h-4 w-4 text-primary" />
@@ -525,7 +545,6 @@ export default function AgentSettingsPage() {
                         </div>
                     </section>
 
-                    {/* Auto Trigger */}
                     <section className="rounded-xl border bg-card shadow-sm">
                         <div className="p-4 border-b flex items-center gap-2">
                             <AlarmClock className="h-4 w-4 text-primary" />
@@ -582,7 +601,6 @@ export default function AgentSettingsPage() {
                     </section>
                 </div>
 
-                {/* ── Enterprise AI Model Config ─────────────────────────────────────────── */}
                 <section className="rounded-xl border bg-card shadow-sm overflow-hidden">
                     <div className="p-4 border-b flex items-center gap-2 bg-gradient-to-r from-primary/5 to-violet-500/5">
                         <Cpu className="h-4 w-4 text-primary" />
@@ -594,7 +612,6 @@ export default function AgentSettingsPage() {
                     </div>
 
                     <div className="p-5 space-y-6">
-                        {/* Key Status Panel */}
                         <div className="rounded-lg border bg-muted/20 p-4">
                             <div className="flex items-center gap-2 mb-3">
                                 <Shield className="h-4 w-4 text-primary" />
@@ -623,26 +640,26 @@ export default function AgentSettingsPage() {
                             </p>
                         </div>
 
-                        {/* Per-agent cards — 5 total: Main, Analyzer, Feeder, Research Subagent, Content Subagent */}
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                             {AGENT_CONFIGS.map(agent => {
                                 const currentProvider = settings[agent.providerKey] || "vercel";
                                 const currentModel = settings[agent.modelKey] || "";
                                 const provMeta = getProviderMeta(currentProvider);
+                                const providerCustomModels = extraModels[currentProvider] || [];
                                 const availableModels = [
                                     ...(provMeta?.defaultModels ?? []),
-                                    ...(extraModels[agent.key] || []),
+                                    ...providerCustomModels,
                                 ];
                                 const testKey = `${agent.key}_model`;
                                 const customTestKey = `${agent.key}_custom`;
                                 const ts: TestState = modelTestStates[testKey] ?? { status: "idle" };
                                 const customTs: TestState = modelTestStates[customTestKey] ?? { status: "idle" };
-                                const customInput = customModelInputs[agent.key] || "";
-                                const expanded = showProviderDetails[agent.key] ?? false;
+                                const providerInputKey = currentProvider;
+                                const customInput = customModelInputs[providerInputKey] || "";
+                                const expanded = showCustomInput[agent.key] ?? false;
 
                                 return (
                                     <div key={agent.key} className="rounded-lg border bg-muted/10 p-4 space-y-3 flex flex-col">
-                                        {/* Agent header */}
                                         <div className="flex items-center gap-2">
                                             {agent.icon}
                                             <div>
@@ -651,45 +668,37 @@ export default function AgentSettingsPage() {
                                             </div>
                                         </div>
 
-                                        {/* Provider selector */}
                                         <div>
                                             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Provider</label>
-                                            <div className="grid grid-cols-2 gap-1">
-                                                {providersLoading ? (
-                                                    <div className="col-span-2 h-8 rounded-md bg-muted animate-pulse" />
-                                                ) : (
-                                                    providerRegistry.map(p => (
-                                                        <button
-                                                            key={p.id}
-                                                            onClick={() => {
-                                                                setSetting(agent.providerKey, p.id);
-                                                                const firstModel = p.defaultModels[0]?.value ?? "";
-                                                                setSetting(agent.modelKey, firstModel);
-                                                            }}
-                                                            className={`py-1.5 px-2 rounded-md text-[11px] font-semibold border transition-all flex items-center gap-1 ${
-                                                                currentProvider === p.id
-                                                                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                                                                    : "border-border bg-background hover:bg-muted text-muted-foreground"
-                                                            }`}
-                                                        >
-                                                            <span className={`inline-block w-1.5 h-1.5 rounded-full bg-gradient-to-br ${p.badgeColor} shrink-0`} />
-                                                            <span className="truncate">{p.label}</span>
-                                                            {p.keySet && currentProvider === p.id && (
-                                                                <CheckCircle2 className="h-2.5 w-2.5 ml-auto shrink-0 opacity-70" />
-                                                            )}
-                                                        </button>
-                                                    ))
-                                                )}
-                                            </div>
+                                            {providersLoading ? (
+                                                <div className="h-9 rounded-md bg-muted animate-pulse" />
+                                            ) : (
+                                                <select
+                                                    value={currentProvider}
+                                                    onChange={e => {
+                                                        const newProvider = e.target.value;
+                                                        setSetting(agent.providerKey, newProvider);
+                                                        const pMeta = getProviderMeta(newProvider);
+                                                        const firstModel = pMeta?.defaultModels[0]?.value ?? "";
+                                                        setSetting(agent.modelKey, firstModel);
+                                                    }}
+                                                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                                >
+                                                    {providerRegistry.map(p => (
+                                                        <option key={p.id} value={p.id}>
+                                                            {p.label}{p.keySet ? " ✓" : " (no key)"}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            )}
                                             {provMeta && !provMeta.keySet && (
-                                                <p className="text-[10px] text-orange-500 mt-1.5 flex items-center gap-1">
+                                                <p className="text-[10px] text-orange-500 mt-1 flex items-center gap-1">
                                                     <XCircle className="h-2.5 w-2.5" />
-                                                    No key set for {provMeta.label} — add to .env
+                                                    No key — add {currentProvider.toUpperCase()}_API_KEY to .env
                                                 </p>
                                             )}
                                         </div>
 
-                                        {/* Model dropdown */}
                                         <div>
                                             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Model</label>
                                             <select
@@ -705,7 +714,6 @@ export default function AgentSettingsPage() {
                                             </select>
                                         </div>
 
-                                        {/* Test selected model */}
                                         <button
                                             onClick={() => testAiModel(agent.key)}
                                             disabled={ts.status === "testing" || !currentModel}
@@ -726,23 +734,26 @@ export default function AgentSettingsPage() {
                                              : "Test Model"}
                                         </button>
 
-                                        {/* Expand for custom model */}
                                         <button
-                                            onClick={() => setShowProviderDetails(p => ({ ...p, [agent.key]: !expanded }))}
+                                            onClick={() => setShowCustomInput(p => ({ ...p, [agent.key]: !expanded }))}
                                             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                                         >
                                             {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                                             Add custom model
+                                            <span className="ml-auto text-[10px] text-muted-foreground/60">global for {currentProvider}</span>
                                         </button>
 
                                         {expanded && (
                                             <div className="pt-1 border-t space-y-1">
+                                                <p className="text-[10px] text-muted-foreground">
+                                                    Models added here apply globally to ALL agents using <span className="font-semibold text-foreground">{provMeta?.label ?? currentProvider}</span>.
+                                                </p>
                                                 <div className="flex gap-1">
                                                     <Input
                                                         type="text"
                                                         placeholder="paste model name…"
                                                         value={customInput}
-                                                        onChange={e => setCustomModelInputs(prev => ({ ...prev, [agent.key]: e.target.value }))}
+                                                        onChange={e => setCustomModelInputs(prev => ({ ...prev, [providerInputKey]: e.target.value }))}
                                                         className="h-7 text-xs flex-1 font-mono"
                                                         onKeyDown={e => { if (e.key === "Enter") testCustomModel(agent.key); }}
                                                     />
@@ -760,7 +771,7 @@ export default function AgentSettingsPage() {
                                                     <button
                                                         onClick={() => addCustomModel(agent.key)}
                                                         disabled={!customInput}
-                                                        title="Add to model list"
+                                                        title={`Add to ${provMeta?.label ?? currentProvider} globally`}
                                                         className="h-7 px-2 rounded-md border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary text-xs transition-all"
                                                     >
                                                         <Plus className="h-3 w-3" />
@@ -768,16 +779,26 @@ export default function AgentSettingsPage() {
                                                 </div>
                                                 {customTs.status === "ok" && (
                                                     <p className="text-xs text-green-600 flex items-center gap-1">
-                                                        <CheckCircle2 className="h-3 w-3" />{customTs.latency}ms — works! Click + to add.
+                                                        <CheckCircle2 className="h-3 w-3" />{customTs.latency}ms — works! Click + to add globally.
                                                     </p>
                                                 )}
                                                 {customTs.status === "error" && (
                                                     <p className="text-xs text-red-500 truncate">{customTs.error}</p>
                                                 )}
+                                                {providerCustomModels.length > 0 && (
+                                                    <div className="mt-1 space-y-0.5">
+                                                        <p className="text-[10px] text-muted-foreground font-medium">Saved for {provMeta?.label ?? currentProvider}:</p>
+                                                        {providerCustomModels.map(m => (
+                                                            <div key={m.value} className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+                                                                <span className="truncate">{m.value}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 
-                                        {/* Active model badge */}
                                         <div className={`mt-auto pt-2 flex items-center gap-1.5 text-xs rounded-md px-2 py-1 border ${
                                             provMeta?.keySet
                                                 ? "bg-green-50 text-green-700 border-green-200"

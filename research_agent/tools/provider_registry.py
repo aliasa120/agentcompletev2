@@ -163,6 +163,25 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
             {"value": "mimo-v2.5",     "label": "MiMo V2.5",     "badge": "Fast"},
         ],
     },
+    "novita": {
+        # Novita AI — OpenAI-compatible inference API.
+        # Endpoint: https://api.novita.ai/openai/v1
+        # Auth: Authorization: Bearer $NOVITA_API_KEY
+        # Docs: https://novita.ai/docs
+        "base_url": "https://api.novita.ai/openai/v1",
+        "env_key": "NOVITA_API_KEY",
+        "label": "Novita AI",
+        "openai_compat": True,
+        "badge_color": "from-cyan-500 to-blue-600",
+        "default_models": [
+            {"value": "deepseek/deepseek-v4-flash",            "label": "DeepSeek V4 Flash",    "badge": "Recommended"},
+            {"value": "deepseek/deepseek-r2",                  "label": "DeepSeek R2",           "badge": "Reasoning"},
+            {"value": "meta-llama/llama-4-maverick",           "label": "Llama 4 Maverick",      "badge": "Meta"},
+            {"value": "meta-llama/llama-3.3-70b-instruct",    "label": "Llama 3.3 70B",         "badge": "Fast"},
+            {"value": "qwen/qwen3-235b-a22b",                  "label": "Qwen3 235B",            "badge": "Large"},
+            {"value": "google/gemma-3-27b-it",                 "label": "Gemma 3 27B",           "badge": "Google"},
+        ],
+    },
 }
 
 

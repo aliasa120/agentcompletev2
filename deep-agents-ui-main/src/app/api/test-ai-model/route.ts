@@ -26,6 +26,7 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   together:   "TOGETHER_API_KEY",
   nvidia:     "NVIDIA_API_KEY",
   mimo:       "MIMO_API_KEY",
+  novita:     "NOVITA_API_KEY",
 };
 
 // Provider → base URL (mirrors provider_registry.py)
@@ -39,6 +40,7 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
   together:   "https://api.together.xyz/v1",
   nvidia:     "https://integrate.api.nvidia.com/v1",
   mimo:       "https://api.xiaomimimo.com/v1",
+  novita:     "https://api.novita.ai/openai/v1",
 };
 
 export async function POST(request: NextRequest) {

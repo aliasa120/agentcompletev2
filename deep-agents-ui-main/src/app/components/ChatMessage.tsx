@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useCallback } from "react";
 import { SubAgentIndicator } from "@/app/components/SubAgentIndicator";
-import { ToolCallBox } from "@/app/components/ToolCallBox";
+import { AgentEventCard } from "@/app/components/agent-cards/AgentEventCard";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import type {
   SubAgent,
@@ -298,7 +298,7 @@ export const ChatMessage = React.memo<ChatMessageProps>(
                 const actionRequest = actionRequestsMap?.get(toolCall.name);
                 const reviewConfig = reviewConfigsMap?.get(toolCall.name);
                 return (
-                  <ToolCallBox
+                  <AgentEventCard
                     key={toolCall.id}
                     toolCall={toolCall}
                     uiComponent={toolCallGenUiComponent}

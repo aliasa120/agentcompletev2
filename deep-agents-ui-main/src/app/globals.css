@@ -375,6 +375,398 @@ button {
   background-color: #9ca3af;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   AGENT EVENT CARDS — Animations & Component Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Entrance animation ─────────────────────────────────────────────────── */
+@keyframes cardEnter {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Alias used by inline styles in agent-cards */
+@keyframes cardSlideIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Rotating spinner (Image gen) ───────────────────────────────────────── */
+@keyframes spinnerRotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+
+/* ── Fade in (for result phase reveal) ──────────────────────────────────── */
+@keyframes agentFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Cursor blink ───────────────────────────────────────────────────────── */
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* ── Shimmer sweep ──────────────────────────────────────────────────────── */
+@keyframes shimmerSweep {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+
+/* ── Reading progress bar ───────────────────────────────────────────────── */
+@keyframes readProgress {
+  0%   { width: 0%; }
+  30%  { width: 45%; }
+  60%  { width: 72%; }
+  85%  { width: 88%; }
+  100% { width: 100%; }
+}
+
+/* ── Scan bars (Gemini Vision) ──────────────────────────────────────────── */
+@keyframes scanBar {
+  0%, 100% { transform: scaleY(0.25); opacity: 0.4; }
+  50%       { transform: scaleY(1);    opacity: 1;   }
+}
+
+/* ── Upload bars (WordPress publish) ───────────────────────────────────── */
+@keyframes uploadBar {
+  0%, 100% { transform: scaleY(0.3); }
+  50%       { transform: scaleY(1);   }
+}
+
+/* ── Rotating gradient spinner (Image gen) ─────────────────────────────── */
+@keyframes spinnerRotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Think card pulsing ring ────────────────────────────────────────────── */
+@keyframes pulseRing {
+  0%   { box-shadow: 0 0 0 0   rgba(139, 92, 246, 0.35); }
+  50%  { box-shadow: 0 0 0 8px rgba(139, 92, 246, 0);    }
+  100% { box-shadow: 0 0 0 0   rgba(139, 92, 246, 0);    }
+}
+
+/* ── Utility animation class ────────────────────────────────────────────── */
+.animate-agent-fade {
+  animation: agentFadeIn 0.35s ease both;
+}
+
+/* ── Base card shell ─────────────────────────────────────────────────────── */
+.agent-card {
+  width: 100%;
+  border-radius: 10px;
+  border: 1.5px solid color-mix(in srgb, var(--card-accent, #2F6868) 25%, transparent);
+  background: color-mix(in srgb, var(--card-accent, #2F6868) 4%, var(--background));
+  overflow: hidden;
+  animation: cardEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.agent-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  width: 100%;
+  border-bottom: 1px solid color-mix(in srgb, var(--card-accent, #2F6868) 15%, transparent);
+  background: color-mix(in srgb, var(--card-accent, #2F6868) 8%, transparent);
+}
+
+.agent-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  color: var(--foreground);
+}
+
+.agent-card-body {
+  padding: 12px 14px 14px;
+}
+
+/* ── Think card pulsing variant ─────────────────────────────────────────── */
+.agent-card-thinking {
+  animation: cardEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) both,
+             pulseRing 1.8s ease-in-out infinite;
+}
+
+/* ── Phase badges ────────────────────────────────────────────────────────── */
+.agent-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  border: 1px solid currentColor;
+}
+
+.agent-badge-querying {
+  color: var(--card-accent, #2F6868);
+  border-color: color-mix(in srgb, var(--card-accent, #2F6868) 40%, transparent);
+  background: color-mix(in srgb, var(--card-accent, #2F6868) 10%, transparent);
+}
+
+.agent-badge-loading {
+  color: #F59E0B;
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.agent-badge-done {
+  color: #10B981;
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+/* ── Query chip ─────────────────────────────────────────────────────────── */
+.agent-query-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--card-accent, #2F6868) 30%, transparent);
+  background: color-mix(in srgb, var(--card-accent, #2F6868) 6%, transparent);
+  font-size: 12px;
+  max-width: 100%;
+  word-break: break-all;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+}
+
+/* ── Typewriter text ─────────────────────────────────────────────────────── */
+.agent-typewriter-text {
+  font-size: 12px;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  color: var(--foreground);
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.agent-cursor {
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--card-accent, #2F6868);
+  animation: cursorBlink 0.9s step-end infinite;
+  font-weight: 300;
+}
+
+/* ── Think block ─────────────────────────────────────────────────────────── */
+.agent-think-block {
+  padding: 8px 10px;
+  border-left: 3px solid #8B5CF6;
+  background: rgba(139, 92, 246, 0.05);
+  border-radius: 0 6px 6px 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.agent-think-text {
+  font-size: 12.5px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.65;
+  color: var(--foreground);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Shimmer skeleton ────────────────────────────────────────────────────── */
+.agent-shimmer {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--muted) 80%, transparent) 0%,
+    color-mix(in srgb, var(--muted) 40%, transparent) 50%,
+    color-mix(in srgb, var(--muted) 80%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmerSweep 1.4s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+/* ── Reading progress track/bar ─────────────────────────────────────────── */
+.agent-progress-track {
+  height: 3px;
+  background: color-mix(in srgb, var(--muted) 60%, transparent);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.agent-progress-bar {
+  height: 100%;
+  border-radius: 9999px;
+  animation: readProgress 2.5s ease-out forwards;
+}
+
+/* ── Image grid ──────────────────────────────────────────────────────────── */
+.agent-image-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.agent-image-placeholder {
+  height: 56px;
+  border-radius: 6px;
+}
+
+.agent-image-thumb {
+  width: 100%;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+/* ── Image preview (larger) ──────────────────────────────────────────────── */
+.agent-image-preview {
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+/* ── Scan bars (Gemini) ──────────────────────────────────────────────────── */
+.agent-scan-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 28px;
+  margin-bottom: 8px;
+}
+
+.agent-scan-bar {
+  flex: 1;
+  height: 100%;
+  border-radius: 2px;
+  background: #6366F1;
+  transform-origin: bottom;
+  animation: scanBar 0.9s ease-in-out infinite;
+}
+
+/* ── Upload bars (WordPress) ─────────────────────────────────────────────── */
+.agent-upload-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 32px;
+  margin-bottom: 4px;
+}
+
+.agent-upload-bar {
+  flex: 1;
+  height: 100%;
+  border-radius: 3px 3px 0 0;
+  transform-origin: bottom;
+  animation: uploadBar 0.8s ease-in-out infinite;
+}
+
+/* ── Image gen spinner ───────────────────────────────────────────────────── */
+.agent-gen-spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: var(--spinner-color, #EC4899);
+  border-right-color: color-mix(in srgb, var(--spinner-color, #EC4899) 50%, transparent);
+  animation: spinnerRotate 0.8s linear infinite;
+}
+
+/* ── Result block ────────────────────────────────────────────────────────── */
+.agent-result-block {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.agent-result-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-foreground);
+  padding: 5px 10px 4px;
+  background: color-mix(in srgb, var(--muted) 50%, transparent);
+  border-bottom: 1px solid var(--border);
+  margin: 0;
+}
+
+.agent-result-pre {
+  margin: 0;
+  padding: 8px 10px;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--foreground);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--muted) 20%, transparent);
+}
+
+.agent-expand-btn {
+  display: block;
+  width: 100%;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--card-accent, #2F6868);
+  background: color-mix(in srgb, var(--card-accent, #2F6868) 6%, transparent);
+  border-top: 1px solid var(--border);
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.agent-expand-btn:hover {
+  background: color-mix(in srgb, var(--card-accent, #2F6868) 12%, transparent);
+}
+
+/* ── Source URL chips ────────────────────────────────────────────────────── */
+.agent-source-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--card-accent, #2F6868) 35%, transparent);
+  background: color-mix(in srgb, var(--card-accent, #2F6868) 8%, transparent);
+  color: var(--card-accent, #2F6868);
+  font-size: 10.5px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.15s ease;
+  cursor: pointer;
+}
+
+.agent-source-chip:hover {
+  background: color-mix(in srgb, var(--card-accent, #2F6868) 16%, transparent);
+}
+
+/* ── Dark mode adjustments ───────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  .agent-card {
+    border-color: color-mix(in srgb, var(--card-accent, #2F6868) 30%, transparent);
+    background: color-mix(in srgb, var(--card-accent, #2F6868) 6%, #1a1a1a);
+  }
+
+  .agent-card-header {
+    background: color-mix(in srgb, var(--card-accent, #2F6868) 10%, transparent);
+  }
+
+  .agent-think-block {
+    background: rgba(139, 92, 246, 0.08);
+  }
+
+  .agent-result-pre {
+    background: rgba(255,255,255,0.03);
+  }
+}
+
 /* Global diff highlighting styles */
 .word-added {
   background-color: rgba(46, 160, 67, 0.4);

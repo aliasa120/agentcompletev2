@@ -131,6 +131,21 @@ const PROVIDER_REGISTRY: Record<string, {
       { value: "mimo-v2.5",     label: "MiMo V2.5",     badge: "Fast" },
     ],
   },
+  novita: {
+    // Novita AI — OpenAI-compatible endpoint: https://api.novita.ai/openai/v1
+    // Docs: https://novita.ai/docs
+    envKey: "NOVITA_API_KEY",
+    label: "Novita AI",
+    badgeColor: "from-cyan-500 to-blue-600",
+    defaultModels: [
+      { value: "deepseek/deepseek-v4-flash",         label: "DeepSeek V4 Flash",  badge: "Recommended" },
+      { value: "deepseek/deepseek-r2",               label: "DeepSeek R2",         badge: "Reasoning" },
+      { value: "meta-llama/llama-4-maverick",        label: "Llama 4 Maverick",    badge: "Meta" },
+      { value: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B",       badge: "Fast" },
+      { value: "qwen/qwen3-235b-a22b",               label: "Qwen3 235B",          badge: "Large" },
+      { value: "google/gemma-3-27b-it",              label: "Gemma 3 27B",         badge: "Google" },
+    ],
+  },
 };
 
 export async function GET() {
