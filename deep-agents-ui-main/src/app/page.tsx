@@ -20,6 +20,7 @@ import { ThreadList } from "@/app/components/ThreadList";
 import { QueueSidebar } from "@/app/components/QueueSidebar";
 import { ChatProvider } from "@/providers/ChatProvider";
 import { ChatInterface } from "@/app/components/ChatInterface";
+import { ThemeToggle } from "@/app/components/ThemeToggle";
 
 interface HomePageInnerProps {
   config: StandaloneConfig;
@@ -382,7 +383,7 @@ function HomePageInner({
               {config.assistantId}
             </div>
             <Link href="/feeder">
-              <Button variant="outline" size="sm" className="border-[#2F6868] text-[#2F6868] hover:bg-[#2F6868]/10">
+              <Button variant="outline" size="sm" className="border-primary text-primary hover:bg-primary/10">
                 <Database className="mr-2 h-4 w-4" />
                 Feeder
               </Button>
@@ -407,12 +408,13 @@ function HomePageInner({
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </Button>
+            <ThemeToggle />
             <Button
               variant="outline"
               size="sm"
               onClick={() => setThreadId(null)}
               disabled={!threadId}
-              className="border-[#2F6868] bg-[#2F6868] text-white hover:bg-[#2F6868]/80"
+              className="border-primary bg-primary text-primary-foreground hover:bg-primary/80 shadow-sm"
             >
               <SquarePen className="mr-2 h-4 w-4" />
               New Thread
@@ -421,7 +423,7 @@ function HomePageInner({
               variant="default"
               size="sm"
               onClick={handleStartAgent}
-              className="bg-green-600 text-white hover:bg-green-700 ml-2"
+              className="ml-2 shadow-sm"
             >
               <Play className="mr-2 h-4 w-4" />
               Start Agent

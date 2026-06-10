@@ -61,7 +61,7 @@ export const MarkdownContent = React.memo<MarkdownContentProps>(
                 </SyntaxHighlighter>
               ) : (
                 <code
-                  className="bg-surface rounded-sm px-1 py-0.5 font-mono text-[0.9em]"
+                  className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[0.9em] text-foreground"
                   {...props}
                 >
                   {children}
@@ -95,7 +95,7 @@ export const MarkdownContent = React.memo<MarkdownContentProps>(
             },
             blockquote({ children }: { children?: React.ReactNode }) {
               return (
-                <blockquote className="text-primary/50 my-4 border-l-4 border-border pl-4 italic">
+                <blockquote className="text-muted-foreground my-4 border-l-4 border-primary/40 pl-4 italic">
                   {children}
                 </blockquote>
               );
@@ -117,7 +117,7 @@ export const MarkdownContent = React.memo<MarkdownContentProps>(
             table({ children }: { children?: React.ReactNode }) {
               return (
                 <div className="my-4 overflow-x-auto">
-                  <table className="[&_th]:bg-surface w-full border-collapse [&_td]:border [&_td]:border-border [&_td]:p-2 [&_th]:border [&_th]:border-border [&_th]:p-2 [&_th]:text-left [&_th]:font-semibold">
+                  <table className="[&_th]:bg-muted w-full border-collapse [&_td]:border [&_td]:border-border [&_td]:p-2 [&_th]:border [&_th]:border-border [&_th]:p-2 [&_th]:text-left [&_th]:font-semibold">
                     {children}
                   </table>
                 </div>

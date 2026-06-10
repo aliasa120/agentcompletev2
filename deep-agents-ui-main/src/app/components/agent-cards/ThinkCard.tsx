@@ -5,50 +5,60 @@ import { CardShell, TypewriterText } from "./CardShell";
 import { useTypingAnimation } from "./useTypingAnimation";
 import { useCardPhase } from "./useCardPhase";
 import type { ToolCall } from "@/app/types/types";
+import { CheckCircle2 } from "lucide-react";
 
-const ACCENT = "#8B5CF6";
+import { cardAccent } from "@/lib/theme";
 
 export const ThinkCard = React.memo<{ toolCall: ToolCall }>(({ toolCall }) => {
-  const reflection = String((toolCall.args as Record<string, unknown>).reflection ?? "");
+  const reflection = String(
+    (toolCall.args as Record<string, unknown>).reflection ?? ""
+  );
   const hasResult = Boolean(toolCall.result);
 
   const isCompleted = toolCall.status !== "pending";
-  const { phase, signalTypingDone } = useCardPhase(toolCall.status, hasResult, 12, reflection.length);
-  const { displayText, isDone } = useTypingAnimation(reflection, 12, true, isCompleted);
+  const { phase, signalTypingDone } = useCardPhase(
+    toolCall.status,
+    hasResult,
+    12,
+    reflection.length
+  );
+  const { displayText, isDone } = useTypingAnimation(
+    reflection,
+    12,
+    true,
+    isCompleted
+  );
 
-  useEffect(() => { if (isDone) signalTypingDone(); }, [isDone, signalTypingDone]);
+  useEffect(() => {
+    if (isDone) signalTypingDone();
+  }, [isDone, signalTypingDone]);
 
   return (
     <CardShell
       title="🧠 Thinking…"
-      accentColor={ACCENT}
+      accentColor={cardAccent.think}
       phase={phase}
       toggleable={false}
       isPulsing={!isDone}
     >
-      {/* Streaming thought text */}
+      {/* Thought block — left border accent only, bg uses theme token */}
       <div
-        className="p-2.5 rounded-r-lg max-h-56 overflow-y-auto"
-        style={{
-          borderLeft: `3px solid ${ACCENT}`,
-          background: `${ACCENT}08`,
-          borderRadius: "0 6px 6px 0",
-        }}
+        className="px-3 py-2.5 rounded-r-lg max-h-56 overflow-y-auto bg-muted/40 border-l-2 border-muted-foreground/30"
       >
         <TypewriterText
           text={displayText}
           isDone={isDone}
-          accentColor={ACCENT}
-          className="font-sans text-[12.5px] leading-relaxed whitespace-pre-wrap break-words"
+          accentColor={cardAccent.think}
+          className="font-sans text-[12px] leading-relaxed whitespace-pre-wrap break-words text-foreground"
         />
       </div>
 
       {isDone && (
         <div
-          className="mt-2 text-[11px] font-medium flex items-center gap-1"
-          style={{ color: ACCENT, animation: "agentFadeIn 0.3s ease both" }}
+          className="mt-2 text-[11px] font-semibold text-primary flex items-center gap-1.5"
+          style={{ animation: "agentFadeIn 0.3s ease both" }}
         >
-          ✓ Thought recorded
+          <CheckCircle2 size={12} /> Thought recorded
         </div>
       )}
     </CardShell>

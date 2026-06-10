@@ -11,6 +11,7 @@ import {
     AlertTriangle, Database, Zap, AlarmClock, Clock,
     ChevronRight, Timer, Layers, CheckCircle2, XCircle
 } from "lucide-react";
+import { ThemeToggle } from "@/app/components/ThemeToggle";
 
 interface FeedSource { id: string; url: string; label: string; is_active: boolean; }
 interface WhitelistDomain { id: string; domain: string; note: string; }
@@ -294,6 +295,7 @@ export default function FeederSettingsPage() {
                     )}
                 </div>
                 <div className="flex items-center gap-2">
+                    <ThemeToggle />
                     <Button variant="outline" size="sm" onClick={loadAll} disabled={loading}>
                         <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh
                     </Button>
@@ -310,11 +312,11 @@ export default function FeederSettingsPage() {
                         <BarChart3 className="h-4 w-4" />Database Statistics
                     </h2>
                     <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-                        <StatCard label="Seen GUIDs" value={stats.guids} icon={Database} color="text-blue-500" sub="Layer 1" />
-                        <StatCard label="Seen Hashes" value={stats.hashes} icon={ShieldCheck} color="text-green-500" sub="Layer 2" />
-                        <StatCard label="Articles Total" value={stats.articles} icon={Activity} color="text-purple-500" sub="All statuses" />
-                        <StatCard label="Pending" value={stats.pending} icon={Timer} color="text-yellow-500" sub="In queue" />
-                        <StatCard label="Done" value={stats.done} icon={Activity} color="text-emerald-500" sub="Processed" />
+                        <StatCard label="Seen GUIDs" value={stats.guids} icon={Database} color="text-primary" sub="Layer 1" />
+                        <StatCard label="Seen Hashes" value={stats.hashes} icon={ShieldCheck} color="text-primary" sub="Layer 2" />
+                        <StatCard label="Articles Total" value={stats.articles} icon={Activity} color="text-muted-foreground" sub="All statuses" />
+                        <StatCard label="Pending" value={stats.pending} icon={Timer} color="text-primary" sub="In queue" />
+                        <StatCard label="Done" value={stats.done} icon={Activity} color="text-primary" sub="Processed" />
                     </div>
                     {articlesByStatus.length > 0 && (
                         <div className="mt-3 flex gap-2 flex-wrap">
@@ -441,12 +443,12 @@ export default function FeederSettingsPage() {
                                     {saveStatus === 'saving' ? 'Saving…' : isDirty ? 'Save Settings' : 'No Changes'}
                                 </Button>
                                 {saveStatus === 'saved' && (
-                                    <span className="flex items-center gap-1 text-sm text-green-600 font-medium">
+                                    <span className="flex items-center gap-1 text-sm text-primary font-medium">
                                         <CheckCircle2 className="h-4 w-4" />Saved
                                     </span>
                                 )}
                                 {saveStatus === 'error' && (
-                                    <span className="flex items-center gap-1 text-sm text-red-600 font-medium">
+                                    <span className="flex items-center gap-1 text-sm text-destructive font-medium">
                                         <XCircle className="h-4 w-4" />Error
                                     </span>
                                 )}
@@ -546,7 +548,7 @@ export default function FeederSettingsPage() {
                                 <Button onClick={saveSettings} disabled={saveStatus === 'saving' || !isDirty} variant="outline" className="flex-1">
                                     {saveStatus === 'saving' ? 'Saving…' : isDirty ? 'Save Interval' : 'No Changes'}
                                 </Button>
-                                {saveStatus === 'saved' && <span className="flex items-center gap-1 text-sm text-green-600 font-medium"><CheckCircle2 className="h-4 w-4" />Saved</span>}
+                                {saveStatus === 'saved' && <span className="flex items-center gap-1 text-sm text-primary font-medium"><CheckCircle2 className="h-4 w-4" />Saved</span>}
                             </div>
                         </div>
                     </section>
@@ -565,7 +567,7 @@ export default function FeederSettingsPage() {
                             {sources.map(s => (
                                 <div key={s.id} className="flex items-center gap-2 text-sm">
                                     <button onClick={() => toggleSource(s.id, s.is_active)} title={s.is_active ? "Active · click to pause" : "Paused · click to activate"}>
-                                        <div className={`h-2.5 w-2.5 rounded-full transition-colors ${s.is_active ? "bg-green-500" : "bg-muted-foreground/30"}`} />
+                                        <div className={`h-2.5 w-2.5 rounded-full transition-colors ${s.is_active ? "bg-primary" : "bg-muted-foreground/30"}`} />
                                     </button>
                                     <div className="flex-1 min-w-0">
                                         <p className="font-medium truncate">{s.label}</p>
@@ -594,7 +596,7 @@ export default function FeederSettingsPage() {
                             {domains.length === 0 && <p className="text-sm text-muted-foreground">No domains — all sources pass Layer -1.</p>}
                             {domains.map(d => (
                                 <div key={d.id} className="flex items-center gap-2 text-sm">
-                                    <ShieldCheck className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                                    <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
                                     <div className="flex-1">
                                         <p className="font-medium">{d.domain}</p>
                                         {d.note && <p className="text-xs text-muted-foreground">{d.note}</p>}

@@ -34,7 +34,7 @@ interface ChatMessageProps {
 function SubagentStatusBadge({ status }: { status: string }) {
   if (status === "running") {
     return (
-      <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-blue-500">
+      <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-primary">
         <Loader2 size={10} className="animate-spin" />
         Running
       </span>
@@ -116,10 +116,10 @@ function LiveSubagentCard({
   const hasLiveContent = aiMessages.length > 0 || resolvedToolCalls.length > 0;
 
   return (
-    <div className="bg-surface border-border-light rounded-md border p-4">
+    <div className="bg-card border border-border rounded-md p-4">
       {/* Header with name + live status badge */}
       <div className="mb-3 flex items-center justify-between">
-        <h4 className="text-primary/70 text-xs font-semibold uppercase tracking-wider">
+        <h4 className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">
           {staticSubAgent.subAgentName}
         </h4>
         <SubagentStatusBadge status={status} />
@@ -127,7 +127,7 @@ function LiveSubagentCard({
 
       {/* INPUT section — always shown */}
       <div className="mb-4">
-        <h4 className="text-primary/70 mb-2 text-xs font-semibold uppercase tracking-wider">
+        <h4 className="text-muted-foreground mb-2 text-xs font-semibold uppercase tracking-wider">
           Input
         </h4>
         <MarkdownContent content={extractSubAgentContent(staticSubAgent.input)} />
@@ -136,7 +136,7 @@ function LiveSubagentCard({
       {/* LIVE STREAM section — shown while running or after completion */}
       {hasLiveContent && (
         <div className="border-t border-border pt-3">
-          <h4 className="text-primary/70 mb-2 text-xs font-semibold uppercase tracking-wider">
+          <h4 className="text-muted-foreground mb-2 text-xs font-semibold uppercase tracking-wider">
             {status === "complete" ? "Output" : "Streaming…"}
           </h4>
 
@@ -158,7 +158,7 @@ function LiveSubagentCard({
 
           {/* AI text tokens streaming in */}
           {aiMessages.map((m: Message, i: number) => (
-            <div key={m.id ?? i} className="text-sm leading-relaxed text-primary">
+            <div key={m.id ?? i} className="text-sm leading-relaxed text-foreground">
               <MarkdownContent content={extractStringFromMessageContent(m) ?? ""} />
             </div>
           ))}
@@ -166,9 +166,9 @@ function LiveSubagentCard({
           {/* Animated dots while still running and no content yet */}
           {status === "running" && !hasLiveContent && (
             <span className="inline-flex gap-1">
-              <span className="animate-bounce [animation-delay:0ms] w-1 h-1 rounded-full bg-blue-400" />
-              <span className="animate-bounce [animation-delay:150ms] w-1 h-1 rounded-full bg-blue-400" />
-              <span className="animate-bounce [animation-delay:300ms] w-1 h-1 rounded-full bg-blue-400" />
+              <span className="animate-bounce [animation-delay:0ms] w-1 h-1 rounded-full bg-primary" />
+              <span className="animate-bounce [animation-delay:150ms] w-1 h-1 rounded-full bg-primary" />
+              <span className="animate-bounce [animation-delay:300ms] w-1 h-1 rounded-full bg-primary" />
             </span>
           )}
         </div>
@@ -177,7 +177,7 @@ function LiveSubagentCard({
       {/* Fallback: static Output from tool result (when stream not available) */}
       {!hasLiveContent && staticSubAgent.output && (
         <>
-          <h4 className="text-primary/70 mb-2 text-xs font-semibold uppercase tracking-wider">
+          <h4 className="text-muted-foreground mb-2 text-xs font-semibold uppercase tracking-wider">
             Output
           </h4>
           <MarkdownContent content={extractSubAgentContent(staticSubAgent.output)} />

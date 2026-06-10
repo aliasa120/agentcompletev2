@@ -11,6 +11,7 @@ import {
     Search, FileText, ImageIcon, FlaskConical, Loader2, Bot, Plus, Cpu,
     KeyRound, Shield, ChevronDown, ChevronUp,
 } from "lucide-react";
+import { ThemeToggle } from "@/app/components/ThemeToggle";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Article { id: string; title: string; description: string; url: string; source_domain: string; status: string; created_at: string; }
@@ -136,13 +137,13 @@ const BATCH_SIZES = ["1", "2", "5", "10", "15", "20"];
 // ── Helper components ──────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
     const color: Record<string, string> = {
-        Pending: "bg-yellow-100 text-yellow-800",
-        Processing: "bg-blue-100 text-blue-800",
-        Done: "bg-green-100 text-green-800",
-        Error: "bg-red-100 text-red-800",
+        Pending: "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-400",
+        Processing: "bg-primary/10 text-primary border border-primary/20",
+        Done: "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400",
+        Error: "bg-destructive/10 text-destructive border border-destructive/20",
     };
     return (
-        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${color[status] ?? "bg-muted text-muted-foreground"}`}>
+        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${color[status] ?? "bg-muted text-muted-foreground border border-border"}`}>
             {status}
         </span>
     );
@@ -150,11 +151,11 @@ function StatusBadge({ status }: { status: string }) {
 
 function KeyStatusPill({ keySet }: { keySet: boolean }) {
     return keySet ? (
-        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200">
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400">
             <CheckCircle2 className="h-2.5 w-2.5" />KEY SET
         </span>
     ) : (
-        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted text-muted-foreground border border-border">
             <XCircle className="h-2.5 w-2.5" />NOT SET
         </span>
     );
@@ -495,12 +496,13 @@ export default function AgentSettingsPage() {
                     <h1 className="text-xl font-semibold">Agent Settings</h1>
                     <span className="text-xs text-muted-foreground ml-4 font-mono">{pktTime} PKT</span>
                     {isDirty && (
-                        <span className="ml-2 text-xs text-orange-500 font-medium px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200">
+                        <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
                             Unsaved changes
                         </span>
                     )}
                 </div>
                 <div className="flex items-center gap-2">
+                    <ThemeToggle />
                     <Button variant="outline" size="sm" onClick={loadAll} disabled={loading}>
                         <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh
                     </Button>
@@ -539,8 +541,8 @@ export default function AgentSettingsPage() {
                                 <Button onClick={saveSettings} disabled={saveStatus === "saving" || !isDirty} className="flex-1">
                                     {saveStatus === "saving" ? "Saving…" : isDirty ? "Save Settings" : "No Changes"}
                                 </Button>
-                                {saveStatus === "saved" && <span className="flex items-center gap-1 text-sm text-green-600 font-medium"><CheckCircle2 className="h-4 w-4" />Saved</span>}
-                                {saveStatus === "error" && <span className="flex items-center gap-1 text-sm text-red-600 font-medium"><XCircle className="h-4 w-4" />Error</span>}
+                                {saveStatus === "saved" && <span className="flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400 font-medium"><CheckCircle2 className="h-4 w-4" />Saved</span>}
+                                {saveStatus === "error" && <span className="flex items-center gap-1 text-sm text-destructive font-medium"><XCircle className="h-4 w-4" />Error</span>}
                             </div>
                         </div>
                     </section>
@@ -718,8 +720,8 @@ export default function AgentSettingsPage() {
                                             onClick={() => testAiModel(agent.key)}
                                             disabled={ts.status === "testing" || !currentModel}
                                             className={`w-full flex items-center justify-center gap-1.5 h-7 rounded-md border text-xs font-medium transition-all ${
-                                                ts.status === "ok"      ? "border-green-400 bg-green-50 text-green-700"
-                                                : ts.status === "error" ? "border-red-400 bg-red-50 text-red-700"
+                                                ts.status === "ok"      ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+                                                : ts.status === "error" ? "border-destructive/40 bg-destructive/5 text-destructive"
                                                 : ts.status === "testing" ? "border-primary bg-primary/5 text-primary"
                                                 : "border-border bg-muted hover:bg-accent text-muted-foreground"
                                             }`}
@@ -761,8 +763,8 @@ export default function AgentSettingsPage() {
                                                         onClick={() => testCustomModel(agent.key)}
                                                         disabled={!customInput || customTs.status === "testing"}
                                                         className={`h-7 px-2 rounded-md border text-xs font-medium transition-all ${
-                                                            customTs.status === "ok" ? "border-green-400 bg-green-50 text-green-700"
-                                                            : customTs.status === "error" ? "border-red-400 bg-red-50 text-red-700"
+                                                            customTs.status === "ok" ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+                                                            : customTs.status === "error" ? "border-destructive/40 bg-destructive/5 text-destructive"
                                                             : "border-border bg-muted hover:bg-accent text-muted-foreground"
                                                         }`}
                                                     >
@@ -778,12 +780,12 @@ export default function AgentSettingsPage() {
                                                     </button>
                                                 </div>
                                                 {customTs.status === "ok" && (
-                                                    <p className="text-xs text-green-600 flex items-center gap-1">
+                                                    <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                                                         <CheckCircle2 className="h-3 w-3" />{customTs.latency}ms — works! Click + to add globally.
                                                     </p>
                                                 )}
                                                 {customTs.status === "error" && (
-                                                    <p className="text-xs text-red-500 truncate">{customTs.error}</p>
+                                                    <p className="text-xs text-destructive truncate">{customTs.error}</p>
                                                 )}
                                                 {providerCustomModels.length > 0 && (
                                                     <div className="mt-1 space-y-0.5">
@@ -801,7 +803,7 @@ export default function AgentSettingsPage() {
 
                                         <div className={`mt-auto pt-2 flex items-center gap-1.5 text-xs rounded-md px-2 py-1 border ${
                                             provMeta?.keySet
-                                                ? "bg-green-50 text-green-700 border-green-200"
+                                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400"
                                                 : "bg-muted text-muted-foreground border-border"
                                         }`}>
                                             <span className={`w-1.5 h-1.5 rounded-full bg-gradient-to-br ${provMeta?.badgeColor ?? "from-gray-400 to-gray-500"}`} />
@@ -815,9 +817,9 @@ export default function AgentSettingsPage() {
                         {/* Reload status banner */}
                         {reloadMsg && (
                             <div className={`text-xs rounded-md px-3 py-2 flex items-center gap-2 ${
-                                reloadStatus === "done"    ? "bg-green-50 text-green-700 border border-green-200"
-                                : reloadStatus === "error" ? "bg-red-50 text-red-600 border border-red-200"
-                                : "bg-blue-50 text-blue-700 border border-blue-200"
+                                reloadStatus === "done"    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400"
+                                : reloadStatus === "error" ? "bg-destructive/5 text-destructive border border-destructive/20"
+                                : "bg-primary/5 text-primary border border-primary/20"
                             }`}>
                                 {reloadStatus === "reloading" && <Loader2 className="h-3 w-3 animate-spin" />}
                                 {reloadMsg}
@@ -831,7 +833,7 @@ export default function AgentSettingsPage() {
                             <Button
                                 onClick={saveAndReload}
                                 disabled={saveStatus === "saving" || reloadStatus === "reloading"}
-                                className="flex-1 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white"
+                                className="flex-1"
                             >
                                 {reloadStatus === "reloading" ? (
                                     <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Applying…</>
@@ -839,8 +841,8 @@ export default function AgentSettingsPage() {
                                     <><Zap className="h-3.5 w-3.5 mr-1.5" />Save & Apply to Agents</>
                                 )}
                             </Button>
-                            {saveStatus === "saved" && <span className="flex items-center gap-1 text-sm text-green-600 font-medium"><CheckCircle2 className="h-4 w-4" />Saved</span>}
-                            {saveStatus === "error"  && <span className="flex items-center gap-1 text-sm text-red-600 font-medium"><XCircle className="h-4 w-4" />Error</span>}
+                            {saveStatus === "saved" && <span className="flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400 font-medium"><CheckCircle2 className="h-4 w-4" />Saved</span>}
+                            {saveStatus === "error"  && <span className="flex items-center gap-1 text-sm text-destructive font-medium"><XCircle className="h-4 w-4" />Error</span>}
                         </div>
                     </div>
                 </section>
@@ -896,8 +898,8 @@ export default function AgentSettingsPage() {
                             <Button onClick={saveSettings} disabled={saveStatus === "saving" || !isDirty} className="flex-1">
                                 {saveStatus === "saving" ? "Saving…" : isDirty ? "Save Provider Settings" : "No Changes"}
                             </Button>
-                            {saveStatus === "saved" && <span className="flex items-center gap-1 text-sm text-green-600 font-medium"><CheckCircle2 className="h-4 w-4" />Saved</span>}
-                            {saveStatus === "error" && <span className="flex items-center gap-1 text-sm text-red-600 font-medium"><XCircle className="h-4 w-4" />Error</span>}
+                            {saveStatus === "saved" && <span className="flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400 font-medium"><CheckCircle2 className="h-4 w-4" />Saved</span>}
+                            {saveStatus === "error" && <span className="flex items-center gap-1 text-sm text-destructive font-medium"><XCircle className="h-4 w-4" />Error</span>}
                         </div>
                     </div>
                 </section>
@@ -909,7 +911,7 @@ export default function AgentSettingsPage() {
                         <h2 className="font-semibold">Current Queue</h2>
                         <span className="ml-auto text-xs text-muted-foreground">Next {batchSize} pending articles (FIFO)</span>
                         <Button onClick={resetStuckArticles} size="sm" variant="outline"
-                            className="ml-2 border-yellow-500 text-yellow-600 hover:bg-yellow-50" title="Revert all Processing articles back to Pending">
+                            className="ml-2" title="Revert all Processing articles back to Pending">
                             Reset Stuck
                         </Button>
                         <Button onClick={fireAgent} size="sm" className="ml-2" disabled={queue.length === 0}>
@@ -1044,7 +1046,7 @@ function ProviderSelector({
                 {providers.map(p => <option key={p.value} value={p.value}>{p.label} ({p.badge})</option>)}
             </select>
             <button onClick={() => onTest(currentValue as ProviderId)} disabled={ts.status === "testing"}
-                className={`w-full flex items-center justify-center gap-1.5 h-8 rounded-md border text-xs font-medium transition-all ${ts.status === "ok" ? "border-green-400 bg-green-50 text-green-700" : ts.status === "error" ? "border-red-400 bg-red-50 text-red-700" : ts.status === "testing" ? "border-primary bg-primary/5 text-primary" : "border-border bg-muted hover:bg-accent text-muted-foreground"}`}>
+                className={`w-full flex items-center justify-center gap-1.5 h-8 rounded-md border text-xs font-medium transition-all ${ts.status === "ok" ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400" : ts.status === "error" ? "border-destructive/40 bg-destructive/5 text-destructive" : ts.status === "testing" ? "border-primary bg-primary/5 text-primary" : "border-border bg-muted hover:bg-accent text-muted-foreground"}`}>
                 {ts.status === "testing" && <Loader2 className="h-3 w-3 animate-spin" />}
                 {ts.status === "ok"      && <CheckCircle2 className="h-3 w-3" />}
                 {ts.status === "error"   && <XCircle className="h-3 w-3" />}

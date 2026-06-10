@@ -8,6 +8,7 @@ import {
     Settings, Home, Activity, Database, RefreshCw, Trash2,
     Rss, Globe, Clock, ChevronRight
 } from "lucide-react";
+import { ThemeToggle } from "@/app/components/ThemeToggle";
 
 interface PendingArticle {
     id: string;
@@ -98,6 +99,7 @@ export default function FeederDashboard() {
                     <h1 className="text-xl font-semibold">Feeder Dashboard</h1>
                 </div>
                 <div className="flex items-center gap-2">
+                    <ThemeToggle />
                     {/* Run Pipeline — moved to header per user request */}
                     <Button
                         onClick={triggerPipeline}
@@ -140,18 +142,18 @@ export default function FeederDashboard() {
                 {/* Stats row */}
                 <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
                     {[
-                        { label: "Pending", value: stats.pending, icon: Database, color: "text-yellow-500", sub: "In queue" },
-                        { label: "Processing", value: stats.processing, icon: Activity, color: "text-blue-500", sub: "With agent" },
-                        { label: "Done", value: stats.done, icon: Activity, color: "text-green-500", sub: "Completed" },
-                        { label: "Total", value: stats.total, icon: Globe, color: "text-purple-500", sub: "All articles" },
-                    ].map(({ label, value, icon: Icon, color, sub }) => (
-                        <div key={label} className="rounded-xl border bg-card shadow-sm p-4 flex items-center gap-4">
-                            <div className={`rounded-lg p-2.5 bg-muted ${color}`}>
+                        { label: "Pending", value: stats.pending, icon: Database, color: "text-amber-500", bg: "bg-amber-50 dark:bg-amber-950/20", sub: "In queue" },
+                        { label: "Processing", value: stats.processing, icon: Activity, color: "text-primary", bg: "bg-primary/10", sub: "With agent" },
+                        { label: "Done", value: stats.done, icon: Activity, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/20", sub: "Completed" },
+                        { label: "Total", value: stats.total, icon: Globe, color: "text-muted-foreground", bg: "bg-muted", sub: "All articles" },
+                    ].map(({ label, value, icon: Icon, color, bg, sub }) => (
+                        <div key={label} className="rounded-xl border border-border bg-card shadow-sm p-4 flex items-center gap-4">
+                            <div className={`rounded-lg p-2.5 ${bg} ${color}`}>
                                 <Icon className="h-5 w-5" />
                             </div>
                             <div>
                                 <p className="text-xs text-muted-foreground">{label}</p>
-                                <p className="text-2xl font-bold">{value}</p>
+                                <p className="text-2xl font-bold text-foreground">{value}</p>
                                 <p className="text-xs text-muted-foreground">{sub}</p>
                             </div>
                         </div>
@@ -173,7 +175,7 @@ export default function FeederDashboard() {
                 {/* Pending articles list */}
                 <div className="rounded-xl border bg-card shadow-sm">
                     <div className="p-4 border-b flex items-center gap-2">
-                        <Database className="h-4 w-4 text-yellow-500" />
+                        <Database className="h-4 w-4 text-primary" />
                         <h2 className="font-semibold">Pending Articles</h2>
                         <span className="ml-auto text-xs text-muted-foreground">
                             {stats.pending} ready · FIFO order
@@ -193,7 +195,7 @@ export default function FeederDashboard() {
                                             href={art.url}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-sm font-medium hover:underline line-clamp-2"
+                                            className="text-sm font-medium text-foreground hover:text-primary hover:underline line-clamp-2 transition-colors"
                                         >
                                             {art.title}
                                         </a>

@@ -35,14 +35,14 @@ const GROUP_LABELS = {
 } as const;
 
 const STATUS_COLORS: Record<ThreadItem["status"], string> = {
-  idle: "bg-green-500",
-  busy: "bg-blue-500",
-  interrupted: "bg-orange-500",
-  error: "bg-red-600",
+  idle: "bg-emerald-500",
+  busy: "bg-primary",
+  interrupted: "bg-amber-500",
+  error: "bg-destructive",
 };
 
 function getThreadColor(status: ThreadItem["status"]): string {
-  return STATUS_COLORS[status] ?? "bg-gray-400";
+  return STATUS_COLORS[status] ?? "bg-muted-foreground";
 }
 
 function formatTime(date: Date, now = new Date()): string {
@@ -74,7 +74,7 @@ function StatusFilterItem({
       />
       {label}
       {badge !== undefined && badge > 0 && (
-        <span className="ml-1 inline-flex items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold leading-none text-white">
+        <span className="ml-1 inline-flex items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-xs font-bold leading-none text-primary-foreground">
           {badge}
         </span>
       )}
@@ -85,7 +85,7 @@ function StatusFilterItem({
 function ErrorState({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center justify-center p-8 text-center">
-      <p className="text-sm text-red-600">Failed to load threads</p>
+      <p className="text-sm text-destructive">Failed to load threads</p>
       <p className="mt-1 text-xs text-muted-foreground">{message}</p>
     </div>
   );
