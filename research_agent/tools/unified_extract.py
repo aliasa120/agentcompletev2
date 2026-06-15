@@ -72,15 +72,38 @@ async def _call_exa(urls: List[str], query: str = "", **_) -> str:
     return await loop.run_in_executor(None, _sync)
 
 
-_PROVIDER_MAP = {
-    "tavily": ("Tavily", _call_tavily),
-    "exa": ("Exa AI", _call_exa),
-}
+async def _call_linkup(urls: List[str], **_) -> str:
+    """Adapter: call Linkup extract (search for url content)."""
+    linkup_key = os.environ.get("LINKUP_API_KEY", "")
+    if not linkup_key:
+        raise RuntimeError("LINKUP_API_KEY not set.")
+    try:
+        from linkup import LinkupClient
+    except ImportError:
+        raise RuntimeError("linkup SDK not installed. Run: uv add linkup-sdk")
 
-_DEFAULTS = {
-    "extract_provider_primary": "tavily",
-    "extract_provider_secondary": "exa",
-    "extract_max_retries": "4",   # 4 attempts × 15 s per provider
+    loop = asyncio.get_event_loop()
+    def _sync():
+        client = LinkupClient(api_key=linkup_key)
+        sections = []
+        for url in urls[:2]:
+            try:
+                resp = client.search(
+                    query=f"Extract content from {url}",
+                    depth="standard",
+                    output_type="sourcedAnswer"
+                )
+                sections.append(f"### Extracted: {url}\n\n{resp}")
+            except Exception as e:
+                sections.append(f"### Failed: {url}\n\nError: {e}")
+        return "\n\n---\n\n".join(sections)
+    return await loop.run_in_executor(None, _sync)
+
+
+_PROVIDER_MAP = {
+    "tavily": _call_tavily,
+    "exa": _call_exa,
+    "linkup": _call_linkup,
 }
 
 
@@ -90,9 +113,8 @@ _DEFAULTS = {
 def unified_extract(urls: List[str], query: str = "") -> str:
     """Extract full article content from URLs.
 
-    Provider selection (Tavily ↔ Exa AI), retry count, and fallback logic are all
-    handled automatically based on settings in Supabase. The agent does NOT need to
-    know which provider is active.
+    Provider selection, priority, retry count, and fallback logic are
+    handled automatically based on the numbered settings in Supabase.
 
     When to use:
     - A search snippet hints at the answer but is too short.
@@ -111,17 +133,7 @@ def unified_extract(urls: List[str], query: str = "") -> str:
         Full extracted markdown content for each URL, separated by dividers.
     """
     urls = urls[:2]
-    settings = get_settings()
-    primary_key = settings.get("extract_provider_primary", _DEFAULTS["extract_provider_primary"])
-    secondary_key = settings.get("extract_provider_secondary", _DEFAULTS["extract_provider_secondary"])
-    max_retries = int(settings.get("extract_max_retries", _DEFAULTS["extract_max_retries"]))
-
-    primary_name, primary_fn = _PROVIDER_MAP.get(primary_key, _PROVIDER_MAP["tavily"])
-    secondary_entry = _PROVIDER_MAP.get(secondary_key)
-    secondary_name = secondary_entry[0] if secondary_entry else "none"
-    secondary_fn = secondary_entry[1] if secondary_entry else None
-
-    logger.info(f"[unified_extract] Primary={primary_name}, Fallback={secondary_name}, Retries={max_retries}")
+    from .provider_engine import execute_unified_pipeline
 
     try:
         loop = asyncio.get_event_loop()
@@ -129,26 +141,17 @@ def unified_extract(urls: List[str], query: str = "") -> str:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    result = loop.run_until_complete(
-        execute_with_fallback(
-            primary_fn=primary_fn,
-            secondary_fn=secondary_fn,
-            primary_name=primary_name,
-            secondary_name=secondary_name,
-            max_retries=max_retries,
+    default_keys = ["tavily", "exa", "linkup"]
+
+    return loop.run_until_complete(
+        execute_unified_pipeline(
+            category="extract",
+            built_in_map=_PROVIDER_MAP,
+            default_provider_keys=default_keys,
+            max_retries=4,
             timeout_seconds=30,
             urls=urls,
             query=query,
         )
     )
 
-    # If all providers failed, result.data is already a graceful error string.
-    # Return it as-is so the agent can decide to skip this step and continue.
-    if result.failed:
-        return result.data
-
-    prefix = ""
-    if result.fallback_used:
-        prefix = f"⚡ [Fallback: {result.provider_used} used after primary failed]\n\n"
-
-    return f"{prefix}{result.data}"

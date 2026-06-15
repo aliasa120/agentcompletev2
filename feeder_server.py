@@ -18,10 +18,14 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 # Internal helper: run the feeder pipeline as a subprocess
 # ---------------------------------------------------------------------------
-def _run_pipeline() -> dict:
+def _run_pipeline(workflow_id: str = None) -> dict:
     try:
+        args = ["python", "-m", "feeder.pipeline"]
+        if workflow_id:
+            args.extend(["--workflow-id", workflow_id])
+            
         result = subprocess.run(
-            ["python", "-m", "feeder.pipeline"],
+            args,
             capture_output=True,
             text=True,
             timeout=300,
@@ -49,7 +53,17 @@ def _run_pipeline() -> dict:
 class FeederHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/run":
-            response = _run_pipeline()
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length) if content_length > 0 else b""
+            workflow_id = None
+            if post_data:
+                try:
+                    payload = json.loads(post_data.decode("utf-8"))
+                    workflow_id = payload.get("workflow_id")
+                except Exception as e:
+                    print(f"Error parsing POST payload in Feeder: {e}")
+            
+            response = _run_pipeline(workflow_id)
             status = 200 if response["success"] else 500
             body = json.dumps(response).encode()
             self.send_response(status)

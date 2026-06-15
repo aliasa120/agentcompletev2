@@ -107,7 +107,7 @@ function LoadingState() {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center p-8 text-center">
-      <MessageSquare className="mb-2 h-12 w-12 text-gray-300" />
+      <MessageSquare className="mb-2 h-12 w-12 text-muted-foreground/60" />
       <p className="text-sm text-muted-foreground">No threads found</p>
     </div>
   );
@@ -128,6 +128,7 @@ function getLangGraphClient(): Client | null {
 }
 
 interface ThreadListProps {
+  workflowId: string | null;
   onThreadSelect: (id: string) => void;
   onMutateReady?: (mutate: () => void) => void;
   onClose?: () => void;
@@ -135,6 +136,7 @@ interface ThreadListProps {
 }
 
 export function ThreadList({
+  workflowId,
   onThreadSelect,
   onMutateReady,
   onClose,
@@ -148,6 +150,7 @@ export function ThreadList({
   const threads = useThreads({
     status: statusFilter === "all" ? undefined : statusFilter,
     limit: 20,
+    workflowId,
   });
 
   const flattened = useMemo(() => {

@@ -24,6 +24,7 @@ from typing import List
 
 import requests
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
 from PIL import Image
 
 from .provider_engine import execute_with_fallback, get_settings
@@ -35,9 +36,6 @@ _REPO_ROOT         = Path(__file__).resolve().parents[2]
 _OUTPUT_DIR        = _REPO_ROOT / "output"
 _MANIFEST_FILE     = _OUTPUT_DIR / "candidate_images" / "manifest.json"
 _LATEST_IMAGE_FILE = _OUTPUT_DIR / "latest_image_path.txt"
-
-_R2_BASE = "https://pub-61765db165154158829d1ed1ff18c3e0.r2.dev/ref%20images"
-_REF_URLS = [f"{_R2_BASE}/ref1.png", f"{_R2_BASE}/ref2.png"]
 
 _DEFAULTS = {
     "image_provider_primary": "kie",
@@ -98,11 +96,71 @@ def _upload_to_supabase(pil_img: Image.Image, slug: str) -> str | None:
     return None
 
 
+def _get_workflow_reference_images(workflow_id: str) -> list[str]:
+    """Retrieve reference image public URLs for the active workflow's Main Agent.
+    
+    If none are found, we raise ValueError (no fallback to default).
+    """
+    from supabase import create_client
+    url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    key = os.environ.get("SUPABASE_ANON_KEY", "")
+    if not url or not key:
+        raise ValueError("Supabase URL and Key must be set in environment.")
+
+    client = create_client(url, key)
+
+    # 1. Get Main Agent ID for this workflow
+    main_agent_resp = client.table("agent_configs").select("id").eq("workflow_id", workflow_id).eq("agent_type", "main").execute()
+    if not main_agent_resp.data:
+        raise ValueError(f"No Main Agent configured for workflow '{workflow_id}'.")
+    
+    main_agent_id = main_agent_resp.data[0]["id"]
+
+    # 2. Get design assets linked to this Main Agent
+    resp = client.table("agent_design_assets").select("design_assets(*)").eq("agent_id", main_agent_id).execute()
+    assets = []
+    for row in (resp.data or []):
+        if row.get("design_assets"):
+            assets.append(row["design_assets"])
+
+    if not assets:
+        raise ValueError(
+            f"No style reference images are attached to the Main Agent of workflow '{workflow_id}'. "
+            f"Please attach style reference images in the Settings UI."
+        )
+
+    # 3. For each asset, load from disk and upload to Supabase to get a public URL for KIE AI
+    public_urls = []
+    for asset in assets:
+        file_path = asset.get("file_path")
+        if not file_path:
+            continue
+        
+        # Load local image using PIL
+        repo_root = Path(__file__).resolve().parents[2]
+        full_path = repo_root / file_path
+        if not full_path.exists():
+            raise FileNotFoundError(f"Reference image file not found on disk: {full_path}")
+        
+        img = Image.open(full_path).convert("RGB")
+        
+        # Upload to Supabase Storage and get public URL
+        asset_key = asset.get("asset_key", "ref")
+        pub_url = _upload_to_supabase(img, asset_key)
+        if pub_url:
+            public_urls.append(pub_url)
+        else:
+            raise RuntimeError(f"Failed to upload reference image '{file_path}' to Supabase Storage.")
+            
+    return public_urls
+
+
 # ── KIE AI Provider ────────────────────────────────────────────────────────────
 
 async def _kie_generate(
     target_url: str,
     editing_prompt: str,
+    ref_urls: list[str],
     **_,
 ) -> Image.Image:
     """Call KIE AI image-to-image. Raises RuntimeError on any failure."""
@@ -124,7 +182,7 @@ async def _kie_generate(
     payload = {
         "model": "gpt-image/1.5-image-to-image",
         "input": {
-            "input_urls": [target_url] + _REF_URLS,
+            "input_urls": [target_url] + ref_urls,
             "prompt": full_prompt,
             "aspect_ratio": "1:1",
             "quality": "medium",
@@ -190,20 +248,16 @@ async def _kie_generate(
 async def _gemini_generate(
     editing_prompt: str,
     source_img: Image.Image | None = None,
+    ref_urls: list[str] = None,
     **_,
 ) -> Image.Image:
-    """Call Gemini 3.1 Flash Image via Vercel AI Gateway (Chat Completions API).
-
-    Sends all 3 images as multimodal content:
-      - source_img: the target news photo (base64 JPEG)
-      - _REF_URLS[0], _REF_URLS[1]: THE ECHO brand reference images (base64 PNG)
-    """
+    """Call Gemini 3.1 Flash Image via Vercel AI Gateway (Chat Completions API)."""
     from .gemini_flash_image import gemini_flash_generate
 
     result = await gemini_flash_generate(
         prompt=editing_prompt,
         source_img=source_img,
-        ref_urls=_REF_URLS,
+        ref_urls=ref_urls,
         timeout=180,
     )
     img = Image.open(io.BytesIO(result["image_bytes"])).convert("RGB")
@@ -226,6 +280,7 @@ def create_post_image(
     image_url: str,
     headline_text: str,
     editing_prompt: str,
+    config: RunnableConfig,
 ) -> str:
     """Create a styled social post image using the configured AI image model.
 
@@ -240,6 +295,7 @@ def create_post_image(
         image_url: URL of the chosen news photo from analyze_images_gemini.
         headline_text: Short headline (max 10 words) for filename generation.
         editing_prompt: Full editing instruction JSON from analyze_images_gemini.
+        config: LangChain runnable configuration.
 
     Returns:
         Absolute path to the saved output image file.
@@ -253,6 +309,31 @@ def create_post_image(
         logger.info(f"[unified_image] Source image size: {source_img.size}")
     except Exception as e:
         return f"❌ Could not load source image: {e}"
+
+    # Resolve active workflow ID
+    workflow_id = config.get("configurable", {}).get("workflow_id")
+    if not workflow_id:
+        try:
+            from supabase import create_client
+            url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+            key = os.environ.get("SUPABASE_ANON_KEY", "")
+            if url and key:
+                client = create_client(url, key)
+                wf_resp = client.table("workflows").select("id").eq("enabled", True).order("created_at").limit(1).execute()
+                if wf_resp.data:
+                    workflow_id = wf_resp.data[0]["id"]
+        except Exception as e:
+            logger.warning(f"[unified_image] Error resolving fallback workflow_id: {e}")
+
+    if not workflow_id:
+        return "❌ Error: workflow_id is not set and could not be resolved from active workflows."
+
+    # Load workflow reference images (throws error on failure/empty list - NO fallback to default)
+    try:
+        ref_urls = _get_workflow_reference_images(workflow_id)
+        logger.info(f"[unified_image] Loaded {len(ref_urls)} workflow-specific reference images: {ref_urls}")
+    except Exception as e:
+        return f"❌ Error loading reference images for workflow: {e}"
 
     # Upload to Supabase (for KIE AI URL access)
     slug = re.sub(r"[^a-z0-9]+", "-", headline_text.lower())[:40].strip("-")
@@ -291,6 +372,7 @@ def create_post_image(
                 target_url=supabase_url,
                 editing_prompt=editing_prompt,
                 source_img=source_img,
+                ref_urls=ref_urls,
             )
         )
         if result.failed:

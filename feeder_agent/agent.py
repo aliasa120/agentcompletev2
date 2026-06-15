@@ -145,19 +145,33 @@ def run_feeder_dedup_agent(
         return articles, []
 
     # Extract kept/dropped decisions
-    kept_ids: list[int] = result.get("kept_ids", [])
-    dropped_entries: list[dict] = result.get("dropped", [])
+    kept_ids: list[int] = result.get("kept_ids", []) or []
+    dropped_entries: list[Any] = result.get("dropped", []) or []
     summary: str = result.get("summary", "")
 
-    print(f"  [FeederAgent] Decision: keep={kept_ids}, drop={[d['id'] for d in dropped_entries]}")
+    # Make parsing robust against variations in model tool-calling responses
+    dropped_ids = []
+    dropped_map = {}
+    for d in dropped_entries:
+        if isinstance(d, dict):
+            did = d.get("id")
+            if did is not None:
+                dropped_ids.append(did)
+                dropped_map[did] = d.get("reason", "Agent dedup")
+        elif isinstance(d, (int, str)):
+            try:
+                did = int(d)
+                dropped_ids.append(did)
+                dropped_map[did] = "Agent dedup"
+            except ValueError:
+                pass
+
+    print(f"  [FeederAgent] Decision: keep={kept_ids}, drop={dropped_ids}")
     print(f"  [FeederAgent] Summary: {summary}")
 
     # Build output
     kept: list[Any] = []
     dropped_with_reasons: list[tuple[Any, str]] = []
-
-    # Map 1-based IDs back to articles
-    dropped_map = {d["id"]: d.get("reason", "Agent dedup") for d in dropped_entries}
 
     for i, art in enumerate(articles, start=1):
         if i in kept_ids:

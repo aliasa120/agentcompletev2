@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useStream } from "@langchain/langgraph-sdk/react";
 import {
   type Message,
@@ -31,6 +31,7 @@ export function useChat({
   thread,
   onFinishCallback,
   onErrorCallback,
+  workflowId,
 }: {
   activeAssistant: Assistant | null;
   onHistoryRevalidate?: () => void;
@@ -39,6 +40,7 @@ export function useChat({
   onFinishCallback?: () => void;
   /** Called when the stream errors */
   onErrorCallback?: () => void;
+  workflowId: string | null;
 }) {
   const [threadId, setThreadId] = useQueryState("threadId");
   const client = useClient();
@@ -68,10 +70,67 @@ export function useChat({
       onHistoryRevalidate?.();
       onErrorCallback?.();
     },
-    onCreated: onHistoryRevalidate,
+    onCreated: (thread: any) => {
+      if (thread?.thread_id && workflowId) {
+        client.threads.update(thread.thread_id, {
+          metadata: { workflow_id: workflowId }
+        }).catch(err => {
+          console.error("[useChat] Failed to set workflow_id on new thread:", err);
+        });
+      }
+      onHistoryRevalidate?.();
+    },
     // experimental_thread was renamed to thread in SDK v1.9.9
     thread: thread,
   });
+
+  // Automatically check for and rejoin active runs on this thread
+  useEffect(() => {
+    if (!threadId || !client) return;
+
+    let isSubscribed = true;
+    let pollInterval: NodeJS.Timeout | null = null;
+    let isRejoining = false;
+
+    const checkAndJoinActiveRun = async () => {
+      if (stream.isLoading || stream.isThreadLoading || isRejoining) return;
+
+      try {
+        const runs = await client.runs.list(threadId, { limit: 5 });
+        if (!isSubscribed) return;
+
+        const activeRun = runs.find(
+          (r) => r.status === "running" || r.status === "pending"
+        );
+
+        if (activeRun) {
+          console.log(`[useChat] Found active run ${activeRun.run_id} on thread ${threadId}, rejoining...`);
+          isRejoining = true;
+          if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
+          await stream.joinStream(activeRun.run_id, undefined, {
+            streamMode: ["values", "messages-tuple", "updates", "tasks", "tools"]
+          });
+        }
+      } catch (err) {
+        console.error("[useChat] Error checking or rejoining active run:", err);
+      } finally {
+        isRejoining = false;
+      }
+    };
+
+    checkAndJoinActiveRun();
+    pollInterval = setInterval(checkAndJoinActiveRun, 4000);
+
+    return () => {
+      isSubscribed = false;
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [threadId, client, stream.isLoading, stream.isThreadLoading]);
 
   const sendMessage = useCallback(
     (content: string) => {
@@ -82,14 +141,21 @@ export function useChat({
           optimisticValues: (prev) => ({
             messages: [...(prev.messages ?? []), newMessage],
           }),
-          config: { ...(activeAssistant?.config ?? {}), recursion_limit: 200 },
+          config: {
+            ...(activeAssistant?.config ?? {}),
+            recursion_limit: 200,
+            configurable: {
+              ...(activeAssistant?.config?.configurable ?? {}),
+              workflow_id: workflowId,
+            },
+          },
           streamSubgraphs: true,  // enable live subagent streaming
         }
       );
       // Update thread list immediately when sending a message
       onHistoryRevalidate?.();
     },
-    [stream, activeAssistant?.config, onHistoryRevalidate]
+    [stream, activeAssistant?.config, onHistoryRevalidate, workflowId]
   );
 
   const runSingleStep = useCallback(
@@ -99,12 +165,19 @@ export function useChat({
       isRerunningSubagent?: boolean,
       optimisticMessages?: Message[]
     ) => {
+      const runConfig = {
+        ...(activeAssistant?.config ?? {}),
+        configurable: {
+          ...(activeAssistant?.config?.configurable ?? {}),
+          workflow_id: workflowId,
+        },
+      };
       if (checkpoint) {
         stream.submit(undefined, {
           ...(optimisticMessages
             ? { optimisticValues: { messages: optimisticMessages } }
             : {}),
-          config: activeAssistant?.config,
+          config: runConfig,
           checkpoint: checkpoint,
           streamSubgraphs: true,
           ...(isRerunningSubagent
@@ -114,11 +187,11 @@ export function useChat({
       } else {
         stream.submit(
           { messages },
-          { config: activeAssistant?.config, interruptBefore: ["tools"], streamSubgraphs: true }
+          { config: runConfig, interruptBefore: ["tools"], streamSubgraphs: true }
         );
       }
     },
-    [stream, activeAssistant?.config]
+    [stream, activeAssistant?.config, workflowId]
   );
 
   const setFiles = useCallback(
@@ -137,6 +210,10 @@ export function useChat({
         config: {
           ...(activeAssistant?.config || {}),
           recursion_limit: 200,
+          configurable: {
+            ...(activeAssistant?.config?.configurable ?? {}),
+            workflow_id: workflowId,
+          },
         },
         streamSubgraphs: true,
         ...(hasTaskToolCall
@@ -146,7 +223,7 @@ export function useChat({
       // Update thread list when continuing stream
       onHistoryRevalidate?.();
     },
-    [stream, activeAssistant?.config, onHistoryRevalidate]
+    [stream, activeAssistant?.config, onHistoryRevalidate, workflowId]
   );
 
   const markCurrentThreadAsResolved = useCallback(() => {

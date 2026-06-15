@@ -54,7 +54,7 @@ export default {
       },
       fontFamily: {
         sans: [
-          `"Inter"`,
+          `var(--font-outfit)`,
           `-apple-system`,
           `BlinkMacSystemFont`,
           `"Segoe UI"`,
@@ -62,6 +62,11 @@ export default {
           `"Helvetica Neue"`,
           `Arial`,
           `sans-serif`,
+        ],
+        serif: [
+          `var(--font-instrument)`,
+          `Georgia`,
+          `serif`,
         ],
         mono: [
           `"Fira Code"`,
@@ -98,8 +103,6 @@ export default {
         xs: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
       },
       backgroundColor: {
-        primary: "var(--bg-primary)",
-        "primary-hover": "var(--bg-primary_hover)",
         secondary: "var(--bg-secondary)",
         "secondary-hover": "var(--bg-secondary_hover)",
         tertiary: "var(--bg-tertiary)",
@@ -123,7 +126,6 @@ export default {
         "warning-strong": "var(--bg-warning-strong)",
       },
       borderColor: {
-        primary: "var(--border-primary)",
         secondary: "var(--border-secondary)",
         tertiary: "var(--border-tertiary)",
         error: "var(--border-error)",
@@ -141,7 +143,6 @@ export default {
         "status-red": "var(--border-status-red)",
       },
       textColor: {
-        primary: "var(--text-primary)",
         secondary: "var(--text-secondary)",
         tertiary: "var(--text-tertiary)",
         quaternary: "var(--text-quaternary)",
@@ -162,6 +163,17 @@ export default {
         "button-primary": "var(--text-button-primary)",
       },
       colors: {
+        "bg-0": "var(--bg-0)",
+        "bg-000": "var(--bg-000)",
+        "bg-100": "var(--bg-100)",
+        "bg-200": "var(--bg-200)",
+        "bg-300": "var(--bg-300)",
+        "text-100": "var(--text-100)",
+        "text-200": "var(--text-200)",
+        "text-300": "var(--text-300)",
+        "text-400": "var(--text-400)",
+        "text-500": "var(--text-500)",
+        "accent-hover": "var(--accent-hover)",
         border: "var(--border)",
         input: "var(--input)",
         ring: "var(--ring)",
@@ -197,6 +209,13 @@ export default {
         },
         sidebar: {
           DEFAULT: "var(--sidebar)",
+          foreground: "var(--sidebar-foreground)",
+          primary: "var(--sidebar-primary)",
+          "primary-foreground": "var(--sidebar-primary-foreground)",
+          accent: "var(--sidebar-accent)",
+          "accent-foreground": "var(--sidebar-accent-foreground)",
+          border: "var(--sidebar-border)",
+          ring: "var(--sidebar-ring)",
         },
         surface: {
           DEFAULT: "var(--color-surface)",
@@ -299,6 +318,18 @@ export default {
         },
       },
       keyframes: {
+        fadeIn: {
+          from: {
+            opacity: 0,
+            transform: "translateY(8px) scale(0.98)",
+            filter: "blur(4px)",
+          },
+          to: {
+            opacity: 1,
+            transform: "translateY(0) scale(1)",
+            filter: "blur(0)",
+          },
+        },
         hide: {
           from: { opacity: 1 },
           to: { opacity: 0 },
@@ -315,6 +346,7 @@ export default {
         },
       },
       animation: {
+        "fade-in": "fadeIn 0.3s ease-out forwards",
         hide: "hide 100ms ease-in",
         slideIn: "slideIn 150ms cubic-bezier(0.16, 1, 0.3, 1)",
         swipeOut: "swipeOut 100ms ease-out",

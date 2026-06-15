@@ -89,15 +89,59 @@ async def _call_parallel(query: str, **_) -> str:
     return "\n".join(lines)
 
 
-_PROVIDER_MAP = {
-    "linkup": ("Linkup", _call_linkup),
-    "parallel": ("Parallel AI", _call_parallel),
-}
+async def _call_tavily(query: str, **_) -> str:
+    """Adapter: call Tavily search."""
+    tavily_key = os.environ.get("TAVILY_API_KEY", "")
+    if not tavily_key:
+        raise RuntimeError("TAVILY_API_KEY not set.")
+    try:
+        from tavily import TavilyClient
+    except ImportError:
+        raise RuntimeError("tavily-python not installed. Run: uv add tavily-python")
 
-_DEFAULTS = {
-    "search_provider_primary": "linkup",
-    "search_provider_secondary": "parallel",
-    "search_max_retries": "4",   # 4 attempts × 15 s per provider
+    loop = asyncio.get_event_loop()
+    def _sync():
+        client = TavilyClient(api_key=tavily_key)
+        resp = client.search(query=query, search_depth="advanced", max_results=5)
+        results = resp.get("results", [])
+        lines = [f"🔍 Tavily Search — {query}\n"]
+        for r in results:
+            lines.append(f"**{r.get('title', 'Untitled')}** — {r.get('url', '')}")
+            lines.append(r.get('content', ''))
+            lines.append("")
+        return "\n".join(lines)
+    return await loop.run_in_executor(None, _sync)
+
+
+async def _call_exa(query: str, **_) -> str:
+    """Adapter: call Exa search."""
+    exa_key = os.environ.get("EXA_API_KEY", "")
+    if not exa_key:
+        raise RuntimeError("EXA_API_KEY not set.")
+    try:
+        from exa_py import Exa
+    except ImportError:
+        raise RuntimeError("exa-py not installed. Run: uv add exa-py")
+
+    loop = asyncio.get_event_loop()
+    def _sync():
+        client = Exa(api_key=exa_key)
+        resp = client.search(query, num_results=5, use_autoprompt=True)
+        results = resp.results
+        lines = [f"🔍 Exa Search — {query}\n"]
+        for r in results:
+            lines.append(f"**{r.title or 'Untitled'}** — {r.url}")
+            lines.append(getattr(r, "highlights", [r.url])[0] if getattr(r, "highlights", None) else r.url)
+            lines.append("")
+        return "\n".join(lines)
+    return await loop.run_in_executor(None, _sync)
+
+
+_PROVIDER_MAP = {
+    "linkup": _call_linkup,
+    "parallel": _call_parallel,
+    "tavily": _call_tavily,
+    "exa": _call_exa,
 }
 
 
@@ -107,9 +151,8 @@ _DEFAULTS = {
 def unified_search(query: str) -> str:
     """Search the web for current news and information on a given topic.
 
-    Provider selection (Linkup ↔ Parallel AI), retry count, and fallback logic are
-    all handled automatically based on settings in Supabase. The agent does NOT need
-    to know which provider is being used.
+    Provider selection, priority, retry count, and fallback logic are
+    handled automatically based on the numbered settings in Supabase.
 
     Query writing rules:
     - Short, specific keyword string (4-8 words) — no quotation marks.
@@ -124,17 +167,7 @@ def unified_search(query: str) -> str:
     Returns:
         Sourced answer with inline citations and source URLs from the active provider.
     """
-    settings = get_settings()
-    primary_key = settings.get("search_provider_primary", _DEFAULTS["search_provider_primary"])
-    secondary_key = settings.get("search_provider_secondary", _DEFAULTS["search_provider_secondary"])
-    max_retries = int(settings.get("search_max_retries", _DEFAULTS["search_max_retries"]))
-
-    primary_name, primary_fn = _PROVIDER_MAP.get(primary_key, _PROVIDER_MAP["linkup"])
-    secondary_entry = _PROVIDER_MAP.get(secondary_key)
-    secondary_name = secondary_entry[0] if secondary_entry else "none"
-    secondary_fn = secondary_entry[1] if secondary_entry else None
-
-    logger.info(f"[unified_search] Primary={primary_name}, Fallback={secondary_name}, Retries={max_retries}")
+    from .provider_engine import execute_unified_pipeline
 
     try:
         loop = asyncio.get_event_loop()
@@ -142,25 +175,16 @@ def unified_search(query: str) -> str:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    result = loop.run_until_complete(
-        execute_with_fallback(
-            primary_fn=primary_fn,
-            secondary_fn=secondary_fn,
-            primary_name=primary_name,
-            secondary_name=secondary_name,
-            max_retries=max_retries,
+    default_keys = ["linkup", "parallel", "tavily", "exa"]
+
+    return loop.run_until_complete(
+        execute_unified_pipeline(
+            category="search",
+            built_in_map=_PROVIDER_MAP,
+            default_provider_keys=default_keys,
+            max_retries=4,
             timeout_seconds=30,
             query=query,
         )
     )
 
-    # If all providers failed, result.data is already a graceful error string.
-    # Return it as-is so the agent can decide to skip this step and continue.
-    if result.failed:
-        return result.data
-
-    prefix = ""
-    if result.fallback_used:
-        prefix = f"⚡ [Fallback: {result.provider_used} used after primary failed]\n\n"
-
-    return f"{prefix}{result.data}"

@@ -29,6 +29,28 @@ def read_skill(skill_name: str) -> str:
     Returns:
         The full text of the SKILL.md file, or an error message if not found.
     """
+    # Try to load from Supabase skills_library first
+    import os
+    try:
+        from supabase import create_client
+        url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        if url and key:
+            client = create_client(url, key)
+            resp = client.table("skills_library").select("content").eq("skill_key", skill_name).execute()
+            if resp.data and len(resp.data) > 0:
+                content = resp.data[0].get("content", "").strip()
+                if content:
+                    print(f"[read_skill] ✅ Loaded skill '{skill_name}' from database ({len(content)} chars)")
+                    return (
+                        f"=== SKILL: {skill_name.upper()} ===\n\n"
+                        f"{content}\n\n"
+                        f"=== END OF SKILL: {skill_name.upper()} ===\n"
+                        f"Now follow the skill instructions above exactly."
+                    )
+    except Exception as e:
+        print(f"[read_skill] Supabase load failed: {e}. Falling back to filesystem...")
+
     skill_path = _SKILLS_ROOT / skill_name / "SKILL.md"
 
     if not _SKILLS_ROOT.exists():

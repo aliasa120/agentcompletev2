@@ -49,6 +49,7 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Optional
+from langchain_core.tools import BaseTool
 
 from .provider_registry import (
     get_provider_api_key,
@@ -86,12 +87,28 @@ def _fetch_settings_from_supabase() -> dict[str, str]:
         return {}
 
 
+def run_in_thread(func, *args, **kwargs):
+    import threading
+    res, err = [], []
+    def target():
+        try:
+            res.append(func(*args, **kwargs))
+        except Exception as e:
+            err.append(e)
+    t = threading.Thread(target=target)
+    t.start()
+    t.join()
+    if err:
+        raise err[0]
+    return res[0]
+
+
 def get_settings() -> dict[str, str]:
     """Return provider settings, using in-process cache (refreshes every 60 s)."""
     global _settings_cache, _cache_loaded_at
     now = time.time()
     if now - _cache_loaded_at >= _CACHE_TTL_SECONDS or not _settings_cache:
-        fresh = _fetch_settings_from_supabase()
+        fresh = run_in_thread(_fetch_settings_from_supabase)
         if fresh:
             _settings_cache = fresh
             _cache_loaded_at = now
@@ -350,3 +367,167 @@ async def execute_with_fallback(
         fallback_used=True if secondary_fn else False,
         failed=True,
     )
+
+
+# ── Numbered Provider Pipeline ──────────────────────────────────────────────
+
+_providers_cache: dict[str, list[dict]] = {}
+_providers_cache_loaded_at: float = 0.0
+
+def get_ordered_providers(category: str) -> list[dict]:
+    """Fetch enabled providers for a tool category, sorted by priority_order."""
+    global _providers_cache, _providers_cache_loaded_at
+    now = time.time()
+    if now - _providers_cache_loaded_at >= _CACHE_TTL_SECONDS or not _providers_cache:
+        try:
+            from supabase import create_client
+            url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+            key = os.environ.get("SUPABASE_ANON_KEY", "")
+            if url and key:
+                client = create_client(url, key)
+                resp = client.table("tool_provider_configs").select("*").execute()
+                grouped = {}
+                for row in (resp.data or []):
+                    cat = row.get("tool_category")
+                    if cat not in grouped:
+                        grouped[cat] = []
+                    grouped[cat].append(row)
+                for cat in grouped:
+                    grouped[cat].sort(key=lambda x: x.get("priority_order", 999))
+                _providers_cache = grouped
+                _providers_cache_loaded_at = now
+                logger.debug("[provider_engine] Tool provider configs cache refreshed.")
+        except Exception as e:
+            logger.warning(f"[provider_engine] Supabase tool provider configs fetch failed: {e}")
+
+    rows = _providers_cache.get(category, [])
+    return [row for row in rows if row.get("enabled", True)]
+
+
+async def load_mcp_tool_by_key(tool_key: str) -> list[BaseTool]:
+    """Find and load a specific MCP tool by its key from active connections."""
+    import os
+    try:
+        from supabase import create_client
+    except ImportError:
+        return []
+
+    url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    key = os.environ.get("SUPABASE_ANON_KEY", "")
+    if not url or not key:
+        return []
+
+    try:
+        client = create_client(url, key)
+        resp = client.table("mcp_connections").select("*").eq("status", "active").execute()
+        connections = resp.data or []
+    except Exception:
+        return []
+
+    for conn in connections:
+        available = conn.get("available_tools") or []
+        for t in available:
+            match = False
+            if isinstance(t, dict) and t.get("tool_key") == tool_key:
+                match = True
+            elif isinstance(t, str) and t == tool_key:
+                match = True
+
+            if match:
+                if conn.get("connection_type") == "manual":
+                    from research_agent.tools.mcp_loader import load_manual_mcp_tool
+                    return await load_manual_mcp_tool(conn.get("mcp_url"), tool_key)
+                else:
+                    composio_api_key = os.environ.get("COMPOSIO_API_KEY", "")
+                    if composio_api_key:
+                        try:
+                            from composio import Composio
+                            from composio_langchain import LangchainProvider
+                            composio = Composio(api_key=composio_api_key, provider=LangchainProvider())
+                            return composio.tools.get(user_id="default", tools=[tool_key])
+                        except Exception:
+                            pass
+    return []
+
+
+async def execute_unified_pipeline(
+    category: str,
+    built_in_map: dict,
+    default_provider_keys: list[str],
+    max_retries: int,
+    timeout_seconds: int = 30,
+    **kwargs,
+) -> str:
+    """Execute the prioritized list of providers for a tool category.
+
+    Tries each enabled provider in order of priority_order.
+    Falls back to the next provider on failure.
+    Supports both built-in adapters and MCP tools.
+    """
+    providers = get_ordered_providers(category)
+    if not providers:
+        providers = [
+            {"provider_key": k, "fallback_on_error": True, "enabled": True}
+            for k in default_provider_keys
+        ]
+
+    errors = []
+    for idx, prov in enumerate(providers):
+        key = prov.get("provider_key")
+        fallback_on_error = prov.get("fallback_on_error", True)
+
+        logger.info(f"[pipeline] Trying provider {idx+1}/{len(providers)}: {key} (fallback={fallback_on_error})")
+
+        fn = None
+        is_mcp = False
+
+        if key in built_in_map:
+            fn = built_in_map[key]
+        else:
+            is_mcp = True
+
+        try:
+            if not is_mcp:
+                result = await asyncio.wait_for(fn(**kwargs), timeout=timeout_seconds)
+                logger.info(f"[pipeline] ✅ Provider '{key}' succeeded!")
+                prefix = ""
+                if idx > 0:
+                    prefix = f"⚡ [Fallback: {key} used after previous providers failed]\n\n"
+                return f"{prefix}{result}"
+            else:
+                tools = await load_mcp_tool_by_key(key)
+                if not tools:
+                    raise RuntimeError(f"MCP tool '{key}' not found or connection offline")
+
+                tool = tools[0]
+                tool_args = {}
+                if "query" in kwargs and kwargs["query"]:
+                    tool_args["query"] = kwargs["query"]
+                if "urls" in kwargs and kwargs["urls"]:
+                    tool_args["urls"] = kwargs["urls"]
+                    if "url" not in tool_args:
+                        tool_args["url"] = kwargs["urls"][0]
+
+                result = await asyncio.wait_for(tool.ainvoke(tool_args), timeout=timeout_seconds)
+                res_str = str(result)
+                logger.info(f"[pipeline] ✅ MCP Provider '{key}' succeeded!")
+                prefix = ""
+                if idx > 0:
+                    prefix = f"⚡ [Fallback MCP: {key} used after previous providers failed]\n\n"
+                return f"{prefix}{res_str}"
+
+        except Exception as e:
+            msg = f"Provider '{key}' failed: {e}"
+            logger.warning(f"[pipeline] ⚠️ {msg}")
+            errors.append(msg)
+            if not fallback_on_error:
+                logger.error(f"[pipeline] Fallback disabled for '{key}'. Aborting.")
+                break
+
+    summary = "; ".join(errors)
+    return (
+        f"⚠️ All tool providers failed. "
+        f"Errors: {summary}. "
+        "Please proceed with the information you have or skip this step."
+    )
+

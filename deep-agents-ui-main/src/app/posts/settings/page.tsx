@@ -54,7 +54,7 @@ type TestStatus = "idle" | "loading" | "success" | "error";
 
 function EnvBadge({ set }: { set: boolean }) {
     return set ? (
-        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+        <span className="inline-flex items-center gap-1 rounded-full bg-success-primary border border-success/30 px-2 py-0.5 text-[11px] font-semibold text-success">
             <ShieldCheck size={10} />.env.local
         </span>
     ) : null;
@@ -79,10 +79,10 @@ function PasswordInput({
     const [show, setShow] = useState(false);
     if (envSet) {
         return (
-            <div className="flex items-center gap-2 mt-1.5 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
+            <div className="flex items-center gap-2 mt-1.5 px-3 py-2 rounded-lg bg-success-primary border border-success/30 text-sm text-success">
                 <ShieldCheck size={14} />
                 <span className="font-medium">Set in .env.local</span>
-                <span className="text-green-500 text-xs ml-auto">env var takes priority</span>
+                <span className="text-success/80 text-xs ml-auto">env var takes priority</span>
             </div>
         );
     }
@@ -114,11 +114,11 @@ function IdInput({
 }) {
     if (envSet) {
         return (
-            <div className="flex items-center gap-2 mt-1.5 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
+            <div className="flex items-center gap-2 mt-1.5 px-3 py-2 rounded-lg bg-success-primary border border-success/30 text-sm text-success">
                 <ShieldCheck size={14} />
                 <span className="font-medium">Set in .env.local</span>
-                {envValue && <span className="font-mono text-xs text-green-600 ml-2">{envValue}</span>}
-                <span className="text-green-500 text-xs ml-auto">env var takes priority</span>
+                {envValue && <span className="font-mono text-xs text-success ml-2">{envValue}</span>}
+                <span className="text-success/80 text-xs ml-auto">env var takes priority</span>
             </div>
         );
     }
@@ -156,8 +156,8 @@ function TestButton({ platform }: { platform: string }) {
                 {status === "loading" ? <Loader2 size={12} className="animate-spin mr-1" /> : null}
                 Test Connection
             </Button>
-            {status === "success" && <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle2 size={13} />{msg}</span>}
-            {status === "error" && <span className="flex items-center gap-1 text-xs text-red-500"><XCircle size={13} />{msg}</span>}
+            {status === "success" && <span className="flex items-center gap-1 text-xs text-success"><CheckCircle2 size={13} />{msg}</span>}
+            {status === "error" && <span className="flex items-center gap-1 text-xs text-destructive"><XCircle size={13} />{msg}</span>}
         </div>
     );
 }
@@ -253,7 +253,7 @@ export default function PostSettingsPage() {
                     </Button>
                 </div>
                 {saveMsg && (
-                    <div className="bg-green-50 border-t border-green-200 px-4 py-2 text-sm text-green-700 flex items-center gap-2">
+                    <div className="bg-success-primary border-t border-success/30 px-4 py-2 text-sm text-success flex items-center gap-2">
                         <CheckCircle2 size={14} />{saveMsg}
                     </div>
                 )}
@@ -351,7 +351,7 @@ export default function PostSettingsPage() {
                         <Toggle enabled={settings.social_ig_enabled === "true"} onToggle={() => toggle("social_ig_enabled")} />
                     </div>
                     <div className="px-5 py-5 space-y-4">
-                        <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-700">
+                        <div className="rounded-lg bg-accent/50 border border-border px-3 py-2 text-xs text-muted-foreground">
                             Instagram uses the same access token as Facebook. The token needs <code>instagram_basic</code> and <code>instagram_content_publish</code> permissions. <strong>Posts require an image.</strong>
                         </div>
                         <div>
@@ -387,7 +387,7 @@ export default function PostSettingsPage() {
                         <Toggle enabled={settings.social_twitter_enabled === "true"} onToggle={() => toggle("social_twitter_enabled")} />
                     </div>
                     <div className="px-5 py-5 space-y-4">
-                        <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-800">
+                        <div className="rounded-lg bg-accent/50 border border-border px-3 py-2 text-xs text-muted-foreground">
                             Posting to X involves the official API. Provide developer OAuth 1.0 credentials here or in <code>.env.local</code>.
                         </div>
 

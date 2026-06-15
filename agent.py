@@ -243,74 +243,427 @@ content_model = ResilientChatModel(
 # The built-in behavior is controlled by HarnessProfiles registered for the
 # specific model provider. No custom configuration needed for standard usage.
 
-# ── Subagent Definitions ──────────────────────────────────────────────────────
-# research-subagent: handles web search + extraction (Step 4)
-# content-subagent:  handles blog + social posts + image pipeline (Steps 6-7g)
-# Main agent: planning, synthesis, WordPress, DB save — and evaluates subagent output.
+# ── Dynamic Agent Resolution ────────────────----------------------------------
+# Fetches configurations, tools, prompts, and MCP tool wrappers from Supabase.
+# Falls back gracefully to the hardcoded defaults if Supabase is offline.
 
-research_subagent = {
-    "name": "research-subagent",
-    "description": (
-        "Web research specialist. Use this subagent to search the web and extract article content "
-        "for a list of specific research targets. Pass the news title, snippet, and numbered "
-        "research targets. It returns a structured Research Report with facts, quotes, and source URLs."
-    ),
-    "system_prompt": RESEARCH_SUBAGENT_PROMPT,
-    "model": research_model,
-    # Focused toolset — only what research needs
-    "tools": [
-        unified_search,
-        unified_extract,
-        think_tool,
-    ],
-}
+from research_agent.tools.mcp_loader import load_mcp_tools_for_agent
+from langchain.agents import AgentState
+from langgraph.graph import StateGraph, START, END
 
-content_subagent = {
-    "name": "content-subagent",
-    "description": (
-        "Content creation specialist. Use this subagent to write the blog post, X/Twitter, "
-        "Instagram, and Facebook posts, then run the full image pipeline (fetch, select, analyze, "
-        "generate social image). Pass the news title, synthesised research facts, hook, and best "
-        "image search query. It reads /news_input.md and /research_synthesis.md from the filesystem "
-        "and returns a summary of files written plus image paths."
-    ),
-    "system_prompt": CONTENT_SUBAGENT_PROMPT,
-    "model": content_model,
-    # Focused toolset — writing + image pipeline only (no search/WordPress/DB)
-    "tools": [
-        read_skill,
-        fetch_images_brave,
-        view_candidate_images,
-        analyze_images_gemini,
-        create_post_image,
-        get_design_guide,
-        think_tool,
-    ],
-}
+from langchain_core.messages import SystemMessage
+import base64
+import mimetypes
+from pathlib import Path
 
-# ── Create the Agent ────────────────────────────────────────────────────────
-agent = create_deep_agent(
-    model=model,
-    tools=[
-        # Main agent keeps all tools for verification, WordPress, and DB save
-        unified_search,
-        unified_extract,
-        think_tool,
-        fetch_images_brave,
-        view_candidate_images,
-        analyze_images_gemini,
-        create_post_image,
-        save_posts_to_supabase,
-        get_design_guide,
-        read_skill,
-        get_wordpress_categories,
-        publish_to_wordpress,
-    ],
-    subagents=[research_subagent, content_subagent],
-    system_prompt=INSTRUCTIONS,
-    # No middleware=[...] — deepagents default harness handles:
-    #   - SummarizationMiddleware (auto context management)
-    #   - FilesystemMiddleware (virtual filesystem for tool output offloading)
-    #   - SubAgentMiddleware (general-purpose task subagent + our 2 custom ones)
-    name="research-agent",
-)
+def _load_agent_design_assets(client, agent_id: str) -> list[dict]:
+    try:
+        resp = client.table("agent_design_assets").select("design_assets(*)").eq("agent_id", agent_id).execute()
+        assets = []
+        for row in (resp.data or []):
+            if row.get("design_assets"):
+                assets.append(row["design_assets"])
+        return assets
+    except Exception as e:
+        print(f"[agent] Error loading reference images for agent {agent_id}: {e}")
+        return []
+
+def _get_base64_image(file_path: str) -> tuple[str, str]:
+    repo_root = Path(__file__).resolve().parent
+    full_path = repo_root / file_path
+    if not full_path.exists():
+        raise FileNotFoundError(f"Reference image file not found on disk: {full_path}")
+    with open(full_path, "rb") as f:
+        data = f.read()
+    encoded = base64.b64encode(data).decode("utf-8")
+    mime_type, _ = mimetypes.guess_type(str(full_path))
+    if not mime_type:
+        mime_type = "image/png"
+    return encoded, mime_type
+
+def _get_agent_system_prompt_with_images(client, agent_id: str, base_prompt: str) -> SystemMessage | str:
+    assets = _load_agent_design_assets(client, agent_id)
+    if not assets:
+        return base_prompt
+
+    content_blocks = [{"type": "text", "text": base_prompt}]
+    content_blocks.append({"type": "text", "text": "\n\n=== ATTACHED BRAND/STYLE REFERENCE IMAGES ===\nYou can refer to these images directly by their Key or Label in your instructions (e.g. \"Reference Image 1\" or by their Key/Label)."})
+    
+    for idx, asset in enumerate(assets, start=1):
+        try:
+            img_base64, mime_type = _get_base64_image(asset["file_path"])
+            content_blocks.append({
+                "type": "text",
+                "text": f"\nReference Image {idx}:\n- Key: {asset['asset_key']}\n- Label: {asset['label']}\n- File Path: {asset['file_path']}"
+            })
+            content_blocks.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{mime_type};base64,{img_base64}"
+                }
+            })
+        except Exception as e:
+            print(f"[agent] Error loading reference image {asset['file_path']}: {e}")
+    
+    return SystemMessage(content=content_blocks)
+
+# Global registry of compiled workflow agents
+compiled_workflows = {}
+default_workflow_id = None
+
+def load_dynamic_agents_by_workflow():
+    global default_workflow_id
+    import os
+    try:
+        from supabase import create_client
+        url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        if not url or not key:
+            print("[agent] Supabase URL/Key missing. Using static fallback.")
+            return {}
+
+        client = create_client(url, key)
+
+        # 1. Fetch all workflows (scheduler status is checked by cron_scheduler.py)
+        workflows_resp = client.table("workflows").select("*").execute()
+        workflows = workflows_resp.data or []
+        if not workflows:
+            print("[agent] No workflows found in database.")
+            return {}
+
+        # Find default workflow id if any
+        for wf in workflows:
+            if wf.get("name") == "Default Workflow":
+                default_workflow_id = wf["id"]
+                break
+        if not default_workflow_id and workflows:
+            default_workflow_id = workflows[0]["id"]
+
+        # 2. Fetch enabled agent configurations
+        resp = client.table("agent_configs").select("*").eq("enabled", True).order("sort_order").execute()
+        configs = resp.data or []
+
+        # 3. Load tool assignments
+        assign_resp = client.table("agent_tool_assignments").select("*").eq("enabled", True).execute()
+        assignments = assign_resp.data or []
+
+        # Tool lookup for built-in tools
+        from research_agent.tools import (
+            unified_search,
+            unified_extract,
+            think_tool,
+            fetch_images_brave,
+            view_candidate_images,
+            analyze_images_gemini,
+            create_post_image,
+            save_posts_to_supabase,
+            get_design_guide,
+            read_skill,
+            get_wordpress_categories,
+            publish_to_wordpress,
+        )
+
+        tool_lookup = {
+            "unified_search": unified_search,
+            "unified_extract": unified_extract,
+            "think_tool": think_tool,
+            "fetch_images_brave": fetch_images_brave,
+            "view_candidate_images": view_candidate_images,
+            "analyze_images_gemini": analyze_images_gemini,
+            "create_post_image": create_post_image,
+            "save_posts_to_supabase": save_posts_to_supabase,
+            "get_design_guide": get_design_guide,
+            "read_skill": read_skill,
+            "get_wordpress_categories": get_wordpress_categories,
+            "publish_to_wordpress": publish_to_wordpress,
+        }
+
+        tool_assignments_by_agent = {}
+        for a in assignments:
+            agent_id = a.get("agent_id")
+            if agent_id not in tool_assignments_by_agent:
+                tool_assignments_by_agent[agent_id] = []
+            tool_assignments_by_agent[agent_id].append(a)
+
+        def make_dynamic_unified_tool(t_key: str):
+            from langchain_core.tools import StructuredTool
+            from research_agent.tools.provider_engine import execute_unified_pipeline
+            category = t_key.replace("unified_", "")
+
+            async def _run_dynamic_tool(query: str = "", urls: list[str] = [], **kwargs) -> str:
+                return await execute_unified_pipeline(
+                    category=category,
+                    built_in_map={},
+                    default_provider_keys=[],
+                    max_retries=3,
+                    query=query,
+                    urls=urls,
+                    **kwargs
+                )
+
+            return StructuredTool.from_function(
+                coroutine=_run_dynamic_tool,
+                name=t_key,
+                description=f"Unified tool for '{category}'. Calls connected providers in priority order.",
+            )
+
+        workflows_compiled = {}
+
+        # Compile each workflow
+        for wf in workflows:
+            wf_id = wf["id"]
+            # Filter agents belonging to this workflow
+            wf_configs = [c for c in configs if c.get("workflow_id") == wf_id]
+            if not wf_configs:
+                print(f"[agent] Workflow '{wf['name']}' has no agent configs. Skipping.")
+                continue
+
+            main_configs = [c for c in wf_configs if c.get("agent_type") == "main"]
+            sub_configs = [c for c in wf_configs if c.get("agent_type") == "subagent"]
+
+            if not main_configs:
+                print(f"[agent] Workflow '{wf['name']}' has no Main Agent. Skipping.")
+                continue
+
+            main_cfg = main_configs[0]
+            main_id = main_cfg["id"]
+            base_main_prompt = main_cfg.get("system_prompt", "").replace("{date}", datetime.now().strftime("%Y-%m-%d"))
+            main_prompt = _get_agent_system_prompt_with_images(client, main_id, base_main_prompt)
+
+            # Resolve Main Agent provider and model dynamically
+            main_provider = main_cfg.get("provider") or "vercel"
+            main_model_name = main_cfg.get("model") or "xiaomi/mimo-v2.5-pro"
+
+            from research_agent.tools.provider_engine import get_provider_base_url, get_provider_api_key, get_provider_config
+            main_base_url = get_provider_base_url(main_provider)
+
+            cfg = get_provider_config(main_provider)
+            needs_v1 = cfg and "base_url_env" in cfg
+            if needs_v1 and not main_base_url.endswith("/v1"):
+                main_base_url = main_base_url + "/v1"
+
+            main_api_key = get_provider_api_key(main_provider)
+
+            main_model = ResilientChatModel(
+                model=main_model_name,
+                api_key=main_api_key,
+                base_url=main_base_url,
+                temperature=0.45,
+                streaming=True,
+            )
+
+            main_tools = []
+            for a in tool_assignments_by_agent.get(main_id, []):
+                t_type = a.get("tool_type")
+                t_key = a.get("tool_key")
+                if t_type == "builtin":
+                    if t_key in tool_lookup:
+                        main_tools.append(tool_lookup[t_key])
+                    elif t_key.startswith("unified_"):
+                        main_tools.append(make_dynamic_unified_tool(t_key))
+
+            # Load MCP tools
+            main_mcp = load_mcp_tools_for_agent(main_id)
+            main_tools.extend(main_mcp)
+
+            # Build Subagents
+            subagents = []
+            for sub in sub_configs:
+                sub_id = sub["id"]
+                base_sub_prompt = sub.get("system_prompt", "")
+                sub_prompt = _get_agent_system_prompt_with_images(client, sub_id, base_sub_prompt)
+                
+                sub_provider = sub.get("provider") or "vercel"
+                sub_model_name = sub.get("model") or "xiaomi/mimo-v2.5-pro"
+
+                sub_base_url = get_provider_base_url(sub_provider)
+
+                sub_cfg = get_provider_config(sub_provider)
+                sub_needs_v1 = sub_cfg and "base_url_env" in sub_cfg
+                if sub_needs_v1 and not sub_base_url.endswith("/v1"):
+                    sub_base_url = sub_base_url + "/v1"
+
+                sub_api_key = get_provider_api_key(sub_provider)
+
+                sub_model = ResilientChatModel(
+                    model=sub_model_name,
+                    api_key=sub_api_key,
+                    base_url=sub_base_url,
+                    temperature=0.3 if "research" in sub["name"].lower() else 0.55,
+                    streaming=True,
+                )
+
+                sub_tools = []
+                for a in tool_assignments_by_agent.get(sub_id, []):
+                    t_type = a.get("tool_type")
+                    t_key = a.get("tool_key")
+                    if t_type == "builtin":
+                        if t_key in tool_lookup:
+                            sub_tools.append(tool_lookup[t_key])
+                        elif t_key.startswith("unified_"):
+                            sub_tools.append(make_dynamic_unified_tool(t_key))
+
+                # Load MCP tools
+                sub_mcp = load_mcp_tools_for_agent(sub_id)
+                sub_tools.extend(sub_mcp)
+
+                subagents.append({
+                    "name": sub["name"],
+                    "description": sub.get("description") or "",
+                    "system_prompt": sub_prompt,
+                    "model": sub_model,
+                    "tools": sub_tools,
+                })
+
+            # Clean up tools
+            for sa in subagents:
+                sa["tools"] = [t for t in sa["tools"] if getattr(t, "name", "") not in ("analyze_images_gemini", "get_design_guide")]
+            main_tools = [t for t in main_tools if getattr(t, "name", "") not in ("analyze_images_gemini", "get_design_guide")]
+
+            print(f"[agent] Compiling workflow '{wf['name']}' with {len(subagents)} subagents...")
+            compiled_agent = create_deep_agent(
+                model=main_model,
+                tools=main_tools,
+                subagents=subagents,
+                system_prompt=main_prompt,
+                name=wf["name"].lower().replace(" ", "-"),
+            )
+            workflows_compiled[str(wf_id)] = compiled_agent
+            workflows_compiled[wf["name"]] = compiled_agent
+
+        return workflows_compiled
+
+    except Exception as e:
+        print(f"[agent] Error loading dynamic workflows: {e}")
+        return {}
+
+
+def run_in_thread(func, *args, **kwargs):
+    import threading
+    res, err = [], []
+    def target():
+        try:
+            res.append(func(*args, **kwargs))
+        except Exception as e:
+            err.append(e)
+    t = threading.Thread(target=target)
+    t.start()
+    t.join()
+    if err:
+        raise err[0]
+    return res[0]
+
+
+# Load the configuration
+import traceback
+try:
+    compiled_workflows = run_in_thread(load_dynamic_agents_by_workflow)
+    with open("agent_load.log", "a", encoding="utf-8") as f:
+        f.write(f"\n--- Load at {datetime.now().isoformat()} ---\n")
+        f.write(f"Compiled workflows keys: {list(compiled_workflows.keys())}\n")
+        if compiled_workflows:
+            for k, v in compiled_workflows.items():
+                try:
+                    tools_list = list(v.nodes['tools'].bound.tools_by_name.keys())
+                except Exception:
+                    tools_list = "no tools"
+                f.write(f"Workflow '{k}' tools: {tools_list}\n")
+        else:
+            f.write("compiled_workflows is empty!\n")
+except Exception as e:
+    with open("agent_load.log", "a", encoding="utf-8") as f:
+        f.write(f"\n--- Load Error at {datetime.now().isoformat()} ---\n")
+        f.write(traceback.format_exc())
+    compiled_workflows = {}
+
+def route_workflow(state, config):
+    workflow_id = config.get("configurable", {}).get("workflow_id")
+    if not workflow_id:
+        raise ValueError("workflow_id is not set. Please configure a workflow_id in your request configuration.")
+    
+    node_key = str(workflow_id)
+    if node_key not in compiled_workflows:
+        raise ValueError(f"Workflow '{workflow_id}' is not compiled or not active. Active workflows: {list(compiled_workflows.keys())}")
+    
+    return node_key
+
+
+# Define the master StateGraph
+builder = StateGraph(AgentState)
+
+if compiled_workflows:
+    # Add each workflow graph as a node
+    for wf_key, wf_agent in compiled_workflows.items():
+        builder.add_node(wf_key, wf_agent)
+        builder.add_edge(wf_key, END)
+
+    # Add conditional edge from START
+    builder.add_conditional_edges(
+        START,
+        route_workflow,
+        {wf_key: wf_key for wf_key in compiled_workflows.keys()}
+    )
+    
+    agent = builder.compile()
+else:
+    # Fallback to static configuration if Supabase is offline or empty
+    print("[agent] WARNING: No compiled workflows found. Falling back to static configuration.")
+    
+    research_subagent = {
+        "name": "research-subagent",
+        "description": "Web research specialist.",
+        "system_prompt": RESEARCH_SUBAGENT_PROMPT,
+        "model": research_model,
+        "tools": [
+            unified_search,
+            unified_extract,
+            think_tool,
+        ],
+    }
+
+    content_subagent = {
+        "name": "content-subagent",
+        "description": "Content creation specialist.",
+        "system_prompt": CONTENT_SUBAGENT_PROMPT,
+        "model": content_model,
+        "tools": [
+            read_skill,
+            fetch_images_brave,
+            view_candidate_images,
+            analyze_images_gemini,
+            create_post_image,
+            get_design_guide,
+            think_tool,
+        ],
+    }
+
+    fallback_agent = create_deep_agent(
+        model=model,
+        tools=[
+            unified_search,
+            unified_extract,
+            think_tool,
+            fetch_images_brave,
+            view_candidate_images,
+            analyze_images_gemini,
+            create_post_image,
+            save_posts_to_supabase,
+            get_design_guide,
+            read_skill,
+            get_wordpress_categories,
+            publish_to_wordpress,
+        ],
+        subagents=[research_subagent, content_subagent],
+        system_prompt=INSTRUCTIONS,
+        name="research-agent",
+    )
+    
+    builder.add_node("static_fallback", fallback_agent)
+    builder.add_edge("static_fallback", END)
+    
+    def route_fallback(state, config):
+        return "static_fallback"
+        
+    builder.add_conditional_edges(START, route_fallback, {"static_fallback": "static_fallback"})  # triggered reload for Composio update 2
+    agent = builder.compile()
+

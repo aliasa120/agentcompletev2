@@ -1,4 +1,4 @@
-﻿"""
+"""
 Feeder Pipeline - 5-Layer article deduplication.
 
 Layer -2: Time filter (drop old articles)
@@ -68,15 +68,20 @@ def load_domain_priority() -> dict[str, int]:
         return {}
 
 
-def load_feed_sources() -> list[str]:
+def load_feed_sources(workflow_id: str = None) -> list[dict]:
     try:
-        res = supabase_client.table("feeder_sources").select("url").eq("is_active", True).execute()
-        urls = [r["url"] for r in (res.data or [])]
-        if urls:
-            return urls
+        query = supabase_client.table("feeder_sources").select("url, workflow_id").eq("is_active", True)
+        if workflow_id:
+            query = query.eq("workflow_id", workflow_id)
+        res = query.execute()
+        sources = res.data or []
+        if sources:
+            return sources
     except Exception as e:
         print(f"Warning: Could not load feed sources: {e}")
-    return ["https://news.google.com/rss/search?q=pakistan&hl=en-PK&gl=PK&ceid=PK:en"]
+    if not workflow_id:
+        return [{"url": "https://news.google.com/rss/search?q=pakistan&hl=en-PK&gl=PK&ceid=PK:en", "workflow_id": None}]
+    return []
 
 
 def fetch_rss_feed(url: str, max_age_minutes: int = 0) -> list[FeederArticle]:
@@ -146,7 +151,7 @@ def _log_drop(layer: str, article_title: str, reason: str):
 
 
 # --- Main Pipeline ---------------------------------------------------------
-def run_feeder_pipeline() -> tuple[list[FeederArticle], list[tuple[FeederArticle, str]]]:
+def run_feeder_pipeline(workflow_id: str = None) -> tuple[list[FeederArticle], list[tuple[FeederArticle, str]]]:
     settings = load_settings()
     batch_size      = settings["batch_size"]
     max_age_minutes = settings["max_age_minutes"]   # always use minutes, no legacy override
@@ -156,18 +161,25 @@ def run_feeder_pipeline() -> tuple[list[FeederArticle], list[tuple[FeederArticle
     effective_max_minutes = max_age_minutes
 
     print(f"\n[Pipeline] Time filter: last {effective_max_minutes} minutes ({effective_max_minutes/60:.1f}h)")
+    if workflow_id:
+        print(f"[Pipeline] Running for Workflow ID: {workflow_id}")
 
     domain_priority = load_domain_priority()
-    feed_urls       = load_feed_sources()
+    feed_sources    = load_feed_sources(workflow_id)
     reset_whitelist_cache()
 
     dropped: list[tuple[FeederArticle, str]] = []
 
     # -- Fetch --
     raw: list[FeederArticle] = []
-    for url in feed_urls:
-        raw.extend(fetch_rss_feed(url, max_age_minutes=effective_max_minutes))
-    print(f"Fetched {len(raw)} raw articles from {len(feed_urls)} feed(s).")
+    for src in feed_sources:
+        url = src["url"]
+        wf_id = src.get("workflow_id")
+        fetched = fetch_rss_feed(url, max_age_minutes=effective_max_minutes)
+        for art in fetched:
+            art.workflow_id = wf_id
+        raw.extend(fetched)
+    print(f"Fetched {len(raw)} raw articles from {len(feed_sources)} feed(s).")
 
     # -- Layer -2: Time filter (minutes-aware) --
     threshold_dt = datetime.now(timezone.utc) - timedelta(minutes=effective_max_minutes)
@@ -181,7 +193,7 @@ def run_feeder_pipeline() -> tuple[list[FeederArticle], list[tuple[FeederArticle
           f"{len(raw)-len(after_time)} dropped.")
 
     # -- Layer -1: Domain whitelist --
-    after_domain = [a for a in after_time if layer_minus1_domain(a.domain)]
+    after_domain = [a for a in after_time if layer_minus1_domain(a.domain, a.workflow_id)]
     for a in after_time:
         if a not in after_domain:
             reason = f"Domain '{a.domain}' not in whitelist"
@@ -267,6 +279,9 @@ def run_feeder_pipeline() -> tuple[list[FeederArticle], list[tuple[FeederArticle
                     "source_domain": art.domain,
                     "status": "Pending",
                 }
+                target_wf_id = art.workflow_id or workflow_id
+                if target_wf_id:
+                    row["workflow_id"] = target_wf_id
                 if art.published_parsed is not None:
                     row["published_at"] = art.published_parsed.isoformat()
                 supabase_client.table("feeder_articles").upsert(row, on_conflict="guid").execute()
@@ -294,4 +309,8 @@ def run_feeder_pipeline() -> tuple[list[FeederArticle], list[tuple[FeederArticle
 
 
 if __name__ == "__main__":
-    run_feeder_pipeline()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--workflow-id", type=str, help="Workflow ID to run the feeder for")
+    args = parser.parse_args()
+    run_feeder_pipeline(workflow_id=args.workflow_id)

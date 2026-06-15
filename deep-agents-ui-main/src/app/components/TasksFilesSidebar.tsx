@@ -186,7 +186,7 @@ export const TasksFilesSidebar = React.memo<{
       <div className="font-inter flex h-full w-full flex-col p-0">
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
           <div className="flex items-center justify-between px-3 pb-1.5 pt-2">
-            <span className="text-xs font-semibold tracking-wide text-zinc-600">
+            <span className="text-xs font-semibold tracking-wide text-muted-foreground">
               AGENT TASKS
             </span>
             <button
@@ -236,7 +236,7 @@ export const TasksFilesSidebar = React.memo<{
           )}
 
           <div className="flex items-center justify-between px-3 pb-1.5 pt-2">
-            <span className="text-xs font-semibold tracking-wide text-zinc-600">
+            <span className="text-xs font-semibold tracking-wide text-muted-foreground">
               FILE SYSTEM
             </span>
             <button

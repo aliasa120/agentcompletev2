@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
+import { triggerAgentReload } from "@/lib/agent-reloader";
 
 /**
  * POST /api/reload-agent
@@ -12,37 +11,8 @@ import path from "path";
  * This avoids needing to manually restart `langgraph dev` after
  * changing the AI model config in Agent Settings.
  */
-
-// Resolve the repo root relative to this file's location
-// deep-agents-ui-main/src/app/api/reload-agent/route.ts
-//  → up 5 levels → repo root
-const REPO_ROOT = path.resolve(process.cwd(), "..");
-const AGENT_FILES = [
-  path.join(REPO_ROOT, "agent.py"),
-  path.join(REPO_ROOT, "feeder_agent", "agent.py"),
-  path.join(REPO_ROOT, "research_agent", "tools", "analyze_images_gemini.py"),
-];
-
 export async function POST(request: NextRequest) {
-  const now = new Date();
-  const touched: string[] = [];
-  const missing: string[] = [];
-
-  for (const filePath of AGENT_FILES) {
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.utimesSync(filePath, now, now);
-        touched.push(path.basename(filePath));
-      } else {
-        missing.push(path.basename(filePath));
-      }
-    } catch (err) {
-      console.warn(`[reload-agent] Could not touch ${filePath}:`, err);
-      missing.push(path.basename(filePath));
-    }
-  }
-
-  console.log(`[reload-agent] Touched: ${touched.join(", ")} | Missing: ${missing.join(", ")}`);
+  const { touched, missing } = triggerAgentReload();
 
   return NextResponse.json({
     success: touched.length > 0,

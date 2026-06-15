@@ -63,6 +63,16 @@ const PROVIDER_REGISTRY: Record<string, {
       { value: "claude-haiku-3-5",  label: "Claude Haiku 3.5",  badge: "Fast" },
     ],
   },
+  google: {
+    envKey: "GOOGLE_API_KEY",
+    label: "Google Gemini",
+    badgeColor: "from-blue-500 via-red-500 to-yellow-500",
+    defaultModels: [
+      { value: "gemini-2.5-pro",   label: "Gemini 2.5 Pro",   badge: "Latest" },
+      { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", badge: "Fast" },
+      { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash", badge: "Stable" },
+    ],
+  },
   openrouter: {
     envKey: "OPENROUTER_API_KEY",
     label: "OpenRouter",

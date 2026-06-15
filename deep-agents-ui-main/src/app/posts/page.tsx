@@ -40,37 +40,37 @@ function TwitterPost({ post, imageSrc, title }: { post: string; imageSrc: string
     const cleanPost = post.replace(/\*Character count:.*?\*\s*/gi, "").replace(/^---+\s*/gm, "").trim();
     return (
         <div style={{ fontFamily: "'TwitterChirp', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}
-            className="overflow-hidden rounded-2xl border border-[#2F3336] bg-[#000000] text-white shadow-xl w-full">
+            className="overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-xl w-full">
             <div className="flex gap-3 px-4 pt-4 pb-2">
                 <div className="shrink-0">
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center font-bold text-white text-base">N</div>
+                    <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center font-bold text-primary-foreground text-base">N</div>
                 </div>
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 flex-wrap">
                         <span className="font-bold text-[15px]">News Agent</span>
-                        <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] fill-[#1D9BF0]">
-                            <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.66 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z" />
+                        <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] fill-primary">
+                            <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.66 1.31 1.91 2.19(3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z" />
                         </svg>
-                        <span className="text-[#71767B] text-[14px]">@newsagent · Just now</span>
+                        <span className="text-muted-foreground text-[14px]">@newsagent · Just now</span>
                     </div>
-                    <p className="text-[12px] text-[#71767B] italic mb-1 mt-0.5 truncate">{title}</p>
-                    <p className="mt-1 text-[15px] leading-[1.5] text-[#E7E9EA] whitespace-pre-wrap break-words">{cleanPost}</p>
+                    <p className="text-[12px] text-muted-foreground/80 italic mb-1 mt-0.5 truncate">{title}</p>
+                    <p className="mt-1 text-[15px] leading-[1.5] text-foreground whitespace-pre-wrap break-words">{cleanPost}</p>
                     {imageSrc && (
-                        <div className="mt-3 overflow-hidden rounded-2xl border border-[#2F3336] w-full">
+                        <div className="mt-3 overflow-hidden rounded-2xl border border-border w-full">
                             <Image src={imageSrc} alt="Post image" width={600} height={338} className="w-full object-cover" unoptimized />
                         </div>
                     )}
-                    <div className="mt-3 flex items-center justify-between text-[#71767B] max-w-[425px]">
+                    <div className="mt-3 flex items-center justify-between text-muted-foreground max-w-[425px]">
                         {[MessageCircle, Repeat2, Heart, Bookmark, Share2].map((Icon, i) => (
-                            <button key={i} className="rounded-full p-2 hover:bg-white/10 transition-colors"><Icon size={18} strokeWidth={1.5} /></button>
+                            <button key={i} className="rounded-full p-2 hover:bg-accent transition-colors"><Icon size={18} strokeWidth={1.5} /></button>
                         ))}
                     </div>
                 </div>
-                <button className="shrink-0 self-start text-[#71767B] hover:text-white p-1 rounded-full hover:bg-white/10"><MoreHorizontal size={18} /></button>
+                <button className="shrink-0 self-start text-muted-foreground hover:text-foreground p-1 rounded-full hover:bg-accent"><MoreHorizontal size={18} /></button>
             </div>
-            <div className="border-t border-[#2F3336] mx-4" />
-            <div className="flex items-center gap-3 px-4 py-3 text-[#71767B] text-[14px]">
-                <div className="h-8 w-8 rounded-full bg-[#2F3336] flex items-center justify-center text-xs font-bold">U</div>
+            <div className="border-t border-border mx-4" />
+            <div className="flex items-center gap-3 px-4 py-3 text-muted-foreground text-[14px]">
+                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">U</div>
                 <span>Post your reply</span>
             </div>
         </div>
@@ -89,22 +89,22 @@ function InstagramPost({ post, imageSrc, title }: { post: string; imageSrc: stri
 
     return (
         <div style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}
-            className="overflow-hidden rounded-2xl border border-[#DBDBDB] bg-white shadow-xl w-full">
-            <div className="flex items-center justify-between px-3 py-3 border-b border-[#EFEFEF]">
+            className="overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-xl w-full">
+            <div className="flex items-center justify-between px-3 py-3 border-b border-border">
                 <div className="flex items-center gap-2.5">
                     <div className="h-9 w-9 rounded-full p-[2px] bg-gradient-to-br from-[#FCAF45] via-[#E1306C] to-[#833AB4]">
-                        <div className="h-full w-full rounded-full bg-white p-[2px]">
+                        <div className="h-full w-full rounded-full bg-card p-[2px]">
                             <div className="h-full w-full rounded-full bg-gradient-to-br from-[#FCAF45] via-[#E1306C] to-[#833AB4] flex items-center justify-center text-white font-bold text-xs">N</div>
                         </div>
                     </div>
                     <div>
-                        <p className="text-[13px] font-semibold text-[#262626] leading-4">newsagent</p>
-                        <p className="text-[11px] text-[#8E8E8E] truncate max-w-[220px]">{title}</p>
+                        <p className="text-[13px] font-semibold text-foreground leading-4">newsagent</p>
+                        <p className="text-[11px] text-muted-foreground truncate max-w-[220px]">{title}</p>
                     </div>
                 </div>
-                <button className="text-[#262626] p-1"><MoreHorizontal size={20} /></button>
+                <button className="text-foreground p-1"><MoreHorizontal size={20} /></button>
             </div>
-            <div className="aspect-square w-full overflow-hidden bg-[#FAFAFA]">
+            <div className="aspect-square w-full overflow-hidden bg-muted/20">
                 {imageSrc ? (
                     <Image src={imageSrc} alt="Instagram post" width={470} height={470} className="h-full w-full object-cover" unoptimized />
                 ) : (
@@ -116,25 +116,25 @@ function InstagramPost({ post, imageSrc, title }: { post: string; imageSrc: stri
             <div className="px-3 pt-3">
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex gap-3">
-                        <button className="hover:opacity-60 transition-opacity"><Heart size={24} className="text-[#262626]" strokeWidth={1.5} /></button>
-                        <button className="hover:opacity-60 transition-opacity"><MessageCircle size={24} className="text-[#262626]" strokeWidth={1.5} /></button>
-                        <button className="hover:opacity-60 transition-opacity"><Share2 size={24} className="text-[#262626]" strokeWidth={1.5} /></button>
+                        <button className="hover:opacity-60 transition-opacity"><Heart size={24} className="text-foreground" strokeWidth={1.5} /></button>
+                        <button className="hover:opacity-60 transition-opacity"><MessageCircle size={24} className="text-foreground" strokeWidth={1.5} /></button>
+                        <button className="hover:opacity-60 transition-opacity"><Share2 size={24} className="text-foreground" strokeWidth={1.5} /></button>
                     </div>
-                    <button className="hover:opacity-60 transition-opacity"><Bookmark size={24} className="text-[#262626]" strokeWidth={1.5} /></button>
+                    <button className="hover:opacity-60 transition-opacity"><Bookmark size={24} className="text-foreground" strokeWidth={1.5} /></button>
                 </div>
-                <div className="text-[14px] text-[#262626] leading-[1.5]">
+                <div className="text-[14px] text-foreground leading-[1.5]">
                     <span className="font-semibold mr-1">newsagent</span>
                     <span className="whitespace-pre-wrap">{visibleCaption}</span>
                     {needsTruncation && !expanded && (
-                        <button onClick={() => setExpanded(true)} className="text-[#8E8E8E] ml-1 hover:text-[#262626]">more</button>
+                        <button onClick={() => setExpanded(true)} className="text-muted-foreground ml-1 hover:text-foreground">more</button>
                     )}
                 </div>
-                {hashtagLine && <p className="mt-1 text-[14px] text-[#00376B]">{hashtagLine}</p>}
-                <p className="mt-1 mb-3 text-[10px] uppercase tracking-widest text-[#8E8E8E]">Just now</p>
+                {hashtagLine && <p className="mt-1 text-[14px] text-primary">{hashtagLine}</p>}
+                <p className="mt-1 mb-3 text-[10px] uppercase tracking-widest text-muted-foreground">Just now</p>
             </div>
-            <div className="border-t border-[#EFEFEF] flex items-center gap-3 px-3 py-2">
-                <div className="h-6 w-6 rounded-full bg-gray-300 flex items-center justify-center text-white text-xs font-bold">U</div>
-                <span className="text-[14px] text-[#8E8E8E]">Add a comment…</span>
+            <div className="border-t border-border flex items-center gap-3 px-3 py-2">
+                <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-muted-foreground text-xs font-bold">U</div>
+                <span className="text-[14px] text-muted-foreground">Add a comment…</span>
             </div>
         </div>
     );
@@ -149,40 +149,40 @@ function FacebookPost({ post, imageSrc, title }: { post: string; imageSrc: strin
 
     return (
         <div style={{ fontFamily: "'Helvetica Neue', Arial, sans-serif" }}
-            className="overflow-hidden rounded-2xl bg-white shadow-xl w-full border border-[#E4E6EB]">
+            className="overflow-hidden rounded-2xl bg-card shadow-xl w-full border border-border">
             <div className="flex items-center gap-2 px-4 pt-4 pb-3">
-                <div className="h-10 w-10 rounded-full bg-[#1877F2] flex items-center justify-center text-white font-bold text-sm">N</div>
+                <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">N</div>
                 <div className="flex-1 min-w-0">
-                    <p className="text-[15px] font-semibold text-[#050505]">News Agent</p>
-                    <p className="text-[12px] text-[#65676B] truncate">{title}</p>
+                    <p className="text-[15px] font-semibold text-foreground">News Agent</p>
+                    <p className="text-[12px] text-muted-foreground truncate">{title}</p>
                     <div className="flex items-center gap-1">
-                        <span className="text-[13px] text-[#65676B]">Just now ·</span>
-                        <Globe size={12} className="text-[#65676B]" />
+                        <span className="text-[13px] text-muted-foreground">Just now ·</span>
+                        <Globe size={12} className="text-muted-foreground" />
                     </div>
                 </div>
-                <button className="text-[#65676B] rounded-full hover:bg-[#F2F2F2] p-2"><MoreHorizontal size={20} /></button>
+                <button className="text-muted-foreground rounded-full hover:bg-accent p-2"><MoreHorizontal size={20} /></button>
             </div>
             <div className="px-4 pb-3">
-                <p className="text-[15px] text-[#050505] whitespace-pre-wrap leading-[1.52]">{visiblePost}</p>
+                <p className="text-[15px] text-foreground whitespace-pre-wrap leading-[1.52]">{visiblePost}</p>
                 {needsTruncation && !expanded && (
-                    <button onClick={() => setExpanded(true)} className="text-[#65676B] text-[15px] font-semibold mt-0.5 hover:underline">See more</button>
+                    <button onClick={() => setExpanded(true)} className="text-muted-foreground text-[15px] font-semibold mt-0.5 hover:underline">See more</button>
                 )}
             </div>
             {imageSrc && (
-                <div className="overflow-hidden w-full bg-[#F0F2F5]">
+                <div className="overflow-hidden w-full bg-muted/20">
                     <Image src={imageSrc} alt="Facebook post" width={500} height={500} className="w-full object-cover" unoptimized />
                 </div>
             )}
-            <div className="px-4 pt-3 pb-1 flex items-center justify-between text-[13px] text-[#65676B]">
+            <div className="px-4 pt-3 pb-1 flex items-center justify-between text-[13px] text-muted-foreground">
                 <span>👍 ❤️ 😮 1.2K</span>
                 <div className="flex gap-3">
                     <span className="hover:underline cursor-pointer">84 comments</span>
                     <span className="hover:underline cursor-pointer">312 shares</span>
                 </div>
             </div>
-            <div className="mx-4 border-t border-[#E4E6EB] mt-1 py-1 flex">
+            <div className="mx-4 border-t border-border mt-1 py-1 flex">
                 {[{ icon: ThumbsUp, label: "Like" }, { icon: MessageCircle, label: "Comment" }, { icon: Share2, label: "Share" }].map(({ icon: Icon, label }) => (
-                    <button key={label} className="flex flex-1 items-center justify-center gap-2 py-2 rounded-lg text-[15px] font-medium text-[#65676B] hover:bg-[#F2F2F2]">
+                    <button key={label} className="flex flex-1 items-center justify-center gap-2 py-2 rounded-lg text-[15px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
                         <Icon size={18} strokeWidth={1.5} />{label}
                     </button>
                 ))}
@@ -318,10 +318,10 @@ function PublishButton({
                     disabled={publishing || allPublished}
                     className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-semibold transition-all
                         ${allPublished
-                            ? "bg-green-100 text-green-700 cursor-default"
+                            ? "bg-success-primary text-success border border-success/30 cursor-default"
                             : publishing
-                                ? "bg-blue-100 text-blue-600 cursor-wait"
-                                : "bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
+                                ? "bg-accent text-primary cursor-wait"
+                                : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
                         }`}
                     title={allPublished ? "Published to all platforms" : `Publish to: ${unpublished.join(", ")}`}
                 >
@@ -340,7 +340,7 @@ function PublishButton({
                         }}
                         disabled={publishing}
                         title="Repost to platforms"
-                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-40"
+                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold border border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground transition-all disabled:opacity-40"
                     >
                         <RefreshCcw size={11} />
                         Repost
@@ -350,11 +350,11 @@ function PublishButton({
 
             {/* Repost dropdown */}
             {showRepost && (
-                <div className="absolute right-0 top-full mt-1.5 z-30 rounded-xl border bg-white shadow-2xl text-[12px] w-52 p-3">
-                    <p className="font-semibold text-gray-700 mb-2 text-[11px] uppercase tracking-wide">Select platforms to repost:</p>
+                <div className="absolute right-0 top-full mt-1.5 z-30 rounded-xl border border-border bg-card shadow-2xl text-[12px] w-52 p-3">
+                    <p className="font-semibold text-muted-foreground mb-2 text-[11px] uppercase tracking-wide">Select platforms to repost:</p>
                     <div className="space-y-1.5 mb-3">
                         {PLATFORM_META.filter((p) => enabledPlatforms.includes(p.key)).map((p) => (
-                            <label key={p.key} className="flex items-center gap-2 cursor-pointer px-2 py-1.5 rounded-lg hover:bg-gray-50">
+                            <label key={p.key} className="flex items-center gap-2 cursor-pointer px-2 py-1.5 rounded-lg hover:bg-accent">
                                 <input
                                     type="checkbox"
                                     checked={selectedRepost.includes(p.key)}
@@ -365,7 +365,7 @@ function PublishButton({
                                     {p.label}
                                 </span>
                                 {post.published_to[p.key] && (
-                                    <span className="text-[10px] text-green-600 ml-auto">✓ posted</span>
+                                    <span className="text-[10px] text-success ml-auto">✓ posted</span>
                                 )}
                             </label>
                         ))}
@@ -374,13 +374,13 @@ function PublishButton({
                         <button
                             onClick={() => doPublish(selectedRepost)}
                             disabled={!selectedRepost.length || publishing}
-                            className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-blue-600 text-white px-2 py-1.5 font-semibold hover:bg-blue-700 disabled:opacity-40 transition-all"
+                            className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-primary text-primary-foreground px-2 py-1.5 font-semibold hover:bg-primary/90 disabled:opacity-40 transition-all"
                         >
                             <Send size={11} />Post Now
                         </button>
                         <button
                             onClick={() => setShowRepost(false)}
-                            className="rounded-lg border px-3 py-1.5 text-gray-600 hover:bg-gray-50"
+                            className="rounded-lg border border-border px-3 py-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                         >
                             ✕
                         </button>
@@ -390,10 +390,10 @@ function PublishButton({
 
             {/* Results toast */}
             {showResults && results && (
-                <div className="absolute right-0 top-full mt-1 z-20 rounded-lg border bg-white shadow-xl text-[12px] w-56 p-2 space-y-1">
-                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide px-1 mb-1">Publish results</p>
+                <div className="absolute right-0 top-full mt-1 z-20 rounded-lg border border-border bg-card shadow-xl text-[12px] w-56 p-2 space-y-1">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-1 mb-1">Publish results</p>
                     {Object.entries(results).map(([platform, r]) => (
-                        <div key={platform} className={`flex items-start gap-1.5 px-2 py-1.5 rounded ${r.success ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>
+                        <div key={platform} className={`flex items-start gap-1.5 px-2 py-1.5 rounded border ${r.success ? "bg-success-primary border-success/20 text-success" : "bg-destructive/10 border-destructive/20 text-destructive"}`}>
                             {r.success ? <CheckCircle2 size={11} className="mt-0.5 shrink-0" /> : <XCircle size={11} className="mt-0.5 shrink-0" />}
                             <span>
                                 <span className="font-semibold capitalize">{platform}: </span>
@@ -494,11 +494,11 @@ export default function PostsPage() {
                                 <button
                                     key={p.key}
                                     onClick={() => setActiveTab(p.key)}
-                                    className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[13px] font-semibold border transition-all ${active ? p.activeClass + " border-transparent shadow" : p.inactiveClass + " border-gray-200"}`}
+                                    className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[13px] font-semibold border transition-all ${active ? p.activeClass + " border-transparent shadow" : p.inactiveClass + " border-border"}`}
                                 >
                                     {p.icon(active)}
                                     {p.label}
-                                    <span className={`text-[11px] rounded-full px-1.5 py-0.5 ${active ? "bg-white/20" : "bg-gray-100 text-gray-500"}`}>{count}</span>
+                                    <span className={`text-[11px] rounded-full px-1.5 py-0.5 ${active ? "bg-white/20" : "bg-muted text-muted-foreground"}`}>{count}</span>
                                 </button>
                             );
                         })}
@@ -522,18 +522,18 @@ export default function PostsPage() {
                 {loading && (
                     <div className="flex min-h-[400px] items-center justify-center">
                         <div className="text-center">
-                            <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
-                            <p className="text-gray-500 text-[14px]">Loading posts…</p>
+                            <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                            <p className="text-muted-foreground text-[14px]">Loading posts…</p>
                         </div>
                     </div>
                 )}
 
                 {error && !loading && (
                     <div className="flex min-h-[400px] items-center justify-center">
-                        <div className="text-center rounded-2xl border border-dashed border-gray-300 bg-white p-12 shadow-sm">
+                        <div className="text-center rounded-2xl border border-dashed border-border bg-card p-12 shadow-sm">
                             <p className="text-5xl mb-4">📭</p>
-                            <h2 className="text-xl font-semibold text-gray-700 mb-2">No posts yet</h2>
-                            <p className="text-gray-500 text-[14px] mb-6">{error}</p>
+                            <h2 className="text-xl font-semibold text-foreground mb-2">No posts yet</h2>
+                            <p className="text-muted-foreground text-[14px] mb-6">{error}</p>
                             <Link href="/"><Button>Run the Agent →</Button></Link>
                         </div>
                     </div>
@@ -541,7 +541,7 @@ export default function PostsPage() {
 
                 {!loading && !error && visiblePosts.length === 0 && (
                     <div className="flex min-h-[300px] items-center justify-center">
-                        <p className="text-gray-400 text-[15px]">No {PLATFORMS.find(p => p.key === activeTab)?.label} posts yet.</p>
+                        <p className="text-muted-foreground/80 text-[15px]">No {PLATFORMS.find(p => p.key === activeTab)?.label} posts yet.</p>
                     </div>
                 )}
 
@@ -554,12 +554,12 @@ export default function PostsPage() {
                                     {/* Story info bar */}
                                     <div className="flex items-start justify-between px-1">
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-[11px] text-gray-400 font-mono">{formatPKT(post.created_at)} PKT</p>
-                                            <p className="text-[13px] font-semibold text-gray-800 line-clamp-2">{title}</p>
+                                            <p className="text-[11px] text-muted-foreground/80 font-mono">{formatPKT(post.created_at)} PKT</p>
+                                            <p className="text-[13px] font-semibold text-foreground line-clamp-2">{title}</p>
                                             {post.sources?.length > 0 && (
                                                 <div className="flex flex-wrap gap-1 mt-1">
                                                     {post.sources.map((s, i) => (
-                                                        <span key={i} className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500">{s}</span>
+                                                        <span key={i} className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{s}</span>
                                                     ))}
                                                 </div>
                                             )}
@@ -575,22 +575,22 @@ export default function PostsPage() {
                                             />
                                             {post.image_url && (
                                                 <a href={post.image_url} download="social_post.jpg"
-                                                    className="flex items-center gap-1 rounded-lg bg-gray-800 px-2 py-1 text-[11px] font-medium text-white hover:bg-gray-600">
+                                                    className="flex items-center gap-1 rounded-lg bg-secondary px-2 py-1 text-[11px] font-medium text-secondary-foreground hover:bg-secondary/80 border border-border">
                                                     <Download size={11} />Img
                                                 </a>
                                             )}
                                             {confirmDeleteId === post.id ? (
                                                 <div className="flex items-center gap-1">
                                                     <button onClick={() => handleDelete(post.id)} disabled={!!deletingId}
-                                                        className="rounded bg-red-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                                                        className="rounded bg-destructive px-2 py-1 text-[11px] font-semibold text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50">
                                                         {deletingId === post.id ? "…" : "Yes"}
                                                     </button>
                                                     <button onClick={() => setConfirmDeleteId(null)}
-                                                        className="rounded px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-100">No</button>
+                                                        className="rounded px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-accent hover:text-foreground">No</button>
                                                 </div>
                                             ) : (
                                                 <button onClick={() => setConfirmDeleteId(post.id)}
-                                                    className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
+                                                    className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
                                                     <Trash2 size={13} />
                                                 </button>
                                             )}

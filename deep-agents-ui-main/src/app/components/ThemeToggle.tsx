@@ -19,7 +19,7 @@ export function ThemeToggle() {
       <Button
         variant="ghost"
         size="sm"
-        className="w-9 h-9 rounded-lg border border-border p-0"
+        className="w-9 h-9 rounded-lg p-0"
         aria-label="Toggle theme"
       >
         <span className="w-4 h-4" />
@@ -65,7 +65,7 @@ export function ThemeToggle() {
       size="sm"
       onClick={cycleTheme}
       title={getThemeLabel()}
-      className="w-9 h-9 rounded-lg border border-border bg-card p-0 text-foreground hover:bg-accent transition-all duration-200 shadow-sm"
+      className="w-9 h-9 rounded-lg p-0 text-foreground hover:bg-accent transition-all duration-200"
       aria-label="Toggle theme"
     >
       {getThemeIcon()}

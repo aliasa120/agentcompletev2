@@ -1,4 +1,4 @@
-import { Inter } from "next/font/google";
+import { Outfit, Instrument_Serif } from "next/font/google";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { Toaster } from "sonner";
 import "./globals.css";
@@ -9,11 +9,19 @@ import { ThemeProvider } from "@/providers/ThemeProvider";
 // This prevents Supabase/API calls from running during Docker build
 export const dynamic = "force-dynamic";
 
-const inter = Inter({
+const outfit = Outfit({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["300", "400", "500", "600", "700"],
   display: "swap",
-  variable: "--font-inter",
+  variable: "--font-outfit",
+});
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: ["400"],
+  style: ["normal", "italic"],
+  display: "swap",
+  variable: "--font-instrument",
 });
 
 export default function RootLayout({
@@ -46,7 +54,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${inter.className} ${inter.variable}`}
+        className={`${outfit.className} ${outfit.variable} ${instrumentSerif.variable}`}
         suppressHydrationWarning
       >
         <ThemeProvider>

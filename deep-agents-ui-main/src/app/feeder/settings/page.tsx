@@ -13,8 +13,9 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 
-interface FeedSource { id: string; url: string; label: string; is_active: boolean; }
-interface WhitelistDomain { id: string; domain: string; note: string; }
+interface FeedSource { id: string; url: string; label: string; is_active: boolean; workflow_id?: string | null; }
+interface WhitelistDomain { id: string; domain: string; note: string; workflow_id?: string | null; }
+interface Workflow { id: string; name: string; feeder_enabled: boolean; feeder_interval_minutes: number; }
 
 // All setting keys the pipeline actually reads — must match these exactly
 const FEEDER_SETTING_KEYS = [
@@ -88,9 +89,13 @@ export default function FeederSettingsPage() {
     const [sources, setSources] = useState<FeedSource[]>([]);
     const [newUrl, setNewUrl] = useState("");
     const [newLabel, setNewLabel] = useState("");
+    const [workflows, setWorkflows] = useState<Workflow[]>([]);
+    const [selectedWorkflowId, setSelectedWorkflowId] = useState("");
     const [domains, setDomains] = useState<WhitelistDomain[]>([]);
     const [newDomain, setNewDomain] = useState("");
     const [newDomainNote, setNewDomainNote] = useState("");
+    const [selectedDomainWorkflowId, setSelectedDomainWorkflowId] = useState("");
+    const [wfArticleCounts, setWfArticleCounts] = useState<Record<string, { pending: number; total: number }>>({});
 
     // Settings state — starts with defaults, overwritten by DB on load
     const [settings, setSettings] = useState<Record<string, string>>(DEFAULTS);
@@ -145,17 +150,19 @@ export default function FeederSettingsPage() {
     const loadAll = useCallback(async () => {
         setLoading(true);
         try {
-            const [srcsRes, domsRes, settRes, guidRes, hashRes, artRes] = await Promise.all([
+            const [srcsRes, domsRes, settRes, guidRes, hashRes, artRes, wfsRes] = await Promise.all([
                 supabase.from("feeder_sources").select("*").order("created_at"),
                 supabase.from("feeder_whitelisted_domains").select("*").order("domain"),
                 supabase.from("feeder_settings").select("key,value"),
                 supabase.from("feeder_seen_guids").select("id", { count: "exact", head: true }),
                 supabase.from("feeder_seen_hashes").select("id", { count: "exact", head: true }),
-                supabase.from("feeder_articles").select("status"),
+                supabase.from("feeder_articles").select("status, workflow_id"),
+                supabase.from("workflows").select("id, name, feeder_enabled, feeder_interval_minutes").order("name"),
             ]);
 
             setSources(srcsRes.data ?? []);
             setDomains(domsRes.data ?? []);
+            setWorkflows(wfsRes.data ?? []);
 
             // Build settings map — start with defaults, overlay DB values
             const loaded: Record<string, string> = { ...DEFAULTS };
@@ -169,6 +176,21 @@ export default function FeederSettingsPage() {
             const statusCounts: Record<string, number> = {};
             for (const a of artRes.data ?? []) statusCounts[a.status] = (statusCounts[a.status] ?? 0) + 1;
             setArticlesByStatus(Object.entries(statusCounts).map(([status, count]) => ({ status, count })));
+
+            const counts: Record<string, { pending: number; total: number }> = {};
+            for (const a of artRes.data ?? []) {
+                const wfId = a.workflow_id;
+                if (wfId) {
+                    if (!counts[wfId]) {
+                        counts[wfId] = { pending: 0, total: 0 };
+                    }
+                    counts[wfId].total++;
+                    if (a.status === "Pending") {
+                        counts[wfId].pending++;
+                    }
+                }
+            }
+            setWfArticleCounts(counts);
 
             setStats({
                 guids: guidRes.count ?? 0,
@@ -243,19 +265,35 @@ export default function FeederSettingsPage() {
 
     const addSource = async () => {
         if (!newUrl.trim()) return;
-        await supabase.from("feeder_sources").insert({ url: newUrl.trim(), label: newLabel.trim() || newUrl.trim() });
-        setNewUrl(""); setNewLabel(""); loadAll();
+        await supabase.from("feeder_sources").insert({
+            url: newUrl.trim(),
+            label: newLabel.trim() || newUrl.trim(),
+            workflow_id: selectedWorkflowId || null,
+        });
+        setNewUrl(""); setNewLabel(""); setSelectedWorkflowId(""); loadAll();
     };
     const deleteSource = async (id: string) => { await supabase.from("feeder_sources").delete().eq("id", id); loadAll(); };
     const toggleSource = async (id: string, is_active: boolean) => { await supabase.from("feeder_sources").update({ is_active: !is_active }).eq("id", id); loadAll(); };
+    const updateSourceWorkflow = async (id: string, workflow_id: string | null) => {
+        await supabase.from("feeder_sources").update({ workflow_id }).eq("id", id);
+        loadAll();
+    };
 
     const addDomain = async () => {
         if (!newDomain.trim()) return;
         const domain = newDomain.trim().toLowerCase().replace(/^www\./, "");
-        await supabase.from("feeder_whitelisted_domains").insert({ domain, note: newDomainNote.trim() });
-        setNewDomain(""); setNewDomainNote(""); loadAll();
+        await supabase.from("feeder_whitelisted_domains").insert({ 
+            domain, 
+            note: newDomainNote.trim(),
+            workflow_id: selectedDomainWorkflowId || null
+        });
+        setNewDomain(""); setNewDomainNote(""); setSelectedDomainWorkflowId(""); loadAll();
     };
     const deleteDomain = async (id: string) => { await supabase.from("feeder_whitelisted_domains").delete().eq("id", id); loadAll(); };
+    const updateDomainWorkflow = async (id: string, workflow_id: string | null) => {
+        await supabase.from("feeder_whitelisted_domains").update({ workflow_id }).eq("id", id);
+        loadAll();
+    };
 
     const clearTable = async (table: string, label: string) => {
         if (!confirm(`Clear all records from "${label}"?`)) return;
@@ -463,49 +501,39 @@ export default function FeederSettingsPage() {
                             <h2 className="font-semibold">Feeder Auto-Run Schedule</h2>
                         </div>
                         <div className="p-5 space-y-5">
-
-                            {/* Toggle — saves immediately */}
-                            <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
-                                <div>
-                                    <p className="text-sm font-medium">Auto-Run</p>
-                                    <p className="text-xs text-muted-foreground mt-0.5">
-                                        {autoEnabled ? "Feeder runs automatically on schedule" : "Only runs when triggered manually"}
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={toggleAutoTrigger}
-                                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors
-                                        ${autoEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-                                >
-                                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform
-                                        ${autoEnabled ? "translate-x-6" : "translate-x-1"}`} />
-                                </button>
+                            <div className="p-4 rounded-lg border bg-primary/5 text-sm space-y-2">
+                                <p className="font-semibold text-primary">Workflow-Specific Schedules</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Feeder schedules are now configured **per-workflow** in the **Agent Settings** panel.
+                                    This allows you to customize trigger intervals (e.g. 15m, 30m, 1h) or pause the feeder for each workflow independently.
+                                </p>
+                                <Link href="/agent-settings">
+                                    <Button size="sm" className="mt-2 text-xs h-7 gap-1">
+                                        <Zap className="h-3.5 w-3.5" /> Go to Workflows settings
+                                    </Button>
+                                </Link>
                             </div>
 
-                            {/* Interval */}
-                            <div className={autoEnabled ? "" : "opacity-50 pointer-events-none"}>
-                                <div className="flex items-center justify-between mb-1">
-                                    <label className="text-sm font-medium">Run Interval</label>
-                                    <span className="text-xs font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">
-                                        every {settings.feeder_auto_trigger_interval_minutes}min
-                                    </span>
-                                </div>
-                                <p className="text-xs text-muted-foreground mb-2">Pipeline runs automatically every N hours</p>
-                                <div className="flex gap-2 flex-wrap mb-2">
-                                    {FEEDER_INTERVALS.map(iv => (
-                                        <PresetButton key={iv.value} value={iv.value} current={settings.feeder_auto_trigger_interval_minutes} onClick={() => setSetting("feeder_auto_trigger_interval_minutes", iv.value)}>
-                                            {iv.label}
-                                        </PresetButton>
-                                    ))}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        type="number" min={1} step={1}
-                                        className="h-8 w-24 text-sm"
-                                        value={settings.feeder_auto_trigger_interval_minutes}
-                                        onChange={e => setSetting("feeder_auto_trigger_interval_minutes", e.target.value)}
-                                    />
-                                    <span className="text-xs text-muted-foreground">minutes (custom)</span>
+                            <div className="rounded-lg border bg-muted/20 p-3 space-y-2 text-xs">
+                                <p className="font-semibold text-muted-foreground uppercase tracking-wider">Active Feeder Schedules:</p>
+                                <div className="space-y-1.5">
+                                    {workflows.map(w => {
+                                        const counts = wfArticleCounts[w.id] || { pending: 0, total: 0 };
+                                        return (
+                                            <div key={w.id} className="flex justify-between items-center py-1 border-b last:border-0 border-border/40">
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium">{w.name}</span>
+                                                    <span className="text-[10px] text-muted-foreground">{counts.total} articles ({counts.pending} pending)</span>
+                                                </div>
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${w.feeder_enabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                                                    {w.feeder_enabled ? `Every ${w.feeder_interval_minutes}m` : "Disabled"}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                    {workflows.length === 0 && (
+                                        <p className="text-muted-foreground italic">No workflows configured yet.</p>
+                                    )}
                                 </div>
                             </div>
 
@@ -516,39 +544,6 @@ export default function FeederSettingsPage() {
                                     <p className="text-xs text-muted-foreground">Pakistan Time (PKT, UTC+5)</p>
                                     <p className="text-sm font-mono font-bold">{pktTime}</p>
                                 </div>
-                            </div>
-
-                            {autoEnabled && nextTriggerIn && (
-                                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm flex items-center gap-2">
-                                    <Timer className="h-4 w-4 text-primary shrink-0" />
-                                    <span className="text-muted-foreground">Next auto-run in:</span>
-                                    <span className="font-bold text-primary">{nextTriggerIn}</span>
-                                </div>
-                            )}
-
-                            {settings.feeder_last_trigger_at && (
-                                <p className="text-xs text-muted-foreground">
-                                    Last run:{" "}
-                                    {new Date(settings.feeder_last_trigger_at).toLocaleString("en-PK", {
-                                        timeZone: "Asia/Karachi", hour12: false,
-                                        year: "numeric", month: "2-digit", day: "2-digit",
-                                        hour: "2-digit", minute: "2-digit"
-                                    })} PKT
-                                </p>
-                            )}
-
-                            <div className="p-3 rounded-lg bg-muted/50 border text-xs text-muted-foreground space-y-1">
-                                <p className="font-medium text-foreground">How it works</p>
-                                <p><ChevronRight className="inline h-3 w-3 mr-1" />Toggle saves instantly — no Save button needed</p>
-                                <p><ChevronRight className="inline h-3 w-3 mr-1" />Interval changes take effect within ~60 seconds on the server</p>
-                                <p><ChevronRight className="inline h-3 w-3 mr-1" />Manual trigger still available on the Feeder Dashboard</p>
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                                <Button onClick={saveSettings} disabled={saveStatus === 'saving' || !isDirty} variant="outline" className="flex-1">
-                                    {saveStatus === 'saving' ? 'Saving…' : isDirty ? 'Save Interval' : 'No Changes'}
-                                </Button>
-                                {saveStatus === 'saved' && <span className="flex items-center gap-1 text-sm text-primary font-medium"><CheckCircle2 className="h-4 w-4" />Saved</span>}
                             </div>
                         </div>
                     </section>
@@ -565,7 +560,7 @@ export default function FeederSettingsPage() {
                         <div className="p-4 space-y-2 max-h-64 overflow-auto">
                             {sources.length === 0 && <p className="text-sm text-muted-foreground">No feed sources added yet.</p>}
                             {sources.map(s => (
-                                <div key={s.id} className="flex items-center gap-2 text-sm">
+                                <div key={s.id} className="flex items-center gap-3 text-sm">
                                     <button onClick={() => toggleSource(s.id, s.is_active)} title={s.is_active ? "Active · click to pause" : "Paused · click to activate"}>
                                         <div className={`h-2.5 w-2.5 rounded-full transition-colors ${s.is_active ? "bg-primary" : "bg-muted-foreground/30"}`} />
                                     </button>
@@ -573,6 +568,16 @@ export default function FeederSettingsPage() {
                                         <p className="font-medium truncate">{s.label}</p>
                                         <p className="text-xs text-muted-foreground truncate">{s.url}</p>
                                     </div>
+                                    <select
+                                        value={s.workflow_id || ""}
+                                        onChange={e => updateSourceWorkflow(s.id, e.target.value || null)}
+                                        className="text-xs h-7 rounded border bg-background px-1.5 focus:outline-none focus:ring-1 focus:ring-primary max-w-[140px]"
+                                    >
+                                        <option value="">(No Workflow)</option>
+                                        {workflows.map(w => (
+                                            <option key={w.id} value={w.id}>{w.name}</option>
+                                        ))}
+                                    </select>
                                     <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive shrink-0" onClick={() => deleteSource(s.id)}>
                                         <X className="h-3 w-3" />
                                     </Button>
@@ -580,8 +585,21 @@ export default function FeederSettingsPage() {
                             ))}
                         </div>
                         <div className="p-4 pt-0 flex flex-col gap-2 border-t">
-                            <Input placeholder="RSS URL" value={newUrl} onChange={e => setNewUrl(e.target.value)} className="h-8 text-sm" />
+                            <Input placeholder="RSS URL" value={newUrl} onChange={e => setNewUrl(e.target.value)} className="h-8 text-sm mt-3" />
                             <Input placeholder="Label (optional)" value={newLabel} onChange={e => setNewLabel(e.target.value)} className="h-8 text-sm" />
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs font-semibold text-muted-foreground shrink-0">Assign Workflow:</label>
+                                <select
+                                    value={selectedWorkflowId}
+                                    onChange={e => setSelectedWorkflowId(e.target.value)}
+                                    className="flex-1 h-8 rounded border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                >
+                                    <option value="">(No Workflow)</option>
+                                    {workflows.map(w => (
+                                        <option key={w.id} value={w.id}>{w.name}</option>
+                                    ))}
+                                </select>
+                            </div>
                             <Button size="sm" onClick={addSource}><PlusCircle className="mr-2 h-3.5 w-3.5" />Add Source</Button>
                         </div>
                     </section>
@@ -601,15 +619,38 @@ export default function FeederSettingsPage() {
                                         <p className="font-medium">{d.domain}</p>
                                         {d.note && <p className="text-xs text-muted-foreground">{d.note}</p>}
                                     </div>
-                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => deleteDomain(d.id)}>
+                                    <select
+                                        value={d.workflow_id || ""}
+                                        onChange={e => updateDomainWorkflow(d.id, e.target.value || null)}
+                                        className="text-xs h-7 rounded border bg-background px-1.5 focus:outline-none focus:ring-1 focus:ring-primary max-w-[140px] mr-1"
+                                    >
+                                        <option value="">(Global)</option>
+                                        {workflows.map(w => (
+                                            <option key={w.id} value={w.id}>{w.name}</option>
+                                        ))}
+                                    </select>
+                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive shrink-0" onClick={() => deleteDomain(d.id)}>
                                         <X className="h-3 w-3" />
                                     </Button>
                                 </div>
                             ))}
                         </div>
                         <div className="p-4 pt-0 flex flex-col gap-2 border-t">
-                            <Input placeholder="e.g. dawn.com" value={newDomain} onChange={e => setNewDomain(e.target.value)} className="h-8 text-sm" />
+                            <Input placeholder="e.g. dawn.com" value={newDomain} onChange={e => setNewDomain(e.target.value)} className="h-8 text-sm mt-3" />
                             <Input placeholder="Note (optional)" value={newDomainNote} onChange={e => setNewDomainNote(e.target.value)} className="h-8 text-sm" />
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs font-semibold text-muted-foreground shrink-0">Assign Workflow:</label>
+                                <select
+                                    value={selectedDomainWorkflowId}
+                                    onChange={e => setSelectedDomainWorkflowId(e.target.value)}
+                                    className="flex-1 h-8 rounded border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                >
+                                    <option value="">(Global / All Workflows)</option>
+                                    {workflows.map(w => (
+                                        <option key={w.id} value={w.id}>{w.name}</option>
+                                    ))}
+                                </select>
+                            </div>
                             <Button size="sm" onClick={addDomain}><PlusCircle className="mr-2 h-3.5 w-3.5" />Add Domain</Button>
                         </div>
                     </section>

@@ -1,4 +1,71 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+// GET /api/test-ai-model — returns env key status + custom models from DB
+export async function GET() {
+  const PROVIDER_STATUS_KEYS: Record<string, string> = {
+    vercel:      "AI_GATEWAY_API_KEY",
+    openai:      "OPENAI_API_KEY",
+    anthropic:   "ANTHROPIC_API_KEY",
+    google:      "GOOGLE_API_KEY",
+    openrouter:  "OPENROUTER_API_KEY",
+    litellm:     "LITELLM_API_KEY",
+    groq:        "GROQ_API_KEY",
+    together:    "TOGETHER_API_KEY",
+    nvidia:      "NVIDIA_API_KEY",
+    mimo:        "MIMO_API_KEY",
+    novita:      "NOVITA_API_KEY",
+  };
+
+  const env_status: Record<string, boolean> = {};
+  for (const [pid, envKey] of Object.entries(PROVIDER_STATUS_KEYS)) {
+    env_status[pid] = !!(process.env[envKey]);
+  }
+
+  let custom_models: Record<string, string[]> = {};
+  try {
+    const { data } = await supabase
+      .from("agent_settings")
+      .select("value")
+      .eq("key", "custom_models_by_provider")
+      .single();
+    if (data?.value) custom_models = JSON.parse(data.value);
+  } catch { /* no saved custom models yet */ }
+
+  return NextResponse.json({ env_status, custom_models });
+}
+
+// PATCH /api/test-ai-model — save custom models for one provider
+export async function PATCH(req: Request) {
+  try {
+    const { provider_id, custom_models } = await req.json();
+    if (!provider_id) return NextResponse.json({ error: "provider_id required" }, { status: 400 });
+
+    let existing: Record<string, string[]> = {};
+    const { data } = await supabase
+      .from("agent_settings")
+      .select("value")
+      .eq("key", "custom_models_by_provider")
+      .single();
+    if (data?.value) { try { existing = JSON.parse(data.value); } catch { /* ignore */ } }
+
+    const updated = { ...existing, [provider_id]: custom_models ?? [] };
+    await supabase.from("agent_settings").upsert(
+      { key: "custom_models_by_provider", value: JSON.stringify(updated) },
+      { onConflict: "key" }
+    );
+    return NextResponse.json({ success: true });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Error" }, { status: 500 });
+  }
+}
+
+
 
 /**
  * POST /api/test-ai-model
@@ -20,6 +87,7 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   vercel:     "AI_GATEWAY_API_KEY",
   openai:     "OPENAI_API_KEY",
   anthropic:  "ANTHROPIC_API_KEY",
+  google:     "GOOGLE_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
   litellm:    "LITELLM_API_KEY",
   groq:       "GROQ_API_KEY",
@@ -34,6 +102,7 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
   vercel:     "https://ai-gateway.vercel.sh/v1",
   openai:     "https://api.openai.com/v1",
   anthropic:  "https://api.anthropic.com/v1",
+  google:     "https://generativelanguage.googleapis.com/v1beta/openai",
   openrouter: "https://openrouter.ai/api/v1",
   litellm:    "", // dynamic — from LITELLM_BASE_URL env or request baseUrl
   groq:       "https://api.groq.com/openai/v1",

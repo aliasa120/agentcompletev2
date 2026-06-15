@@ -1,0 +1,937 @@
+
+--- Load at 2026-06-12T22:45:36.307867 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool']
+
+--- Load at 2026-06-12T22:45:49.460004 ---
+Compiled workflows keys: []
+compiled_workflows is empty!
+
+--- Load at 2026-06-12T22:46:10.581061 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Failed to load Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: No module named 'composio'
+Traceback (most recent call last):
+  File "C:\Users\kashif\Downloads\agentcompletev2-main (1)\agentcompletev2-main\research_agent\tools\mcp_loader.py", line 183, in load_mcp_tools_for_agent
+    from composio import Composio
+ModuleNotFoundError: No module named 'composio'
+
+
+--- Load at 2026-06-12T22:46:51.300506 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool']
+[mcp_loader] Failed to load Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: No module named 'composio'
+Traceback (most recent call last):
+  File "C:\Users\kashif\Downloads\agentcompletev2-main (1)\agentcompletev2-main\research_agent\tools\mcp_loader.py", line 183, in load_mcp_tools_for_agent
+    from composio import Composio
+ModuleNotFoundError: No module named 'composio'
+
+
+--- Load at 2026-06-12T22:47:06.419296 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-12T22:51:07.031887 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T06:39:07.979059 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T06:57:43.959523 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T06:57:53.119931 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T06:58:44.835366 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T07:12:25.389231 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T07:12:40.340976 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Failed to load Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: No module named 'composio'
+Traceback (most recent call last):
+  File "C:\Users\kashif\Downloads\agentcompletev2-main (1)\agentcompletev2-main\research_agent\tools\mcp_loader.py", line 183, in load_mcp_tools_for_agent
+    from composio import Composio
+ModuleNotFoundError: No module named 'composio'
+
+
+--- Load at 2026-06-13T11:57:19.226215 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+
+--- Load at 2026-06-13T12:03:36.847008 ---
+Compiled workflows keys: []
+compiled_workflows is empty!
+
+--- Load at 2026-06-13T12:03:45.438344 ---
+Compiled workflows keys: []
+compiled_workflows is empty!
+
+--- Load at 2026-06-13T12:08:39.778212 ---
+Compiled workflows keys: []
+compiled_workflows is empty!
+[mcp_loader] Failed to load Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: No module named 'composio'
+Traceback (most recent call last):
+  File "C:\Users\kashif\Downloads\agentcompletev2-main (1)\agentcompletev2-main\research_agent\tools\mcp_loader.py", line 183, in load_mcp_tools_for_agent
+    from composio import Composio
+ModuleNotFoundError: No module named 'composio'
+
+
+--- Load at 2026-06-13T12:10:22.087909 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:14:59.251319 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:25:15.191585 ---
+Compiled workflows keys: []
+compiled_workflows is empty!
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:29:04.088911 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:32:15.508817 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:32:26.872850 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:32:38.680799 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:35:16.064010 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:52:35.419488 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:53:52.641572 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:54:15.872371 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:54:26.096946 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:54:35.884808 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:54:47.257993 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:54:58.047505 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T12:55:54.309315 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T12:56:06.476586 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T12:58:26.136910 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T13:10:32.975867 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T13:10:49.603698 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T13:14:32.170570 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T13:15:05.129819 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T13:27:57.510182 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T13:29:28.426950 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T13:29:40.764459 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T13:29:53.297845 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T13:32:13.283010 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T13:37:27.355768 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T13:41:07.324123 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T13:42:51.899113 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T13:43:04.673486 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T13:44:58.174087 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T14:37:24.300252 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T14:42:01.356953 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T14:42:15.583796 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T14:42:30.658690 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T14:46:55.873310 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T14:47:08.526238 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T14:48:06.796486 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T14:50:23.993520 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T14:50:37.187674 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T14:52:44.056785 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T19:51:09.266157 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:00:03.404266 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:01:37.198669 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T20:01:49.103782 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:02:04.660966 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T20:09:40.867444 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:13:00.453267 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:13:15.433496 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T20:14:05.072482 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-13T20:14:20.890859 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:18:40.903607 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:19:06.923058 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:19:57.958296 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:21:25.548311 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:21:48.622223 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:22:30.271616 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:27:10.340986 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:27:35.027628 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:28:17.447623 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:28:37.438435 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:28:39.113321 ---
+Compiled workflows keys: []
+compiled_workflows is empty!
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:29:50.145014 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Failed to load Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: No module named 'composio'
+Traceback (most recent call last):
+  File "C:\Users\kashif\Downloads\agentcompletev2-main (1)\agentcompletev2-main\research_agent\tools\mcp_loader.py", line 183, in load_mcp_tools_for_agent
+    from composio import Composio
+ModuleNotFoundError: No module named 'composio'
+
+[mcp_loader] Failed to load Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: No module named 'composio'
+Traceback (most recent call last):
+  File "C:\Users\kashif\Downloads\agentcompletev2-main (1)\agentcompletev2-main\research_agent\tools\mcp_loader.py", line 183, in load_mcp_tools_for_agent
+    from composio import Composio
+ModuleNotFoundError: No module named 'composio'
+
+
+--- Load at 2026-06-13T20:30:40.236290 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:31:04.490818 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Failed to load Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: No module named 'composio'
+Traceback (most recent call last):
+  File "C:\Users\kashif\Downloads\agentcompletev2-main (1)\agentcompletev2-main\research_agent\tools\mcp_loader.py", line 183, in load_mcp_tools_for_agent
+    from composio import Composio
+ModuleNotFoundError: No module named 'composio'
+
+[mcp_loader] Failed to load Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: No module named 'composio'
+Traceback (most recent call last):
+  File "C:\Users\kashif\Downloads\agentcompletev2-main (1)\agentcompletev2-main\research_agent\tools\mcp_loader.py", line 183, in load_mcp_tools_for_agent
+    from composio import Composio
+ModuleNotFoundError: No module named 'composio'
+
+
+--- Load at 2026-06-13T20:31:18.492558 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:31:41.593068 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:31:59.514741 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:32:23.671668 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:32:40.750830 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:33:32.857222 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T20:33:57.564961 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T22:58:02.154606 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T23:06:09.185014 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-13T23:08:06.904515 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T11:22:10.754888 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T11:27:09.172918 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Failed to load Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: No module named 'composio'
+Traceback (most recent call last):
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\research_agent\tools\mcp_loader.py", line 183, in load_mcp_tools_for_agent
+    from composio import Composio
+ModuleNotFoundError: No module named 'composio'
+
+[mcp_loader] Failed to load Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: No module named 'composio'
+Traceback (most recent call last):
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\research_agent\tools\mcp_loader.py", line 183, in load_mcp_tools_for_agent
+    from composio import Composio
+ModuleNotFoundError: No module named 'composio'
+
+
+--- Load at 2026-06-14T12:04:16.529294 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T12:08:33.721639 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-14T12:10:30.582373 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T12:10:59.071163 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T12:11:10.790640 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T12:12:52.787270 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T12:20:08.060957 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T16:17:21.880373 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T16:28:21.769414 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T16:29:19.608569 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T16:40:42.836885 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T16:58:47.895356 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T18:41:32.331046 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T18:49:51.617569 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+
+--- Load at 2026-06-14T18:51:14.361704 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 3 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-14T20:27:29.140877 ---
+Compiled workflows keys: ['ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']

@@ -21,8 +21,16 @@ import time
 import json
 import logging
 import requests
+import threading
 from datetime import datetime, timezone
 from dotenv import load_dotenv
+
+def fire_in_background(func, *args, **kwargs):
+    """Run a function in a background thread."""
+    t = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
+    t.start()
+    return t
+
 
 # ── Publish failure tracker ──────────────────────────────────────────────────
 # Tracks consecutive failures per (post_id, platform) in memory.
@@ -147,36 +155,50 @@ def _retry(fn, max_attempts: int = 3, wait_seconds: int = 10, label: str = ""):
 # ── Feeder trigger ───────────────────────────────────────────────────────────
 def check_feeder() -> None:
     try:
-        rows = _sb_get("feeder_settings", "key=in.(feeder_auto_trigger_enabled,feeder_auto_trigger_interval_minutes,feeder_last_trigger_at)")
-        smap = {r["key"]: r["value"] for r in rows}
-
-        enabled = smap.get("feeder_auto_trigger_enabled", "false").lower() == "true"
-        if not enabled:
+        # Get all workflows
+        workflows = _sb_get("workflows")
+        if not workflows:
+            log.info("Feeder: No workflows found.")
             return
 
-        interval_min = float(smap.get("feeder_auto_trigger_interval_minutes", "30") or "30")
-        interval_sec = interval_min * 60
-        last_at = smap.get("feeder_last_trigger_at", "") or ""
-        elapsed = _elapsed_since(last_at)
+        for wf in workflows:
+            wf_id = wf["id"]
+            wf_name = wf["name"]
 
-        if elapsed >= interval_sec:
-            run_time = now_iso()
-            log.info(f"⏰ FEEDER trigger due (elapsed={elapsed/60:.1f}min, interval={interval_min}min) — firing...")
-            # Save timestamp FIRST to prevent double-fire
-            _sb_upsert("feeder_settings", [{"key": "feeder_last_trigger_at", "value": run_time, "updated_at": run_time}])
-            # CON-6: Retry feeder HTTP call up to 3 times with 10s waits
-            try:
-                def _call_feeder():
-                    resp = requests.post(f"{FEEDER_URL}/run", json={}, timeout=310)
-                    resp.raise_for_status()
-                    return resp
-                resp = _retry(_call_feeder, max_attempts=3, wait_seconds=10, label="Feeder")
-                log.info("✅ Feeder pipeline completed successfully.")
-            except Exception as e:
-                log.error(f"❌ Feeder HTTP call failed after 3 attempts: {e}")
-        else:
-            remaining = interval_sec - elapsed
-            log.info(f"Feeder: next run in {remaining/60:.1f}min (interval={interval_min}min)")
+            # Workflow-specific feeder auto-trigger
+            # Default to True if not explicitly set to False
+            feeder_enabled = str(wf.get("feeder_enabled", "true")).lower() == "true"
+            if not feeder_enabled:
+                log.info(f"Feeder [{wf_name}]: Auto-run disabled.")
+                continue
+
+            interval_min = float(wf.get("feeder_interval_minutes") if wf.get("feeder_interval_minutes") is not None else 30)
+            interval_sec = interval_min * 60
+            last_at = wf.get("feeder_last_trigger_at") or ""
+            elapsed = _elapsed_since(last_at)
+
+            if elapsed >= interval_sec:
+                run_time = now_iso()
+                log.info(f"⏰ FEEDER [{wf_name}] trigger due (elapsed={elapsed/60:.1f}min, interval={interval_min}min) — firing...")
+
+                # Save timestamp FIRST to prevent double-fire
+                _sb_patch("workflows", f"id=eq.{wf_id}", {"feeder_last_trigger_at": run_time, "updated_at": run_time})
+
+                def run_feeder_async(w_id, w_name):
+                    try:
+                        def _call_feeder():
+                            resp = requests.post(f"{FEEDER_URL}/run", json={"workflow_id": w_id}, timeout=310)
+                            resp.raise_for_status()
+                            return resp
+                        resp = _retry(_call_feeder, max_attempts=3, wait_seconds=10, label=f"Feeder:{w_name}")
+                        log.info(f"✅ Feeder pipeline for [{w_name}] completed successfully.")
+                    except Exception as e:
+                        log.error(f"❌ Feeder HTTP call failed for [{w_name}] after 3 attempts: {e}")
+
+                fire_in_background(run_feeder_async, wf_id, wf_name)
+            else:
+                remaining = interval_sec - elapsed
+                log.info(f"Feeder [{wf_name}]: next run in {remaining/60:.1f}min (interval={interval_min}min)")
 
     except Exception as e:
         log.error(f"check_feeder error: {e}")
@@ -194,16 +216,24 @@ def _lg_list_assistants() -> list:
     return r.json()
 
 
-def _lg_create_thread() -> str:
-    r = requests.post(f"{LG_URL}/threads", headers={"Content-Type": "application/json"}, json={}, timeout=10)
+def _lg_create_thread(workflow_id: str = None) -> str:
+    payload = {}
+    if workflow_id:
+        payload["metadata"] = {"workflow_id": workflow_id}
+    r = requests.post(f"{LG_URL}/threads", headers={"Content-Type": "application/json"}, json=payload, timeout=10)
     r.raise_for_status()
     return r.json()["thread_id"]
 
 
-def _lg_create_run(thread_id: str, assistant_id: str, content: str) -> None:
+def _lg_create_run(thread_id: str, assistant_id: str, content: str, workflow_id: str) -> None:
     payload = {
         "assistant_id": assistant_id,
         "input": {"messages": [{"role": "human", "content": content}]},
+        "config": {
+            "configurable": {
+                "workflow_id": workflow_id
+            }
+        }
     }
     r = requests.post(
         f"{LG_URL}/threads/{thread_id}/runs",
@@ -217,78 +247,120 @@ def _lg_create_run(thread_id: str, assistant_id: str, content: str) -> None:
 # ── Agent trigger ────────────────────────────────────────────────────────────
 def check_agent() -> None:
     try:
-        rows = _sb_get(
-            "agent_settings",
-            "key=in.(auto_trigger_enabled,auto_trigger_interval_minutes,auto_trigger_last_at,queue_batch_size)"
-        )
-        smap = {r["key"]: r["value"] for r in rows}
-
-        enabled = smap.get("auto_trigger_enabled", "false").lower() == "true"
-        if not enabled:
+        # Get all workflows
+        workflows = _sb_get("workflows")
+        if not workflows:
+            log.info("Agent: No workflows found.")
             return
 
-        interval_min = float(smap.get("auto_trigger_interval_minutes", "30") or "30")
-        interval_sec = interval_min * 60
-        last_at = smap.get("auto_trigger_last_at", "") or ""
-        elapsed = _elapsed_since(last_at)
-        batch_size = int(smap.get("queue_batch_size", "2") or "2")
+        for wf in workflows:
+            wf_id = wf["id"]
+            wf_name = wf["name"]
+            enabled = str(wf.get("enabled", "true")).lower() == "true"
+            if not enabled:
+                continue
 
-        if elapsed >= interval_sec:
-            # Check for pending articles
-            pending = _sb_get(
-                "feeder_articles",
-                f"status=eq.Pending&order=created_at.asc&limit={batch_size}&select=id,title,description,url"
-            )
-            if not pending:
-                log.info("Agent: trigger due but queue empty — skipping.")
-                return
+            interval_min = float(wf.get("interval_minutes", 30) or 30)
+            interval_sec = interval_min * 60
+            last_at = wf.get("last_trigger_at") or ""
+            elapsed = _elapsed_since(last_at)
+            batch_size = int(wf.get("batch_size", 2) or 2)
 
-            run_time = now_iso()
-            log.info(f"⏰ AGENT trigger due (elapsed={elapsed/60:.1f}min, interval={interval_min}min) — firing {len(pending)} articles...")
-
-            # Save timestamp FIRST to prevent double-fire
-            _sb_upsert("agent_settings", [{"key": "auto_trigger_last_at", "value": run_time, "updated_at": run_time}])
-
-            # Mark articles as Processing
-            ids = [a["id"] for a in pending]
-            ids_filter = "(" + ",".join(f'"{i}"' for i in ids) + ")"
-            _sb_patch("feeder_articles", f"id=in.{ids_filter}", {"status": "Processing"})
-
-            # Discover assistant_id from LangGraph
-            assistant_id = "research"   # fallback
-            try:
-                assistants = _lg_list_assistants()
-                if assistants:
-                    assistant_id = assistants[0]["assistant_id"]
-                    log.info(f"Using assistant: {assistant_id}")
-            except Exception as e:
-                log.warning(f"Could not fetch assistants — using fallback 'research': {e}")
-
-            # Create one LangGraph run per article (Retry 1: 3 attempts, 10s wait)
-            for article in pending:
+            if elapsed >= interval_sec:
+                # Check if this workflow has any feeder sources connected
+                has_feeder_sources = False
                 try:
-                    clean_title = _strip_html(article.get('title', ''))
-                    clean_desc  = _strip_html(article.get('description', ''))
-                    content = f"Title: {clean_title}\nDescription: {clean_desc}"
-
-                    def _create_run_for_article():
-                        tid = _lg_create_thread()
-                        _lg_create_run(tid, assistant_id, content)
-                        return tid
-
-                    thread_id = _retry(_create_run_for_article, max_attempts=3, wait_seconds=10, label=f"Agent:{clean_title[:40]}")
-                    log.info(f"  ✅ Created run for article: {clean_title[:60]}")
+                    sources = _sb_get("feeder_sources", f"workflow_id=eq.{wf_id}")
+                    has_feeder_sources = len(sources) > 0
                 except Exception as e:
-                    # Revert article to Pending so it can be retried on next cron tick
-                    try:
-                        _sb_patch("feeder_articles", f"id=eq.{article['id']}", {"status": "Pending"})
-                    except Exception:
-                        pass
-                    log.error(f"  ❌ Failed to create run for article {article['id']} after 3 attempts: {e}")
+                    log.warning(f"Could not check feeder sources for [{wf_name}]: {e}")
+                    has_feeder_sources = True
 
-        else:
-            remaining = interval_sec - elapsed
-            log.info(f"Agent:  next run in {remaining/60:.1f}min (interval={interval_min}min)")
+                if has_feeder_sources:
+                    # Query articles assigned to this workflow (must filter workflow_id)
+                    pending = _sb_get(
+                        "feeder_articles",
+                        f"status=eq.Pending&workflow_id=eq.{wf_id}&order=created_at.asc&limit={batch_size}&select=id,title,description,url"
+                    )
+                    if not pending:
+                        # Log message and check next workflow
+                        log.info(f"Agent [{wf_name}]: trigger due but queue empty — skipping.")
+                        continue
+
+                    run_time = now_iso()
+                    log.info(f"⏰ AGENT [{wf_name}] trigger due (elapsed={elapsed/60:.1f}min, interval={interval_min}min) — firing {len(pending)} articles...")
+
+                    # Save timestamp FIRST to prevent double-fire
+                    _sb_patch("workflows", f"id=eq.{wf_id}", {"last_trigger_at": run_time, "updated_at": run_time})
+
+                    # Mark articles as Processing
+                    ids = [a["id"] for a in pending]
+                    ids_filter = "(" + ",".join(f'"{i}"' for i in ids) + ")"
+                    _sb_patch("feeder_articles", f"id=in.{ids_filter}", {"status": "Processing"})
+
+                    # Discover assistant_id from LangGraph
+                    assistant_id = "research"   # fallback
+                    try:
+                        assistants = _lg_list_assistants()
+                        if assistants:
+                            assistant_id = assistants[0]["assistant_id"]
+                            log.info(f"Using assistant: {assistant_id}")
+                    except Exception as e:
+                        log.warning(f"Could not fetch assistants — using fallback 'research': {e}")
+
+                    # Create one LangGraph run per article
+                    for article in pending:
+                        try:
+                            clean_title = _strip_html(article.get('title', ''))
+                            clean_desc  = _strip_html(article.get('description', ''))
+                            content = f"Title: {clean_title}\nDescription: {clean_desc}"
+
+                            def _create_run_for_article():
+                                tid = _lg_create_thread(wf_id)
+                                _lg_create_run(tid, assistant_id, content, wf_id)
+                                return tid
+
+                            thread_id = _retry(_create_run_for_article, max_attempts=3, wait_seconds=10, label=f"Agent:{wf_name}:{clean_title[:30]}")
+                            log.info(f"  ✅ Created run for article in [{wf_name}]: {clean_title[:60]}")
+                        except Exception as e:
+                            # Revert article to Pending so it can be retried on next cron tick
+                            try:
+                                _sb_patch("feeder_articles", f"id=eq.{article['id']}", {"status": "Pending"})
+                            except Exception:
+                                pass
+                            log.error(f"  ❌ Failed to create run for article {article['id']} in [{wf_name}] after 3 attempts: {e}")
+                else:
+                    # Standalone self-triggered workflow (no feeder sources connected)
+                    run_time = now_iso()
+                    log.info(f"⏰ AGENT [{wf_name}] trigger due (elapsed={elapsed/60:.1f}min, interval={interval_min}min) — firing standalone scheduler run...")
+
+                    # Save timestamp FIRST to prevent double-fire
+                    _sb_patch("workflows", f"id=eq.{wf_id}", {"last_trigger_at": run_time, "updated_at": run_time})
+
+                    # Discover assistant_id from LangGraph
+                    assistant_id = "research"   # fallback
+                    try:
+                        assistants = _lg_list_assistants()
+                        if assistants:
+                            assistant_id = assistants[0]["assistant_id"]
+                            log.info(f"Using assistant: {assistant_id}")
+                    except Exception as e:
+                        log.warning(f"Could not fetch assistants — using fallback 'research': {e}")
+
+                    try:
+                        content = "Run scheduled workflow tasks."
+                        def _create_standalone_run():
+                            tid = _lg_create_thread(wf_id)
+                            _lg_create_run(tid, assistant_id, content, wf_id)
+                            return tid
+
+                        thread_id = _retry(_create_standalone_run, max_attempts=3, wait_seconds=10, label=f"Agent:{wf_name}:Standalone")
+                        log.info(f"  ✅ Created standalone run for [{wf_name}]")
+                    except Exception as e:
+                        log.error(f"  ❌ Failed to create standalone run for [{wf_name}] after 3 attempts: {e}")
+            else:
+                remaining = interval_sec - elapsed
+                log.info(f"Agent [{wf_name}]:  next run in {remaining/60:.1f}min (interval={interval_min}min)")
 
     except Exception as e:
         log.error(f"check_agent error: {e}")
@@ -467,9 +539,9 @@ def main():
 
     while True:
         log.info("--- tick ---")
-        check_feeder()
-        check_agent()
-        check_auto_publish()
+        fire_in_background(check_feeder)
+        fire_in_background(check_agent)
+        fire_in_background(check_auto_publish)
         time.sleep(TICK_SECONDS)
 
 

@@ -14,7 +14,7 @@ interface FeederArticle {
     status: string;
 }
 
-export function QueueSidebar({ onClose }: { onClose: () => void }) {
+export function QueueSidebar({ workflowId, onClose }: { workflowId: string | null; onClose: () => void }) {
     const [articles, setArticles] = useState<FeederArticle[]>([]);
     const [totalPending, setTotalPending] = useState(0);
     const [batchSize, setBatchSize] = useState(1);
@@ -23,31 +23,52 @@ export function QueueSidebar({ onClose }: { onClose: () => void }) {
     const fetchQueue = async () => {
         setLoading(true);
         try {
-            // 1. Read queue_batch_size from agent_settings (key-value table)
-            const { data: settings } = await supabase
-                .from("agent_settings")
-                .select("value")
-                .eq("key", "queue_batch_size")
-                .limit(1)
-                .single();
-            const size = parseInt(settings?.value ?? "1", 10);
+            let size = 2;
+            if (workflowId) {
+                const { data: wf } = await supabase
+                    .from("workflows")
+                    .select("batch_size")
+                    .eq("id", workflowId)
+                    .single();
+                size = wf?.batch_size ?? 2;
+            } else {
+                const { data: settings } = await supabase
+                    .from("agent_settings")
+                    .select("value")
+                    .eq("key", "queue_batch_size")
+                    .limit(1)
+                    .single();
+                size = parseInt(settings?.value ?? "2", 10);
+            }
             setBatchSize(size);
 
-            // 2. Fetch ONLY the next N articles in FIFO order (oldest first)
-            const { data, count } = await supabase
+            // Fetch ONLY the next N articles in FIFO order (oldest first)
+            let query = supabase
                 .from("feeder_articles")
                 .select("id,title,source_domain,created_at,status", { count: "exact" })
-                .eq("status", "Pending")
+                .eq("status", "Pending");
+
+            if (workflowId) {
+                query = query.eq("workflow_id", workflowId);
+            }
+
+            const { data } = await query
                 .order("created_at", { ascending: true })  // FIFO
                 .limit(size);
 
             setArticles(data ?? []);
 
-            // 3. Fetch total pending count separately for the header
-            const { count: total } = await supabase
+            // Fetch total pending count separately for the header
+            let countQuery = supabase
                 .from("feeder_articles")
                 .select("id", { count: "exact", head: true })
                 .eq("status", "Pending");
+
+            if (workflowId) {
+                countQuery = countQuery.eq("workflow_id", workflowId);
+            }
+
+            const { count: total } = await countQuery;
             setTotalPending(total ?? 0);
         } catch (e) {
             console.error("QueueSidebar fetch error:", e);
@@ -55,20 +76,20 @@ export function QueueSidebar({ onClose }: { onClose: () => void }) {
         setLoading(false);
     };
 
-    useEffect(() => { fetchQueue(); }, []);
+    useEffect(() => { fetchQueue(); }, [workflowId]);
 
-    // Auto-refresh whenever agent_settings changes (e.g. batch size updated)
+    // Auto-refresh whenever settings change
     useEffect(() => {
         const channel = supabase
             .channel("queue-settings-watch")
             .on(
                 "postgres_changes",
-                { event: "*", schema: "public", table: "agent_settings" },
+                { event: "*", schema: "public", table: workflowId ? "workflows" : "agent_settings" },
                 () => { fetchQueue(); }
             )
             .subscribe();
         return () => { supabase.removeChannel(channel); };
-    }, []);
+    }, [workflowId]);
 
     return (
         <div className="flex h-full flex-col border-r border-border bg-card">

@@ -5,9 +5,9 @@ import React, {
   useRef,
   useCallback,
   useMemo,
-  FormEvent,
   Fragment,
 } from "react";
+import ClaudeChatInput, { AttachedFile, PastedContent, ClaudeChatInputHandle } from "@/components/ui/claude-style-chat-input";
 import { Button } from "@/components/ui/button";
 import {
   Square,
@@ -16,6 +16,10 @@ import {
   Clock,
   Circle,
   FileIcon,
+  SquarePen,
+  Database,
+  LayoutGrid,
+  MessagesSquare,
 } from "lucide-react";
 import { ChatMessage } from "@/app/components/ChatMessage";
 import type {
@@ -33,6 +37,7 @@ import { FilesPopover } from "@/app/components/TasksFilesSidebar";
 
 interface ChatInterfaceProps {
   assistant: Assistant | null;
+  onStartAgent?: () => void;
 }
 
 const getStatusIcon = (status: TodoItem["status"], className?: string) => {
@@ -61,12 +66,11 @@ const getStatusIcon = (status: TodoItem["status"], className?: string) => {
   }
 };
 
-export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
+export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant, onStartAgent }) => {
   const [metaOpen, setMetaOpen] = useState<"tasks" | "files" | null>(null);
   const tasksContainerRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const chatInputRef = useRef<ClaudeChatInputHandle>(null);
 
-  const [input, setInput] = useState("");
   const { scrollRef, contentRef } = useStickToBottom();
 
   const {
@@ -86,28 +90,46 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
 
   const submitDisabled = isLoading || !assistant;
 
-  const handleSubmit = useCallback(
-    (e?: FormEvent) => {
-      if (e) {
-        e.preventDefault();
+  const handleSendMessage = useCallback(
+    async (data: {
+      message: string;
+      files: AttachedFile[];
+      pastedContent: PastedContent[];
+      model: string;
+      isThinkingEnabled: boolean;
+    }) => {
+      // 1. Process files client-side and upload them to the agent state
+      const fileContents: Record<string, string> = {};
+      for (const f of data.files) {
+        try {
+          if (
+            f.file.type.startsWith("text/") ||
+            f.file.name.endsWith(".txt") ||
+            f.file.name.endsWith(".md") ||
+            f.file.name.endsWith(".json") ||
+            f.file.name.endsWith(".js") ||
+            f.file.name.endsWith(".ts") ||
+            f.file.name.endsWith(".tsx")
+          ) {
+            const text = await f.file.text();
+            fileContents[f.file.name] = text;
+          }
+        } catch (err) {
+          console.error("Failed to read file:", f.file.name, err);
+        }
       }
-      const messageText = input.trim();
-      if (!messageText || isLoading || submitDisabled) return;
-      sendMessage(messageText);
-      setInput("");
-    },
-    [input, isLoading, sendMessage, setInput, submitDisabled]
-  );
+      for (const p of data.pastedContent) {
+        fileContents[`pasted_text_${p.id}.txt`] = p.content;
+      }
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (submitDisabled) return;
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSubmit();
+      if (Object.keys(fileContents).length > 0) {
+        await setFiles({ ...files, ...fileContents });
       }
+
+      // 2. Send the message
+      sendMessage(data.message);
     },
-    [handleSubmit, submitDisabled]
+    [files, sendMessage, setFiles]
   );
 
   // TODO: can we make this part of the hook?
@@ -241,14 +263,39 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
     );
   }, [interrupt]);
 
+  const isEmptyState = !isThreadLoading && processedMessages.length === 0 && !isLoading;
+
+  if (isEmptyState) {
+    return (
+      <div className="flex flex-1 flex-col justify-center items-center px-4 max-w-[720px] mx-auto w-full select-none animate-fade-in">
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-semibold tracking-tight bg-gradient-to-r from-orange-400 via-primary to-orange-600 bg-clip-text text-transparent pb-1.5 font-serif">
+            Hi Legend, what's on your mind?
+          </h1>
+          <p className="text-xs text-muted-foreground/85 mt-1">
+            Ask a question, analyze documents, or start a new workflow.
+          </p>
+        </div>
+        <div className="w-full">
+          <ClaudeChatInput
+            ref={chatInputRef}
+            onSendMessage={handleSendMessage}
+            isLoading={isLoading}
+            onStartAgent={onStartAgent}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col overflow-hidden bg-background">
       <div
         className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
         ref={scrollRef}
       >
         <div
-          className="mx-auto w-full max-w-[1024px] px-6 pb-6 pt-4"
+          className="mx-auto w-full max-w-[720px] px-6 pb-6 pt-4"
           ref={contentRef}
         >
           {isThreadLoading ? (
@@ -309,16 +356,10 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
         </div>
       </div>
 
-
       <div className="flex-shrink-0 bg-background">
-        <div
-          className={cn(
-            "mx-4 mb-6 flex flex-shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background",
-            "mx-auto w-[calc(100%-32px)] max-w-[1024px] transition-colors duration-200 ease-in-out"
-          )}
-        >
+        <div className="mx-auto w-full max-w-[720px] px-4 mb-6 flex flex-shrink-0 flex-col transition-all duration-200 ease-in-out">
           {(hasTasks || hasFiles) && (
-            <div className="flex max-h-72 flex-col overflow-y-auto border-b border-border bg-sidebar empty:hidden">
+            <div className="mb-2 flex max-h-72 flex-col overflow-y-auto border border-border rounded-xl bg-sidebar empty:hidden">
               {!metaOpen && (
                 <>
                   {(() => {
@@ -524,42 +565,12 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
               )}
             </div>
           )}
-          <form
-            onSubmit={handleSubmit}
-            className="flex flex-col"
-          >
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={isLoading ? "Running..." : "Write your message..."}
-              className="font-inherit field-sizing-content flex-1 resize-none border-0 bg-transparent px-[18px] pb-[13px] pt-[14px] text-sm leading-7 text-foreground outline-none placeholder:text-muted-foreground"
-              rows={1}
-            />
-            <div className="flex justify-between gap-2 p-3">
-              <div className="flex justify-end gap-2">
-                <Button
-                  type={isLoading ? "button" : "submit"}
-                  variant={isLoading ? "destructive" : "default"}
-                  onClick={isLoading ? stopStream : handleSubmit}
-                  disabled={!isLoading && (submitDisabled || !input.trim())}
-                >
-                  {isLoading ? (
-                    <>
-                      <Square size={14} />
-                      <span>Stop</span>
-                    </>
-                  ) : (
-                    <>
-                      <ArrowUp size={18} />
-                      <span>Send</span>
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </form>
+          <ClaudeChatInput
+            ref={chatInputRef}
+            onSendMessage={handleSendMessage}
+            isLoading={isLoading}
+            onStartAgent={onStartAgent}
+          />
         </div>
       </div>
     </div>
