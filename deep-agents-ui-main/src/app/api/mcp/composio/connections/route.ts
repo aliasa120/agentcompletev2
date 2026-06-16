@@ -383,15 +383,15 @@ export async function DELETE(req: Request) {
       .delete()
       .eq("composio_conn_id", connection_id);
 
-    // Revoke connection from Composio if key set (v3 revoke endpoint)
+    // Delete connection from Composio if key set
     if (COMPOSIO_API_KEY) {
       try {
-        await fetch(`${COMPOSIO_BASE}/connected_accounts/${connection_id}/revoke`, {
-          method: "POST",
+        await fetch(`${COMPOSIO_BASE}/connected_accounts/${connection_id}`, {
+          method: "DELETE",
           headers: { "x-api-key": COMPOSIO_API_KEY },
         });
       } catch {
-        // Ignore revoke errors — local delete already done
+        // Ignore errors — local delete already done
       }
     }
 
