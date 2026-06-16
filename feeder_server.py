@@ -72,6 +72,28 @@ class FeederHandler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(body)
+        elif self.path == "/reload":
+            try:
+                from pathlib import Path
+                agent_path = Path(__file__).resolve().parent / "agent.py"
+                if agent_path.exists():
+                    agent_path.touch()
+                    status = 200
+                    response = {"success": True, "message": "Backend touched agent.py successfully."}
+                else:
+                    status = 404
+                    response = {"success": False, "message": "agent.py not found in backend."}
+            except Exception as e:
+                status = 500
+                response = {"success": False, "message": str(e)}
+
+            body = json.dumps(response).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
         elif self.path == "/health":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
