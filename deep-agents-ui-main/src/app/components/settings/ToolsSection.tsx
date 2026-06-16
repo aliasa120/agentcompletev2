@@ -888,12 +888,147 @@ function ToolsTab({
   );
 }
 
+// ── Zapier Platform Section ──────────────────────────────────────────────────
+
+function ZapierSection() {
+  const [connections, setConnections] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const fetchConnections = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/oauth/connections");
+      const data = await res.json();
+      setConnections(data.connections ?? []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchConnections();
+  }, []);
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const handleDisconnect = async (id: string) => {
+    if (!confirm("Are you sure you want to disconnect this Zapier account?")) return;
+    try {
+      await fetch("/api/oauth/connections", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      await fetchConnections();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const copyableFields = [
+    { label: "Client ID", value: "easyclaw_client_id" },
+    { label: "Client Secret", value: "easyclaw_client_secret_xyz123" },
+    { label: "Authorization URL", value: `${window.location.origin}/api/oauth/authorize` },
+    { label: "Access Token URL", value: `${window.location.origin}/api/oauth/token` },
+    { label: "Test Request (User Profile) URL", value: `${window.location.origin}/api/oauth/me` },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Overview Card */}
+      <div className="rounded-lg border bg-card p-5 space-y-4 shadow-sm">
+        <div className="flex items-center gap-3 border-b pb-3.5">
+          <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-600">
+            <Zap className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold">Zapier Developer Platform Integration</h3>
+            <p className="text-[11px] text-muted-foreground">Standard OAuth2 settings to configure your private Zapier app "easyclaw"</p>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Use the credentials and URLs below to set up **OAuth v2 Authentication** in your Zapier Developer dashboard.
+        </p>
+
+        <div className="space-y-3">
+          {copyableFields.map(field => (
+            <div key={field.label} className="flex flex-col md:flex-row md:items-center justify-between gap-1 p-2 rounded-lg border bg-muted/30">
+              <span className="text-xs font-semibold text-muted-foreground min-w-[200px]">{field.label}</span>
+              <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
+                <span className="text-xs font-mono text-foreground truncate select-all">{field.value}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleCopy(field.value, field.label)}
+                  className="h-6 px-2 text-[10px]"
+                >
+                  {copiedKey === field.label ? "Copied!" : "Copy"}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Connected Accounts */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          Connected Zapier Accounts
+          <span className="text-xs font-normal text-muted-foreground">({connections.length})</span>
+        </h3>
+
+        {loading ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground py-4">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading connected accounts…
+          </div>
+        ) : connections.length === 0 ? (
+          <div className="text-center py-8 text-xs text-muted-foreground border rounded-xl border-dashed">
+            No Zapier accounts connected yet. Connect an account from your Zapier Developer console to test.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {connections.map(conn => (
+              <div key={conn.id} className="flex items-center justify-between p-3 rounded-lg border bg-card shadow-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold truncate">{conn.email}</p>
+                    <p className="text-[10px] text-muted-foreground font-mono">
+                      Connected: {new Date(conn.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleDisconnect(conn.id)}
+                  className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Tools Section Main ────────────────────────────────────────────────────────
 
-export function ToolsSection({ initialTab = "tools" }: { initialTab?: "composio" | "manual" | "tools" }) {
+export function ToolsSection({ initialTab = "tools" }: { initialTab?: "composio" | "manual" | "tools" | "zapier" }) {
   const [connections, setConnections] = useState<MCPConnection[]>([]);
   const [loadingConn, setLoadingConn] = useState(true);
-  const [activeTab, setActiveTab] = useState<"composio" | "manual" | "tools">(initialTab);
+  const [activeTab, setActiveTab] = useState<"composio" | "manual" | "tools" | "zapier">(initialTab);
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -953,31 +1088,41 @@ export function ToolsSection({ initialTab = "tools" }: { initialTab?: "composio"
     <div className="space-y-5">
       <div className="flex items-center justify-between border-b pb-4">
         <div>
-          <h2 className="font-semibold text-base mb-0.5">Tools & MCP Connections</h2>
+          <h2 className="font-semibold text-base mb-0.5">
+            {activeTab === "zapier" ? "Zapier Platform Integration" : "Tools & MCP Connections"}
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Connect external tools via Composio or manual MCP servers.
+            {activeTab === "zapier"
+              ? "Configure OAuth2 settings and view connected accounts for your private Zapier app 'easyclaw'."
+              : "Connect external tools via Composio or manual MCP servers."}
           </p>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => fetchConnections(true)}
-          disabled={loadingConn}
-          className="h-8 gap-1.5 text-xs font-semibold shrink-0"
-        >
-          {loadingConn ? <Loader2 className="h-3 w-3 animate-spin" /> : <Globe className="h-3.5 w-3.5" />}
-          Sync Connections
-        </Button>
+        {activeTab !== "zapier" && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => fetchConnections(true)}
+            disabled={loadingConn}
+            className="h-8 gap-1.5 text-xs font-semibold shrink-0"
+          >
+            {loadingConn ? <Loader2 className="h-3 w-3 animate-spin" /> : <Globe className="h-3.5 w-3.5" />}
+            Sync Connections
+          </Button>
+        )}
       </div>
 
       {/* Loading indicator */}
-      {loadingConn && (
+      {loadingConn && activeTab !== "zapier" && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Syncing connections list…
         </div>
       )}
 
       {/* Tab content */}
+      {activeTab === "zapier" && (
+        <ZapierSection />
+      )}
+
       {activeTab === "composio" && (
         <ComposioMarketplace connections={connections} onRefresh={fetchConnections} onReloadAgent={reloadAgent} />
       )}

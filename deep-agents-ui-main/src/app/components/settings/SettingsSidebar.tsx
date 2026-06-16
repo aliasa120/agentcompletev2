@@ -12,6 +12,7 @@ export type SettingsSection =
   | "tools"
   | "tools-composio"
   | "tools-manual"
+  | "tools-zapier"
   | "providers"
   | "agents"
   | "subagents"
@@ -100,7 +101,7 @@ interface SettingsSidebarProps {
 }
 
 export function SettingsSidebar({ active, onChange, isExpanded = true, onToggleExpanded }: SettingsSidebarProps) {
-  const isToolsActive = ["tools", "tools-composio", "tools-manual"].includes(active);
+  const isToolsActive = ["tools", "tools-composio", "tools-manual", "tools-zapier"].includes(active);
   const [isToolsExpanded, setIsToolsExpanded] = React.useState(isToolsActive);
   const prevIsToolsActive = React.useRef(isToolsActive);
 
@@ -199,6 +200,7 @@ export function SettingsSidebar({ active, onChange, isExpanded = true, onToggleE
                     {[
                       { id: "tools-composio" as const, label: "Composio Gateway" },
                       { id: "tools-manual" as const, label: "Manual MCP" },
+                      { id: "tools-zapier" as const, label: "Zapier Platform" },
                     ].map((sub) => {
                       const isSubActive = active === sub.id;
                       return (

@@ -740,6 +740,7 @@ export default function AgentSettingsPage() {
       case "tools":     return <ToolsSection initialTab="tools" />;
       case "tools-composio": return <ToolsSection initialTab="composio" />;
       case "tools-manual": return <ToolsSection initialTab="manual" />;
+      case "tools-zapier": return <ToolsSection initialTab="zapier" />;
       case "providers": return <ProviderOrderingSection />;
       case "agents":    return <AgentsSection agentType="main" skills={skills} mcpConnections={mcpConnections} toolSettings={toolSettings} />;
       case "subagents": return <AgentsSection agentType="subagent" skills={skills} mcpConnections={mcpConnections} toolSettings={toolSettings} />;
