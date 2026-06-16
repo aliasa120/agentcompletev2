@@ -114,7 +114,10 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
     if config_data and isinstance(config_data, dict):
         mcp_url_str = config_data.get("url", mcp_url)
 
-    is_zapier = mcp_url_str.startswith("https://mcp.zapier.com/")
+    # Strip hash fragment from URL to get the base endpoint
+    base_url = mcp_url_str.split("#")[0]
+
+    is_zapier = base_url.startswith("https://mcp.zapier.com/")
     if is_zapier:
         zapier_secret = os.environ.get("ZAPIER_MCP_SECRET", "")
         if zapier_secret:
@@ -135,7 +138,7 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
             server_config = {
                 "manual_server": {
                     "transport": "streamable-http" if is_zapier else transport,
-                    "url": config_data.get("url", mcp_url),
+                    "url": config_data.get("url", base_url),
                     "headers": headers,
                 }
             }
@@ -143,7 +146,7 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
         server_config = {
             "manual_server": {
                 "transport": "streamable-http" if is_zapier else "sse",
-                "url": mcp_url,
+                "url": base_url,
                 "headers": headers,
             }
         }

@@ -90,7 +90,7 @@ async function fetchMcpStreamableHttpTools(mcpUrl: string, secret?: string): Pro
 }
 
 // Helper to fetch user's enabled actions from a connected Zapier server
-async function fetchZapierEnabledActions(mcpUrl: string, secret?: string): Promise<{ tool_key: string; tool_name: string; underlying_tool: string; selected_api: string; action: string }[]> {
+async function fetchZapierEnabledActions(mcpUrl: string, secret?: string): Promise<{ tool_key: string; tool_name: string; underlying_tool: string; selected_api: string; action: string; app: string }[]> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "Accept": "application/json, text/event-stream"
@@ -160,7 +160,7 @@ async function fetchZapierEnabledActions(mcpUrl: string, secret?: string): Promi
 
   const appsData = JSON.parse(textContent);
   const apps = appsData.apps || [];
-  const actionTools: { tool_key: string; tool_name: string; underlying_tool: string; selected_api: string; action: string }[] = [];
+  const actionTools: { tool_key: string; tool_name: string; underlying_tool: string; selected_api: string; action: string; app: string }[] = [];
 
   let idCounter = 4;
   for (const app of apps) {
@@ -208,7 +208,8 @@ async function fetchZapierEnabledActions(mcpUrl: string, secret?: string): Promi
             tool_name: `Zapier: ${app.app} - ${act.name}`,
             underlying_tool: act.tool,
             selected_api: app.selected_api,
-            action: act.key
+            action: act.key,
+            app: app.app
           });
         }
       }
@@ -341,35 +342,123 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const sync = searchParams.get("sync") === "true";
 
-    const { data } = await supabase
+    let { data } = await supabase
       .from("mcp_connections")
       .select("*")
       .eq("connection_type", "manual")
       .order("created_at", { ascending: false });
 
-    const connections = data ?? [];
+    let connections = data ?? [];
 
     if (sync) {
       const secret = process.env.ZAPIER_MCP_SECRET;
+      // Find all unique base server URLs from Zapier connections
+      const baseUrls = new Set<string>();
       for (const conn of connections) {
         if (conn.mcp_url?.startsWith("https://mcp.zapier.com/")) {
-          try {
-            const defaultTools = await fetchMcpStreamableHttpTools(conn.mcp_url, secret);
-            const enabledActions = await fetchZapierEnabledActions(conn.mcp_url, secret);
-            const available_tools = [...defaultTools, ...enabledActions];
-
-            // Update in DB
-            await supabase
-              .from("mcp_connections")
-              .update({ available_tools, updated_at: new Date().toISOString() })
-              .eq("id", conn.id);
-
-            conn.available_tools = available_tools;
-          } catch (syncErr) {
-            console.warn(`[Manual MCP] Sync failed for ${conn.label}:`, syncErr);
-          }
+          baseUrls.add(conn.mcp_url.split("#")[0]);
         }
       }
+
+      for (const baseServerUrl of baseUrls) {
+        try {
+          const defaultTools = await fetchMcpStreamableHttpTools(baseServerUrl, secret);
+          const enabledActions = await fetchZapierEnabledActions(baseServerUrl, secret);
+
+          // Group actions by app
+          const appsActions: Record<string, any[]> = {};
+          for (const act of enabledActions) {
+            const appName = act.app || "Unknown App";
+            if (!appsActions[appName]) {
+              appsActions[appName] = [];
+            }
+            appsActions[appName].push(act);
+          }
+
+          // 1. Update/Insert Base
+          const baseMcpUrl = `${baseServerUrl}#Base`;
+          const { data: baseExisting } = await supabase
+            .from("mcp_connections")
+            .select("*")
+            .eq("mcp_url", baseMcpUrl)
+            .maybeSingle();
+
+          if (baseExisting) {
+            await supabase
+              .from("mcp_connections")
+              .update({ available_tools: defaultTools, updated_at: new Date().toISOString() })
+              .eq("id", baseExisting.id);
+          } else {
+            await supabase
+              .from("mcp_connections")
+              .insert({
+                connection_type: "manual",
+                label: "Zapier MCP (Base)",
+                mcp_url: baseMcpUrl,
+                status: "active",
+                available_tools: defaultTools,
+                updated_at: new Date().toISOString(),
+              });
+          }
+
+          // 2. Update/Insert Apps
+          for (const appName of Object.keys(appsActions)) {
+            const appMcpUrl = `${baseServerUrl}#${appName}`;
+            const appLabel = `Zapier: ${appName}`;
+            const appTools = appsActions[appName];
+
+            const { data: appExisting } = await supabase
+              .from("mcp_connections")
+              .select("*")
+              .eq("mcp_url", appMcpUrl)
+              .maybeSingle();
+
+            if (appExisting) {
+              await supabase
+                .from("mcp_connections")
+                .update({ available_tools: appTools, updated_at: new Date().toISOString() })
+                .eq("id", appExisting.id);
+            } else {
+              await supabase
+                .from("mcp_connections")
+                .insert({
+                  connection_type: "manual",
+                  label: appLabel,
+                  mcp_url: appMcpUrl,
+                  status: "active",
+                  available_tools: appTools,
+                  updated_at: new Date().toISOString(),
+                });
+            }
+          }
+
+          // 3. Clean up deleted apps
+          const activeMcpUrls = [
+            baseMcpUrl,
+            ...Object.keys(appsActions).map(appName => `${baseServerUrl}#${appName}`)
+          ];
+          const { data: allUserConns } = await supabase
+            .from("mcp_connections")
+            .select("id, mcp_url")
+            .eq("connection_type", "manual");
+          
+          for (const conn of (allUserConns || [])) {
+            if (conn.mcp_url.startsWith(baseServerUrl) && !activeMcpUrls.includes(conn.mcp_url)) {
+              await supabase.from("mcp_connections").delete().eq("id", conn.id);
+            }
+          }
+        } catch (syncErr) {
+          console.warn(`[Manual MCP] Sync failed for base ${baseServerUrl}:`, syncErr);
+        }
+      }
+
+      // Re-fetch connections after sync
+      const { data: updatedData } = await supabase
+        .from("mcp_connections")
+        .select("*")
+        .eq("connection_type", "manual")
+        .order("created_at", { ascending: false });
+      connections = updatedData ?? [];
     }
 
     return NextResponse.json({ connections });
@@ -386,6 +475,120 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "label and mcp_url required" }, { status: 400 });
     }
 
+    if (mcp_url.startsWith("https://mcp.zapier.com/")) {
+      const baseServerUrl = mcp_url.split("#")[0];
+      const secret = process.env.ZAPIER_MCP_SECRET;
+      
+      let defaultTools: any[] = [];
+      let enabledActions: any[] = [];
+      try {
+        defaultTools = await fetchMcpStreamableHttpTools(baseServerUrl, secret);
+        enabledActions = await fetchZapierEnabledActions(baseServerUrl, secret);
+      } catch (err) {
+        return NextResponse.json({ error: `Failed to connect to Zapier MCP: ${err instanceof Error ? err.message : err}` }, { status: 500 });
+      }
+
+      // Group actions by app
+      const appsActions: Record<string, any[]> = {};
+      for (const act of enabledActions) {
+        const appName = act.app || "Unknown App";
+        if (!appsActions[appName]) {
+          appsActions[appName] = [];
+        }
+        appsActions[appName].push(act);
+      }
+
+      const results = [];
+
+      // 1. Register Base Server
+      const baseMcpUrl = `${baseServerUrl}#Base`;
+      const baseLabel = `Zapier MCP (Base)`;
+      const { data: baseExisting } = await supabase
+        .from("mcp_connections")
+        .select("*")
+        .eq("mcp_url", baseMcpUrl)
+        .maybeSingle();
+
+      if (baseExisting) {
+        const { data } = await supabase
+          .from("mcp_connections")
+          .update({ available_tools: defaultTools, updated_at: new Date().toISOString() })
+          .eq("id", baseExisting.id)
+          .select()
+          .single();
+        results.push(data);
+      } else {
+        const { data } = await supabase
+          .from("mcp_connections")
+          .insert({
+            connection_type: "manual",
+            label: baseLabel,
+            mcp_url: baseMcpUrl,
+            status: "active",
+            available_tools: defaultTools,
+            updated_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+        results.push(data);
+      }
+
+      // 2. Register App Specific Connections
+      for (const appName of Object.keys(appsActions)) {
+        const appMcpUrl = `${baseServerUrl}#${appName}`;
+        const appLabel = `Zapier: ${appName}`;
+        const appTools = appsActions[appName];
+
+        const { data: appExisting } = await supabase
+          .from("mcp_connections")
+          .select("*")
+          .eq("mcp_url", appMcpUrl)
+          .maybeSingle();
+
+        if (appExisting) {
+          const { data } = await supabase
+            .from("mcp_connections")
+            .update({ available_tools: appTools, updated_at: new Date().toISOString() })
+            .eq("id", appExisting.id)
+            .select()
+            .single();
+          results.push(data);
+        } else {
+          const { data } = await supabase
+            .from("mcp_connections")
+            .insert({
+              connection_type: "manual",
+              label: appLabel,
+              mcp_url: appMcpUrl,
+              status: "active",
+              available_tools: appTools,
+              updated_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
+          results.push(data);
+        }
+      }
+
+      // 3. Clean up deleted apps
+      const activeMcpUrls = [
+        baseMcpUrl,
+        ...Object.keys(appsActions).map(appName => `${baseServerUrl}#${appName}`)
+      ];
+      const { data: allUserConns } = await supabase
+        .from("mcp_connections")
+        .select("id, mcp_url")
+        .eq("connection_type", "manual");
+      
+      for (const conn of (allUserConns || [])) {
+        if (conn.mcp_url.startsWith(baseServerUrl) && !activeMcpUrls.includes(conn.mcp_url)) {
+          await supabase.from("mcp_connections").delete().eq("id", conn.id);
+        }
+      }
+
+      return NextResponse.json({ connection: results[0] });
+    }
+
     // Check if duplicate connection exists (same mcp_url)
     const { data: existing } = await supabase
       .from("mcp_connections")
@@ -393,7 +596,7 @@ export async function POST(req: Request) {
       .eq("mcp_url", mcp_url)
       .maybeSingle();
 
-    if (existing && existing.available_tools?.length > 0 && !mcp_url.startsWith("https://mcp.zapier.com/")) {
+    if (existing && existing.available_tools?.length > 0) {
       return NextResponse.json({ connection: existing });
     }
 
@@ -403,34 +606,16 @@ export async function POST(req: Request) {
       available_tools = manual_tools;
     } else {
       const secret = process.env.ZAPIER_MCP_SECRET;
-      // 1. Try Streamable HTTP handshake first for Zapier URLs, else fallback to SSE
-      if (mcp_url.startsWith("https://mcp.zapier.com/")) {
-        try {
-          const defaultTools = await fetchMcpStreamableHttpTools(mcp_url, secret);
-          try {
-            const enabledActions = await fetchZapierEnabledActions(mcp_url, secret);
-            available_tools = [...defaultTools, ...enabledActions];
-          } catch (actErr) {
-            console.warn("[Manual MCP] Failed to fetch Zapier enabled actions:", actErr);
-            available_tools = defaultTools;
-          }
-        } catch (streamableErr) {
-          console.warn("[Manual MCP] Streamable HTTP introspection failed, falling back to SSE:", streamableErr instanceof Error ? streamableErr.message : streamableErr);
-          try {
-            available_tools = await fetchMcpSseTools(mcp_url, secret);
-          } catch (sseErr) {
-            console.warn("[Manual MCP] SSE fallback introspection failed:", sseErr instanceof Error ? sseErr.message : sseErr);
-          }
-        }
+      try {
+        available_tools = await fetchMcpSseTools(mcp_url, secret);
+      } catch (sseErr) {
+        console.warn("[Manual MCP] SSE fallback introspection failed:", sseErr instanceof Error ? sseErr.message : sseErr);
       }
 
-      // 2. Fall back to standard HTTP POST /tools/list if SSE failed or is not a Zapier URL
+      // Fall back to standard HTTP POST /tools/list if SSE failed
       if (available_tools.length === 0) {
         try {
           const headers: Record<string, string> = { "Content-Type": "application/json" };
-          if (mcp_url.startsWith("https://mcp.zapier.com/") && secret) {
-            headers["Authorization"] = `Bearer ${secret}`;
-          }
           const introspectRes = await fetch(`${mcp_url}/tools/list`, {
             method: "POST",
             headers,
