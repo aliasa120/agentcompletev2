@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const responseType = searchParams.get("response_type");
 
   // Verify parameters
-  if (clientId !== ALLOWED_CLIENT_ID || redirectUri !== ALLOWED_REDIRECT_URI || responseType !== "code") {
+  if (clientId !== ALLOWED_CLIENT_ID || !redirectUri || !redirectUri.startsWith("https://zapier.com/") || responseType !== "code") {
     return new NextResponse("Invalid Client ID or Redirect URI", { status: 400 });
   }
 
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
   const state = formData.get("state");
   const responseType = formData.get("response_type");
 
-  if (clientId !== ALLOWED_CLIENT_ID || redirectUri !== ALLOWED_REDIRECT_URI || responseType !== "code") {
+  if (clientId !== ALLOWED_CLIENT_ID || !redirectUri || !redirectUri.toString().startsWith("https://zapier.com/") || responseType !== "code") {
     return new NextResponse("Invalid Client ID or Redirect URI", { status: 400 });
   }
 
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
   await oauthStore.saveCode(code, user.id, user.email);
 
   // Redirect back to Zapier with the auth code
-  const targetUrl = new URL(ALLOWED_REDIRECT_URI);
+  const targetUrl = new URL(redirectUri.toString());
   targetUrl.searchParams.set("code", code);
   if (state) {
     targetUrl.searchParams.set("state", state.toString());
