@@ -52,7 +52,6 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str) -> List[BaseTool]:
     except ImportError:
         logger.warning("langchain-mcp-adapters not installed. Skipping manual tool loading.")
         return []
-
     # Try parsing mcp_url as JSON for custom stdio/sse configs
     config_data = None
     if mcp_url.strip().startswith("{"):
@@ -60,6 +59,17 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str) -> List[BaseTool]:
             config_data = json.loads(mcp_url)
         except Exception as je:
             logger.warning(f"Failed to parse mcp_url as JSON: {je}")
+
+    # Inject authorization headers if connecting to Zapier MCP
+    headers = {}
+    mcp_url_str = mcp_url
+    if config_data and isinstance(config_data, dict):
+        mcp_url_str = config_data.get("url", mcp_url)
+
+    if mcp_url_str.startswith("https://mcp.zapier.com/"):
+        zapier_secret = os.environ.get("ZAPIER_MCP_SECRET", "")
+        if zapier_secret:
+            headers["Authorization"] = f"Bearer {zapier_secret}"
 
     if config_data and isinstance(config_data, dict):
         transport = config_data.get("transport", "sse")
@@ -77,6 +87,7 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str) -> List[BaseTool]:
                 "manual_server": {
                     "transport": "sse",
                     "url": config_data.get("url", mcp_url),
+                    "headers": headers,
                 }
             }
     else:
@@ -84,6 +95,7 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str) -> List[BaseTool]:
             "manual_server": {
                 "transport": "sse",
                 "url": mcp_url,
+                "headers": headers,
             }
         }
 

@@ -34,9 +34,16 @@ export async function POST(req: Request) {
       available_tools = manual_tools;
     } else {
       try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (mcp_url.startsWith("https://mcp.zapier.com/")) {
+          const secret = process.env.ZAPIER_MCP_SECRET;
+          if (secret) {
+            headers["Authorization"] = `Bearer ${secret}`;
+          }
+        }
         const introspectRes = await fetch(`${mcp_url}/tools/list`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({}),
           signal: AbortSignal.timeout(5000),
         });
