@@ -1082,12 +1082,13 @@ function ZapierSection({
               Initializing Zapier Embed...
             </div>
           ) : (
-            <div className="rounded-xl overflow-hidden border bg-background relative" style={{ minHeight: "600px" }}>
+            <div className="rounded-xl overflow-hidden border bg-background relative w-full h-[600px]">
               {React.createElement("zapier-mcp", {
                 ref: zapierRef,
                 "embed-id": "35b5974d-78e9-4938-9e29-156dd8a9be41",
                 width: "100%",
-                height: "600px",
+                height: "100%",
+                style: { display: "block", width: "100%", height: "100%" },
                 "sign-up-email": userEmail,
                 "sign-up-first-name": firstName,
                 "sign-up-last-name": lastName,
