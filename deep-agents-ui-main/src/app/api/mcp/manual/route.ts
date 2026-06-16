@@ -89,6 +89,137 @@ async function fetchMcpStreamableHttpTools(mcpUrl: string, secret?: string): Pro
   }));
 }
 
+// Helper to fetch user's enabled actions from a connected Zapier server
+async function fetchZapierEnabledActions(mcpUrl: string, secret?: string): Promise<{ tool_key: string; tool_name: string; underlying_tool: string; selected_api: string; action: string }[]> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream"
+  };
+  if (secret) {
+    headers["Authorization"] = `Bearer ${secret}`;
+  }
+
+  // 1. Initialize
+  const initRes = await fetch(mcpUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "easyclaw-client", version: "1.0.0" }
+      },
+      id: 1
+    }),
+    signal: AbortSignal.timeout(5000)
+  });
+  if (!initRes.ok) throw new Error("Initialize failed");
+
+  // 2. Send initialized notification
+  await fetch(mcpUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "notifications/initialized"
+    }),
+    signal: AbortSignal.timeout(5000)
+  });
+
+  // 3. Get list of apps
+  const appsRes = await fetch(mcpUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "list_enabled_zapier_actions",
+        arguments: {}
+      },
+      id: 3
+    }),
+    signal: AbortSignal.timeout(8000)
+  });
+  if (!appsRes.ok) throw new Error("Failed to call list_enabled_zapier_actions");
+
+  const appsText = await appsRes.text();
+  let appsDataJson = "";
+  for (const line of appsText.split("\n")) {
+    if (line.startsWith("data:")) {
+      appsDataJson += line.slice(5).trim();
+    }
+  }
+  if (!appsDataJson) return [];
+
+  const appsParsed = JSON.parse(appsDataJson);
+  const textContent = appsParsed.result?.content?.[0]?.text;
+  if (!textContent) return [];
+
+  const appsData = JSON.parse(textContent);
+  const apps = appsData.apps || [];
+  const actionTools: { tool_key: string; tool_name: string; underlying_tool: string; selected_api: string; action: string }[] = [];
+
+  let idCounter = 4;
+  for (const app of apps) {
+    if (!app.selected_api) continue;
+    try {
+      const actionsRes = await fetch(mcpUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "list_enabled_zapier_actions",
+            arguments: {
+              selected_api: app.selected_api
+            }
+          },
+          id: idCounter++
+        }),
+        signal: AbortSignal.timeout(8000)
+      });
+      if (!actionsRes.ok) continue;
+
+      const actionsText = await actionsRes.text();
+      let actionsDataJson = "";
+      for (const line of actionsText.split("\n")) {
+        if (line.startsWith("data:")) {
+          actionsDataJson += line.slice(5).trim();
+        }
+      }
+      if (!actionsDataJson) continue;
+
+      const actionsParsed = JSON.parse(actionsDataJson);
+      const actionsTextContent = actionsParsed.result?.content?.[0]?.text;
+      if (!actionsTextContent) continue;
+
+      const actionsArray = JSON.parse(actionsTextContent);
+      const appObj = Array.isArray(actionsArray) ? actionsArray[0] : actionsArray;
+      const actions = appObj?.actions || [];
+
+      for (const act of actions) {
+        if (act.tool_name) {
+          actionTools.push({
+            tool_key: act.tool_name,
+            tool_name: `Zapier: ${app.app} - ${act.name}`,
+            underlying_tool: act.tool,
+            selected_api: app.selected_api,
+            action: act.key
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch actions for app:", app.app, e);
+    }
+  }
+
+  return actionTools;
+}
+
 // Helper to fetch tools from an SSE connection (standard MCP SSE protocol)
 async function fetchMcpSseTools(mcpUrl: string, secret?: string): Promise<{ tool_key: string; tool_name: string }[]> {
   return new Promise(async (resolve, reject) => {
@@ -205,14 +336,43 @@ async function fetchMcpSseTools(mcpUrl: string, secret?: string): Promise<{ tool
 }
 
 // GET /api/mcp/manual — list manual connections
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const sync = searchParams.get("sync") === "true";
+
     const { data } = await supabase
       .from("mcp_connections")
       .select("*")
       .eq("connection_type", "manual")
       .order("created_at", { ascending: false });
-    return NextResponse.json({ connections: data ?? [] });
+
+    const connections = data ?? [];
+
+    if (sync) {
+      const secret = process.env.ZAPIER_MCP_SECRET;
+      for (const conn of connections) {
+        if (conn.mcp_url?.startsWith("https://mcp.zapier.com/")) {
+          try {
+            const defaultTools = await fetchMcpStreamableHttpTools(conn.mcp_url, secret);
+            const enabledActions = await fetchZapierEnabledActions(conn.mcp_url, secret);
+            const available_tools = [...defaultTools, ...enabledActions];
+
+            // Update in DB
+            await supabase
+              .from("mcp_connections")
+              .update({ available_tools, updated_at: new Date().toISOString() })
+              .eq("id", conn.id);
+
+            conn.available_tools = available_tools;
+          } catch (syncErr) {
+            console.warn(`[Manual MCP] Sync failed for ${conn.label}:`, syncErr);
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({ connections });
   } catch (e: unknown) {
     return NextResponse.json({ connections: [], error: e instanceof Error ? e.message : "Unknown" });
   }
@@ -233,12 +393,12 @@ export async function POST(req: Request) {
       .eq("mcp_url", mcp_url)
       .maybeSingle();
 
-    if (existing && existing.available_tools?.length > 0) {
+    if (existing && existing.available_tools?.length > 0 && !mcp_url.startsWith("https://mcp.zapier.com/")) {
       return NextResponse.json({ connection: existing });
     }
 
     // Use user-provided manual tools list if available, otherwise attempt SSE/HTTP introspection
-    let available_tools: { tool_key: string; tool_name: string }[] = [];
+    let available_tools: any[] = [];
     if (manual_tools && Array.isArray(manual_tools)) {
       available_tools = manual_tools;
     } else {
@@ -246,7 +406,14 @@ export async function POST(req: Request) {
       // 1. Try Streamable HTTP handshake first for Zapier URLs, else fallback to SSE
       if (mcp_url.startsWith("https://mcp.zapier.com/")) {
         try {
-          available_tools = await fetchMcpStreamableHttpTools(mcp_url, secret);
+          const defaultTools = await fetchMcpStreamableHttpTools(mcp_url, secret);
+          try {
+            const enabledActions = await fetchZapierEnabledActions(mcp_url, secret);
+            available_tools = [...defaultTools, ...enabledActions];
+          } catch (actErr) {
+            console.warn("[Manual MCP] Failed to fetch Zapier enabled actions:", actErr);
+            available_tools = defaultTools;
+          }
         } catch (streamableErr) {
           console.warn("[Manual MCP] Streamable HTTP introspection failed, falling back to SSE:", streamableErr instanceof Error ? streamableErr.message : streamableErr);
           try {

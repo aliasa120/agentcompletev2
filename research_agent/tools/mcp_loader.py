@@ -10,10 +10,58 @@ import json
 import asyncio
 import logging
 import threading
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Type
 from langchain_core.tools import BaseTool
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger("mcp_loader")
+
+class ZapierActionInput(BaseModel):
+    instructions: str = Field(description="Natural language instructions for the action (e.g. 'Create a post with title Hello and status publish')")
+    params: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optional key-value parameters to forward directly to the action")
+    output: Optional[str] = Field(default="URL or confirmation of the action", description="Description of what output/data you want back")
+
+class ZapierActionTool(BaseTool):
+    name: str
+    description: str
+    args_schema: Type[BaseModel] = ZapierActionInput
+    
+    server_config: Dict[str, Any] = Field(exclude=True)
+    underlying_tool: str
+    selected_api: str
+    action_key: str
+
+    def _run(self, *args, **kwargs):
+        raise NotImplementedError("Use async run (_arun)")
+
+    async def _arun(self, instructions: str, params: Optional[Dict[str, Any]] = None, output: Optional[str] = None, **kwargs):
+        try:
+            from langchain_mcp_adapters.client import MultiServerMCPClient
+            client = MultiServerMCPClient(self.server_config)
+            async with client.session("manual_server") as session:
+                result = await session.call_tool(
+                    self.underlying_tool,
+                    {
+                        "selected_api": self.selected_api,
+                        "action": self.action_key,
+                        "instructions": instructions,
+                        "params": params or {},
+                        "output": output or "status or result info"
+                    }
+                )
+                if hasattr(result, "content"):
+                    text_parts = []
+                    for c in result.content:
+                        if hasattr(c, "text"):
+                            text_parts.append(c.text)
+                        elif isinstance(c, dict) and "text" in c:
+                            text_parts.append(c["text"])
+                        else:
+                            text_parts.append(str(c))
+                    return "\n".join(text_parts)
+                return str(result)
+        except Exception as e:
+            return f"Error executing Zapier action: {e}"
 
 def run_sync(coro):
     """Run an async coroutine synchronously, safe for running event loops."""
@@ -44,7 +92,7 @@ def run_sync(coro):
         return asyncio.run(coro)
 
 
-async def load_manual_mcp_tool(mcp_url: str, tool_key: str) -> List[BaseTool]:
+async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, Any] = None) -> List[BaseTool]:
     """Connect to a manual MCP server via SSE or Stdio and fetch the specified tool."""
     try:
         from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -99,6 +147,19 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str) -> List[BaseTool]:
                 "headers": headers,
             }
         }
+
+    if metadata and isinstance(metadata, dict) and metadata.get("underlying_tool"):
+        # Dynamic Zapier action wrapper
+        wrapper_tool = ZapierActionTool(
+            name=tool_key,
+            description=f"Zapier tool to '{metadata.get('tool_name', tool_key)}'. Use this tool to interact with the integrated application. Provide detailed instructions.",
+            server_config=server_config,
+            underlying_tool=metadata.get("underlying_tool"),
+            selected_api=metadata.get("selected_api"),
+            action_key=metadata.get("action")
+        )
+        logger.info(f"Dynamically created wrapper Zapier tool: {tool_key}")
+        return [wrapper_tool]
 
     client = MultiServerMCPClient(server_config)
     try:
@@ -173,11 +234,11 @@ def load_mcp_tools_for_agent(agent_id: str) -> List[BaseTool]:
                 tools_list = conn.get("available_tools") or []
                 for t in tools_list:
                     if isinstance(t, dict) and t.get("tool_key") == tool_key:
-                        manual_tools_to_load.append((conn.get("mcp_url"), tool_key))
+                        manual_tools_to_load.append((conn.get("mcp_url"), tool_key, t))
                         found_manual = True
                         break
                     elif isinstance(t, str) and t == tool_key:
-                        manual_tools_to_load.append((conn.get("mcp_url"), tool_key))
+                        manual_tools_to_load.append((conn.get("mcp_url"), tool_key, None))
                         found_manual = True
                         break
                 if found_manual:
@@ -222,11 +283,11 @@ def load_mcp_tools_for_agent(agent_id: str) -> List[BaseTool]:
 
     # 2. Load manual MCP tools
     if manual_tools_to_load:
-        for mcp_url, tool_key in manual_tools_to_load:
+        for mcp_url, tool_key, metadata in manual_tools_to_load:
             if not mcp_url:
                 continue
             try:
-                tools = run_sync(load_manual_mcp_tool(mcp_url, tool_key))
+                tools = run_sync(load_manual_mcp_tool(mcp_url, tool_key, metadata))
                 loaded_tools.extend(tools)
             except Exception as e:
                 logger.warning(f"Error loading manual tool {tool_key} from {mcp_url}: {e}")
