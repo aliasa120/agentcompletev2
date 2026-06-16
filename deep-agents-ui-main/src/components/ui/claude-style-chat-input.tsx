@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
-import { Plus, ChevronDown, ArrowUp, X, FileText, Loader2, Check, Archive } from "lucide-react";
+import { Plus, ChevronDown, ArrowUp, X, FileText, Loader2, Check, Archive, Square } from "lucide-react";
 
 /* --- ICONS --- */
 export const Icons = {
@@ -253,6 +253,7 @@ interface ClaudeChatInputProps {
     }) => void;
     isLoading?: boolean;
     onStartAgent?: () => void;
+    onStop?: () => void;
 }
 
 export interface ClaudeChatInputHandle {
@@ -261,7 +262,7 @@ export interface ClaudeChatInputHandle {
 }
 
 export const ClaudeChatInput = forwardRef<ClaudeChatInputHandle, ClaudeChatInputProps>(
-    ({ onSendMessage, isLoading, onStartAgent }, ref) => {
+    ({ onSendMessage, isLoading, onStartAgent, onStop }, ref) => {
         const [message, setMessage] = useState("");
     const [files, setFiles] = useState<AttachedFile[]>([]);
     const [pastedContent, setPastedContent] = useState<PastedContent[]>([]);
@@ -391,19 +392,22 @@ export const ClaudeChatInput = forwardRef<ClaudeChatInputHandle, ClaudeChatInput
 
     return (
         <div
-            className={`relative w-full max-w-[720px] mx-auto transition-all duration-300 font-sans`}
+            className={`relative w-full max-w-[600px] mx-auto transition-all duration-300 font-sans`}
             onDragOver={onDragOver}
             onDragLeave={onDragLeave}
             onDrop={onDrop}
         >
-            <div className={`
-                !box-content flex flex-col mx-2 md:mx-0 items-stretch transition-all duration-200 relative z-10 rounded-2xl cursor-text border border-bg-300 dark:border-transparent 
-                shadow-[0_0_15px_rgba(0,0,0,0.08)] hover:shadow-[0_0_20px_rgba(0,0,0,0.12)]
-                focus-within:shadow-[0_0_25px_rgba(0,0,0,0.15)]
-                bg-white dark:bg-[#30302E] font-sans antialiased
-            `}>
+            <div 
+                onClick={() => textareaRef.current?.focus()}
+                className={`
+                    !box-content flex flex-col mx-2 md:mx-0 items-stretch transition-all duration-200 relative z-10 rounded-2xl cursor-text border border-bg-300 dark:border-transparent 
+                    shadow-[0_0_15px_rgba(0,0,0,0.08)] hover:shadow-[0_0_20px_rgba(0,0,0,0.12)]
+                    focus-within:shadow-[0_0_25px_rgba(0,0,0,0.15)]
+                    bg-white dark:bg-[#30302E] font-sans antialiased
+                `}
+            >
 
-                <div className="flex flex-col px-3 pt-3 pb-2 gap-2">
+                <div className="flex flex-col px-3 pt-3.5 pb-2 gap-1.5">
 
                     {/* 1. Artifacts (Files & Pastes) - Rendered ABOVE text input */}
                     {(files.length > 0 || pastedContent.length > 0) && (
@@ -426,8 +430,8 @@ export const ClaudeChatInput = forwardRef<ClaudeChatInputHandle, ClaudeChatInput
                     )}
 
                     {/* 2. Input Area */}
-                    <div className="relative mb-1">
-                        <div className="max-h-96 w-full overflow-y-auto custom-scrollbar font-sans break-words transition-opacity duration-200 min-h-[2.5rem] pl-1">
+                    <div className="relative mb-0.5">
+                        <div className="max-h-96 w-full overflow-y-auto custom-scrollbar font-sans break-words transition-opacity duration-200 min-h-[2.25rem] pl-1">
                             <textarea
                                 ref={textareaRef}
                                 value={message}
@@ -436,7 +440,7 @@ export const ClaudeChatInput = forwardRef<ClaudeChatInputHandle, ClaudeChatInput
                                 onKeyDown={handleKeyDown}
                                 placeholder={isLoading ? "Agent is thinking..." : "How can I help you today?"}
                                 disabled={isLoading}
-                                className="w-full bg-transparent border-0 outline-none text-text-100 text-[16px] placeholder:text-text-450 resize-none overflow-hidden py-0 leading-relaxed block font-normal antialiased"
+                                className="w-full bg-transparent border-0 outline-none text-text-100 text-[16px] placeholder:text-text-450 resize-none overflow-hidden py-0.5 leading-relaxed block font-normal antialiased"
                                 rows={1}
                                 autoFocus
                                 style={{ minHeight: '1.5em' }}
@@ -493,22 +497,33 @@ export const ClaudeChatInput = forwardRef<ClaudeChatInputHandle, ClaudeChatInput
                                 </button>
                             )}
 
-                            {/* Send Button */}
+                            {/* Send / Stop Button */}
                             <div>
-                                <button
-                                    onClick={handleSend}
-                                    disabled={!hasContent || isLoading}
-                                    className={`
-                                        inline-flex items-center justify-center relative shrink-0 transition-colors h-8 w-8 rounded-md active:scale-95 !rounded-xl !h-8 !w-8
-                                        ${hasContent && !isLoading
-                                            ? 'bg-accent text-white hover:bg-accent-hover shadow-md'
-                                            : 'bg-accent/30 text-white/60 cursor-default'}
-                                    `}
-                                    type="button"
-                                    aria-label="Send message"
-                                >
-                                    <Icons.ArrowUp className="w-4 h-4" />
-                                </button>
+                                {isLoading ? (
+                                    <button
+                                        onClick={onStop}
+                                        className="inline-flex items-center justify-center relative shrink-0 transition-colors h-8 w-8 rounded-xl active:scale-95 bg-primary text-primary-foreground hover:bg-primary/90 shadow-md animate-pulse"
+                                        type="button"
+                                        aria-label="Stop generating"
+                                    >
+                                        <Square className="w-3.5 h-3.5 fill-current" />
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={handleSend}
+                                        disabled={!hasContent}
+                                        className={`
+                                            inline-flex items-center justify-center relative shrink-0 transition-colors h-8 w-8 rounded-xl active:scale-95
+                                            ${hasContent
+                                                ? 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md'
+                                                : 'bg-muted dark:bg-[#2A2A28] text-muted-foreground/30 dark:text-[#5A5A58] cursor-default'}
+                                        `}
+                                        type="button"
+                                        aria-label="Send message"
+                                    >
+                                        <Icons.ArrowUp className="w-4 h-4" />
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>

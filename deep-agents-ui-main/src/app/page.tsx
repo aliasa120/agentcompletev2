@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Assistant } from "@langchain/langgraph-sdk";
 import { ClientProvider, useClient } from "@/providers/ClientProvider";
-import { Settings, MessagesSquare, SquarePen, LayoutGrid, ListOrdered, Play, Database, Zap, Menu, Trash2, ChevronDown, ChevronRight, RefreshCcw, Check } from "lucide-react";
+import { Settings, MessagesSquare, SquarePen, LayoutGrid, ListOrdered, Play, Database, Zap, Menu, Trash2, ChevronDown, ChevronRight, RefreshCcw, Check, Plus } from "lucide-react";
 import { useThreads } from "@/app/hooks/useThreads";
 import { Client } from "@langchain/langgraph-sdk";
 import { ChatProvider } from "@/providers/ChatProvider";
@@ -501,23 +501,23 @@ function HomePageInner({
       {/* Sleek left sidebar styled like Gemini */}
       <aside className={cn(
         "bg-sidebar flex flex-col justify-between shrink-0 transition-all duration-300",
-        isSidebarExpanded ? "w-64" : "w-16"
+        isSidebarExpanded ? "w-52" : "w-11"
       )}>
-        <div className="flex flex-col gap-3 p-3 overflow-hidden flex-1">
+        <div className="flex flex-col gap-2 p-2 overflow-hidden flex-1">
           {/* Logo / Branding */}
           <div className={cn(
-            "flex items-center gap-2 h-10 relative",
-            isSidebarExpanded ? "px-2" : "justify-center"
+            "flex items-center gap-1.5 h-10 relative",
+            isSidebarExpanded ? "px-1.5" : "justify-center"
           )}>
             <button
               onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-              className="flex items-center justify-center h-8 w-8 rounded-lg hover:bg-accent text-foreground shrink-0 transition-colors"
+              className="flex items-center justify-center h-7 w-7 rounded-lg hover:bg-accent text-foreground shrink-0 transition-colors"
               title="Toggle Sidebar"
             >
-              <Menu className="h-5 w-5 text-muted-foreground hover:text-foreground shrink-0" />
+              <Menu className="h-4 w-4 text-muted-foreground hover:text-foreground shrink-0" />
             </button>
             {isSidebarExpanded && (
-              <span className="font-semibold text-base tracking-tight truncate text-foreground animate-fade-in font-serif">
+              <span className="font-semibold text-sm tracking-tight truncate text-foreground animate-fade-in font-serif">
                 Deep Agent UI
               </span>
             )}
@@ -528,44 +528,44 @@ function HomePageInner({
             onClick={() => setThreadId(null)}
             disabled={!threadId}
             className={cn(
-              "flex items-center justify-start gap-3 rounded-xl bg-accent/40 transition-all duration-200 hover:bg-accent/70 text-foreground",
+              "flex items-center justify-start gap-2 rounded-lg bg-accent/40 transition-all duration-200 hover:bg-accent/70 text-foreground",
               isSidebarExpanded
-                ? "h-10 w-full px-3 text-sm font-medium"
-                : "h-10 w-10 p-0 justify-center"
+                ? "h-8 w-full px-2.5 text-xs font-semibold"
+                : "h-7 w-7 p-0 justify-center"
             )}
             title="New chat"
           >
-            <SquarePen className="h-5 w-5 shrink-0" />
+            <Plus className="h-4 w-4 shrink-0" />
             {isSidebarExpanded && <span className="truncate">New chat</span>}
           </button>
 
           {/* Nav Items */}
-          <nav className="flex flex-col gap-1.5 mt-2">
+          <nav className="flex flex-col gap-1 mt-1.5">
             {/* Posts Page */}
             <Link
               href="/posts"
               className={cn(
                 "flex items-center transition-all duration-200 text-muted-foreground hover:bg-accent hover:text-foreground",
                 isSidebarExpanded 
-                  ? "gap-3 rounded-xl h-10 px-3 text-sm font-medium" 
-                  : "h-10 w-10 justify-center rounded-xl p-0"
+                  ? "gap-2 rounded-lg h-8 px-2.5 text-xs font-semibold" 
+                  : "h-7 w-7 justify-center rounded-lg p-0"
               )}
               title="Posts"
             >
-              <LayoutGrid className="h-5 w-5 shrink-0" />
+              <LayoutGrid className="h-4 w-4 shrink-0" />
               {isSidebarExpanded && <span className="truncate">Posts</span>}
             </Link>
           </nav>
 
           {/* Gemini Recents Thread History */}
           {isSidebarExpanded && (
-            <div className="flex flex-col gap-1 mt-2 px-1 overflow-hidden flex-1 min-h-0">
-              <div className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider px-2 mb-1.5 select-none">
+            <div className="flex flex-col gap-1 mt-1 px-0.5 overflow-hidden flex-1 min-h-0">
+              <div className="text-[9px] font-bold text-muted-foreground/80 uppercase tracking-wider px-1.5 mb-1 select-none">
                 Recents
               </div>
               <div className="overflow-y-auto flex-1 custom-scrollbar pr-1 max-h-[300px] flex flex-col gap-0.5 scrollbar-pretty">
                 {threadItems.length === 0 ? (
-                  <div className="text-xs text-muted-foreground/60 px-2 py-1.5 italic">
+                  <div className="text-[11px] text-muted-foreground/60 px-1.5 py-1 italic">
                     No recent chats
                   </div>
                 ) : (
@@ -575,20 +575,20 @@ function HomePageInner({
                       <div
                         key={thread.id}
                         className={cn(
-                          "group relative flex items-center justify-between rounded-xl px-2.5 py-2 text-xs font-medium transition-all duration-200 cursor-pointer select-none",
+                          "group relative flex items-center justify-between rounded-lg px-2 py-1.5 text-[11px] font-medium transition-all duration-200 cursor-pointer select-none",
                           isActive
                             ? "bg-primary/15 text-primary font-semibold"
                             : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
                         )}
                         onClick={() => setThreadId(thread.id)}
                       >
-                        <span className="truncate pr-4 w-full">
+                        <span className="truncate pr-3 w-full">
                           {thread.title}
                         </span>
                         {/* Delete button on hover */}
                         <button
                           onClick={(e) => handleDeleteThread(thread.id, thread.status, e)}
-                          className="absolute right-1.5 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent hover:text-destructive transition-all duration-150"
+                          className="absolute right-1 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent hover:text-destructive transition-all duration-150"
                           title="Delete chat"
                         >
                           <Trash2 className="h-3 w-3" />
@@ -603,40 +603,40 @@ function HomePageInner({
 
           {/* Collapsible Queue inside Sidebar */}
           {isSidebarExpanded && (
-            <div className="flex flex-col mt-2 pt-2 px-1 flex-shrink-0">
+            <div className="flex flex-col mt-1.5 pt-1.5 px-0.5 flex-shrink-0">
               <button
                 onClick={() => setIsQueueCollapsed(!isQueueCollapsed)}
-                className="flex items-center justify-between px-2 py-1.5 hover:bg-accent/30 rounded-lg text-xs font-semibold text-muted-foreground/90 w-full transition-colors"
+                className="flex items-center justify-between px-1.5 py-1 hover:bg-accent/30 rounded-md text-[11px] font-semibold text-muted-foreground/90 w-full transition-colors"
               >
-                <span className="flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
+                <span className="flex items-center gap-1 uppercase tracking-wider text-[9px]">
                   Queue ({queueTotalPending})
                 </span>
                 {isQueueCollapsed ? (
-                  <ChevronRight className="h-3.5 w-3.5" />
+                  <ChevronRight className="h-3 w-3" />
                 ) : (
-                  <ChevronDown className="h-3.5 w-3.5" />
+                  <ChevronDown className="h-3 w-3" />
                 )}
               </button>
 
               {!isQueueCollapsed && (
-                <div className="mt-1.5 flex flex-col gap-1.5 max-h-[180px] overflow-y-auto px-1.5 py-1 text-xs scrollbar-pretty">
+                <div className="mt-1 flex flex-col gap-1 max-h-[150px] overflow-y-auto px-1 py-0.5 text-[11px] scrollbar-pretty">
                   {queueArticles.length === 0 ? (
-                    <div className="text-[11px] text-muted-foreground/60 italic py-1 pl-1">
+                    <div className="text-[10px] text-muted-foreground/60 italic py-0.5 pl-0.5">
                       Queue is empty
                     </div>
                   ) : (
                     <>
-                      <div className="flex flex-col gap-1.5">
+                      <div className="flex flex-col gap-1">
                         {queueArticles.map((article, index) => (
                           <div
                             key={article.id}
-                            className="p-2 rounded-lg border border-border/50 bg-card/30 flex flex-col gap-0.5 text-[11px] leading-tight"
+                            className="p-1.5 rounded-md border border-border/50 bg-card/30 flex flex-col gap-0.5 text-[10px] leading-tight"
                             title={article.title}
                           >
                             <div className="font-medium text-foreground line-clamp-1">
                               {index + 1}. {article.title}
                             </div>
-                            <div className="text-[10px] text-muted-foreground/80 flex justify-between">
+                            <div className="text-[9px] text-muted-foreground/80 flex justify-between">
                               <span>{article.source_domain}</span>
                               <span>
                                 {new Date(article.created_at).toLocaleDateString("en-PK", {
@@ -648,7 +648,7 @@ function HomePageInner({
                         ))}
                       </div>
                       {queueTotalPending > queueBatchSize && (
-                        <div className="text-[10px] text-muted-foreground/60 text-center py-1 border-t border-border/20 mt-1">
+                        <div className="text-[9px] text-muted-foreground/60 text-center py-0.5 border-t border-border/20 mt-0.5">
                           +{queueTotalPending - queueBatchSize} more pending
                         </div>
                       )}
@@ -661,45 +661,45 @@ function HomePageInner({
         </div>
 
         {/* Bottom Panel */}
-        <div className="flex flex-col gap-2 p-3">
+        <div className="flex flex-col gap-1.5 p-2 border-t border-border/10">
           {/* User Info / Assistant ID */}
           {isSidebarExpanded && (
-            <div className="px-2 py-1.5 rounded-lg bg-accent/20 text-xxs text-muted-foreground truncate font-mono select-text" title={`Assistant ID: ${config.assistantId}`}>
-              Assistant: {config.assistantId.substring(0, 16)}...
+            <div className="px-1.5 py-1 rounded-md bg-accent/20 text-[9px] text-muted-foreground truncate font-mono select-text" title={`Assistant ID: ${config.assistantId}`}>
+              Assistant: {config.assistantId.substring(0, 12)}...
             </div>
           )}
 
           {isSidebarExpanded ? (
             /* Horizontal expanded footer */
-            <div className="flex items-center justify-between gap-1 h-10 px-1">
-              <div className="flex items-center gap-2 overflow-hidden shrink min-w-0">
-                <div className="h-7 w-7 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs shrink-0 select-none">
+            <div className="flex items-center justify-between gap-1 h-8 px-0.5">
+              <div className="flex items-center gap-1.5 overflow-hidden shrink min-w-0">
+                <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-[10px] shrink-0 select-none">
                   {userEmail ? userEmail[0].toUpperCase() : "U"}
                 </div>
-                <span className="text-xs font-semibold truncate text-foreground select-text">
+                <span className="text-[11px] font-semibold truncate text-foreground select-text">
                   {userEmail || "User"}
                 </span>
               </div>
 
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-0.5 shrink-0 scale-90 origin-right">
                 <ThemeToggle />
                 <Link href="/agent-settings" title="Agent Settings">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                    <Settings className="h-5 w-5" />
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                    <Settings className="h-4 w-4" />
                   </div>
                 </Link>
               </div>
             </div>
           ) : (
             /* Vertical stacked collapsed footer */
-            <div className="flex flex-col items-center gap-3 py-1">
+            <div className="flex flex-col items-center gap-2 py-0.5 scale-90">
               <ThemeToggle />
               <Link href="/agent-settings" title="Agent Settings">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                  <Settings className="h-5 w-5" />
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                  <Settings className="h-4 w-4" />
                 </div>
               </Link>
-              <div className="h-7 w-7 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs select-none">
+              <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-[10px] select-none">
                 {userEmail ? userEmail[0].toUpperCase() : "U"}
               </div>
             </div>

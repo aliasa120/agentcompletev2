@@ -267,14 +267,11 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant, onStar
 
   if (isEmptyState) {
     return (
-      <div className="flex flex-1 flex-col justify-center items-center px-4 max-w-[720px] mx-auto w-full select-none animate-fade-in">
+      <div className="flex flex-1 flex-col justify-center items-center pb-28 px-4 max-w-[600px] mx-auto w-full select-none animate-fade-in">
         <div className="text-center mb-6">
           <h1 className="text-3xl font-semibold tracking-tight bg-gradient-to-r from-orange-400 via-primary to-orange-600 bg-clip-text text-transparent pb-1.5 font-serif">
             Hi Legend, what's on your mind?
           </h1>
-          <p className="text-xs text-muted-foreground/85 mt-1">
-            Ask a question, analyze documents, or start a new workflow.
-          </p>
         </div>
         <div className="w-full">
           <ClaudeChatInput
@@ -282,6 +279,7 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant, onStar
             onSendMessage={handleSendMessage}
             isLoading={isLoading}
             onStartAgent={onStartAgent}
+            onStop={stopStream}
           />
         </div>
       </div>
@@ -295,7 +293,7 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant, onStar
         ref={scrollRef}
       >
         <div
-          className="mx-auto w-full max-w-[720px] px-6 pb-6 pt-4"
+          className="mx-auto w-full max-w-[600px] px-6 pb-6 pt-4"
           ref={contentRef}
         >
           {isThreadLoading ? (
@@ -357,7 +355,7 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant, onStar
       </div>
 
       <div className="flex-shrink-0 bg-background">
-        <div className="mx-auto w-full max-w-[720px] px-4 mb-6 flex flex-shrink-0 flex-col transition-all duration-200 ease-in-out">
+        <div className="mx-auto w-full max-w-[600px] px-4 mb-6 flex flex-shrink-0 flex-col transition-all duration-200 ease-in-out">
           {(hasTasks || hasFiles) && (
             <div className="mb-2 flex max-h-72 flex-col overflow-y-auto border border-border rounded-xl bg-sidebar empty:hidden">
               {!metaOpen && (
@@ -570,6 +568,7 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant, onStar
             onSendMessage={handleSendMessage}
             isLoading={isLoading}
             onStartAgent={onStartAgent}
+            onStop={stopStream}
           />
         </div>
       </div>
