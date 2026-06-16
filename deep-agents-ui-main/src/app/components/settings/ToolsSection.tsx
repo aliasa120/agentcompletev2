@@ -591,6 +591,17 @@ function ManualMCPForm({ onRefresh, onReloadAgent }: { onRefresh: () => void; on
       let finalUrl = url;
       let availableTools: { tool_key: string; tool_name: string }[] = [];
 
+      if (tools.trim().length > 0) {
+        availableTools = tools
+          .split(",")
+          .map(t => t.trim())
+          .filter(t => t.length > 0)
+          .map(t => ({
+            tool_key: t,
+            tool_name: t.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+          }));
+      }
+
       if (transport === "stdio") {
         // Parse arguments
         const parsedArgs = args
@@ -616,16 +627,6 @@ function ManualMCPForm({ onRefresh, onReloadAgent }: { onRefresh: () => void; on
           args: parsedArgs,
           env: envObj
         });
-
-        // Parse user-defined tools
-        availableTools = tools
-          .split(",")
-          .map(t => t.trim())
-          .filter(t => t.length > 0)
-          .map(t => ({
-            tool_key: t,
-            tool_name: t.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
-          }));
       }
 
       const res = await fetch("/api/mcp/manual", {
@@ -634,7 +635,7 @@ function ManualMCPForm({ onRefresh, onReloadAgent }: { onRefresh: () => void; on
         body: JSON.stringify({
           label,
           mcp_url: finalUrl,
-          available_tools: transport === "stdio" ? availableTools : undefined
+          available_tools: availableTools.length > 0 ? availableTools : undefined
         }),
       });
       const data = await res.json();
@@ -732,20 +733,21 @@ function ManualMCPForm({ onRefresh, onReloadAgent }: { onRefresh: () => void; on
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
-            <div className="md:col-span-2">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Exposed Tools (Comma-separated name list)</label>
-              <Input
-                value={tools}
-                onChange={e => setTools(e.target.value)}
-                placeholder="e.g. query_db, get_schema, execute_sql"
-                className="h-9 text-sm font-mono"
-              />
-              <p className="text-[10px] text-muted-foreground mt-1.5 leading-snug">
-                Define the tool slugs that this local server exposes so you can assign and toggle them in the Tools list.
-              </p>
-            </div>
           </>
         )}
+
+        <div className="md:col-span-2">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Exposed Tools (Comma-separated name list)</label>
+          <Input
+            value={tools}
+            onChange={e => setTools(e.target.value)}
+            placeholder={transport === "sse" ? "e.g. gmail_send_email, slack_send_channel_message" : "e.g. query_db, execute_sql"}
+            className="h-9 text-sm font-mono"
+          />
+          <p className="text-[10px] text-muted-foreground mt-1.5 leading-snug">
+            Define the tool slugs that this server exposes so you can assign and toggle them in the Tools list.
+          </p>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 pt-2 border-t mt-2">
