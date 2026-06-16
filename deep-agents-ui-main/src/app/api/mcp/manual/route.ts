@@ -6,6 +6,89 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// Helper to fetch tools from a Streamable HTTP connection (Zapier style)
+async function fetchMcpStreamableHttpTools(mcpUrl: string, secret?: string): Promise<{ tool_key: string; tool_name: string }[]> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream"
+  };
+  if (secret) {
+    headers["Authorization"] = `Bearer ${secret}`;
+  }
+
+  // 1. Initialize
+  const initRes = await fetch(mcpUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "easyclaw-client", version: "1.0.0" }
+      },
+      id: 1
+    }),
+    signal: AbortSignal.timeout(5000)
+  });
+
+  if (!initRes.ok) {
+    throw new Error(`Initialize failed with status: ${initRes.status}`);
+  }
+
+  // 2. Send initialized notification
+  await fetch(mcpUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "notifications/initialized"
+    }),
+    signal: AbortSignal.timeout(5000)
+  });
+
+  // 3. List tools
+  const toolsRes = await fetch(mcpUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/list",
+      params: {},
+      id: 2
+    }),
+    signal: AbortSignal.timeout(5000)
+  });
+
+  if (!toolsRes.ok) {
+    throw new Error(`Tools list request failed with status: ${toolsRes.status}`);
+  }
+
+  const toolsText = await toolsRes.text();
+  let toolsDataJson = "";
+  const lines = toolsText.split("\n");
+  for (const line of lines) {
+    if (line.startsWith("data:")) {
+      toolsDataJson += line.slice(5).trim();
+    }
+  }
+
+  if (!toolsDataJson) {
+    throw new Error("No data: line found in tools list response");
+  }
+
+  const toolsData = JSON.parse(toolsDataJson);
+  if (!toolsData.result?.tools) {
+    throw new Error("Invalid response format, tools not found under result.tools");
+  }
+
+  return toolsData.result.tools.map((t: any) => ({
+    tool_key: t.name,
+    tool_name: t.title || t.name,
+  }));
+}
+
 // Helper to fetch tools from an SSE connection (standard MCP SSE protocol)
 async function fetchMcpSseTools(mcpUrl: string, secret?: string): Promise<{ tool_key: string; tool_name: string }[]> {
   return new Promise(async (resolve, reject) => {
@@ -160,12 +243,17 @@ export async function POST(req: Request) {
       available_tools = manual_tools;
     } else {
       const secret = process.env.ZAPIER_MCP_SECRET;
-      // 1. Try SSE handshake first for Zapier URLs
+      // 1. Try Streamable HTTP handshake first for Zapier URLs, else fallback to SSE
       if (mcp_url.startsWith("https://mcp.zapier.com/")) {
         try {
-          available_tools = await fetchMcpSseTools(mcp_url, secret);
-        } catch (sseErr) {
-          console.warn("[Manual MCP] SSE introspection failed:", sseErr instanceof Error ? sseErr.message : sseErr);
+          available_tools = await fetchMcpStreamableHttpTools(mcp_url, secret);
+        } catch (streamableErr) {
+          console.warn("[Manual MCP] Streamable HTTP introspection failed, falling back to SSE:", streamableErr instanceof Error ? streamableErr.message : streamableErr);
+          try {
+            available_tools = await fetchMcpSseTools(mcp_url, secret);
+          } catch (sseErr) {
+            console.warn("[Manual MCP] SSE fallback introspection failed:", sseErr instanceof Error ? sseErr.message : sseErr);
+          }
         }
       }
 

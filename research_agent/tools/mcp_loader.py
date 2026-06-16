@@ -66,7 +66,8 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str) -> List[BaseTool]:
     if config_data and isinstance(config_data, dict):
         mcp_url_str = config_data.get("url", mcp_url)
 
-    if mcp_url_str.startswith("https://mcp.zapier.com/"):
+    is_zapier = mcp_url_str.startswith("https://mcp.zapier.com/")
+    if is_zapier:
         zapier_secret = os.environ.get("ZAPIER_MCP_SECRET", "")
         if zapier_secret:
             headers["Authorization"] = f"Bearer {zapier_secret}"
@@ -85,7 +86,7 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str) -> List[BaseTool]:
         else:
             server_config = {
                 "manual_server": {
-                    "transport": "sse",
+                    "transport": "streamable-http" if is_zapier else transport,
                     "url": config_data.get("url", mcp_url),
                     "headers": headers,
                 }
@@ -93,7 +94,7 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str) -> List[BaseTool]:
     else:
         server_config = {
             "manual_server": {
-                "transport": "sse",
+                "transport": "streamable-http" if is_zapier else "sse",
                 "url": mcp_url,
                 "headers": headers,
             }
