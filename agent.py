@@ -44,6 +44,8 @@ from research_agent.tools import (
     save_posts_to_supabase,
     get_design_guide,
     read_skill,
+    list_skills,
+    manage_skill,
     get_wordpress_categories,
     publish_to_wordpress,
 )
