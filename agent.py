@@ -313,7 +313,7 @@ def _bind_agent_id_to_list_skills(list_skills_tool, agent_id: str):
     from langchain_core.tools import tool
     from typing import Optional
     
-    @tool(name="list_skills")
+    @tool("list_skills")
     def list_skills_bound(category: Optional[str] = None) -> str:
         """List all available skills with their names, descriptions, and categories.
 
@@ -332,7 +332,7 @@ def _bind_agent_id_to_list_skills(list_skills_tool, agent_id: str):
 def _bind_agent_id_to_read_skill(read_skill_tool, agent_id: str):
     from langchain_core.tools import tool
     
-    @tool(name="read_skill")
+    @tool("read_skill")
     def read_skill_bound(skill_name: str) -> str:
         """Load a skill instruction file from disk and return its full content.
 
@@ -485,9 +485,9 @@ def load_dynamic_agents_by_workflow():
                 skills_index = build_skills_index(agent_id=main_id)
                 if skills_index:
                     base_main_prompt = base_main_prompt + "\n\n" + skills_index
-                    print(f"[agent] ✅ Skills index injected into system prompt (agent: {main_id[:8]}...)")
+                    print(f"[agent] [OK] Skills index injected into system prompt (agent: {main_id[:8]}...)")
             except Exception as e:
-                print(f"[agent] ⚠️ Failed to build skills index: {e}")
+                print(f"[agent] [WARNING] Failed to build skills index: {e}")
 
             main_prompt = _get_agent_system_prompt_with_images(client, main_id, base_main_prompt)
 
@@ -543,9 +543,9 @@ def load_dynamic_agents_by_workflow():
                     skills_index = build_skills_index(agent_id=sub_id)
                     if skills_index:
                         base_sub_prompt = base_sub_prompt + "\n\n" + skills_index
-                        print(f"[agent] ✅ Skills index injected into subagent system prompt (agent: {sub_id[:8]}...)")
+                        print(f"[agent] [OK] Skills index injected into subagent system prompt (agent: {sub_id[:8]}...)")
                 except Exception as e:
-                    print(f"[agent] ⚠️ Failed to build subagent skills index: {e}")
+                    print(f"[agent] [WARNING] Failed to build subagent skills index: {e}")
 
                 sub_prompt = _get_agent_system_prompt_with_images(client, sub_id, base_sub_prompt)
                 

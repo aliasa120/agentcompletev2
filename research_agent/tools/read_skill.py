@@ -69,7 +69,7 @@ def read_skill(skill_name: str, agent_id: Optional[str] = None) -> str:
                     except Exception:
                         pass  # Don't fail the skill load if tracking fails
 
-                    print(f"[read_skill] ✅ Loaded skill '{skill_name}' from database ({len(content)} chars)")
+                    print(f"[read_skill] [OK] Loaded skill '{skill_name}' from database ({len(content)} chars)")
                     return (
                         f"=== SKILL: {skill_name.upper()} ===\n\n"
                         f"{content}\n\n"
@@ -100,7 +100,7 @@ def read_skill(skill_name: str, agent_id: Optional[str] = None) -> str:
     try:
         content = skill_path.read_text(encoding="utf-8")
         char_count = len(content)
-        print(f"[read_skill] ✅ Loaded skill '{skill_name}' ({char_count} chars)")
+        print(f"[read_skill] [OK] Loaded skill '{skill_name}' ({char_count} chars)")
         return (
             f"=== SKILL: {skill_name.upper()} ===\n\n"
             f"{content}\n\n"
