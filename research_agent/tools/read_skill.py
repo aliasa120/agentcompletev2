@@ -5,6 +5,7 @@ Skill files live in research_agent/skills/<skill_name>/SKILL.md
 """
 
 from pathlib import Path
+from typing import Optional
 
 from langchain_core.tools import tool
 
