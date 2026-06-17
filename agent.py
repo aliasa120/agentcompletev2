@@ -325,7 +325,7 @@ def _bind_agent_id_to_list_skills(list_skills_tool, agent_id: str):
             category: Optional filter — only show skills in this category
                       (e.g. 'research', 'content', 'publishing', 'general').
         """
-        return list_skills_tool.callback(category=category, agent_id=agent_id)
+        return list_skills_tool.func(category=category, agent_id=agent_id)
     return list_skills_bound
 
 
@@ -346,7 +346,7 @@ def _bind_agent_id_to_read_skill(read_skill_tool, agent_id: str):
             skill_name: The name of the skill directory (e.g. "blog_post_writer").
                         Must match a folder inside research_agent/skills/.
         """
-        return read_skill_tool.callback(skill_name=skill_name, agent_id=agent_id)
+        return read_skill_tool.func(skill_name=skill_name, agent_id=agent_id)
     return read_skill_bound
 
 # Global registry of compiled workflow agents
