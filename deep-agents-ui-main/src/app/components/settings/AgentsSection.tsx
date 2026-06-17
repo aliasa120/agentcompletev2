@@ -60,6 +60,8 @@ const BUILTIN_TOOLS = [
   { tool_key: "view_candidate_images",   tool_label: "View Candidate Images", category: "Images" },
   { tool_key: "create_post_image",       tool_label: "Image Generator",      category: "Images" },
   { tool_key: "read_skill",             tool_label: "Read Skill",            category: "Skills" },
+  { tool_key: "list_skills",            tool_label: "List Skills",           category: "Skills" },
+  { tool_key: "manage_skill",           tool_label: "Manage Skill",          category: "Skills" },
   { tool_key: "save_posts_to_supabase", tool_label: "Save to Database",      category: "Output" },
   { tool_key: "get_wordpress_categories", tool_label: "WP Categories",       category: "Output" },
   { tool_key: "publish_to_wordpress",   tool_label: "Publish to WordPress",  category: "Output" },

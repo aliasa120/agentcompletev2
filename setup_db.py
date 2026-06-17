@@ -396,6 +396,8 @@ def seed_tool_assignments():
             ("builtin", "save_posts_to_supabase", "Save to Database"),
             ("builtin", "get_design_guide",       "Design Guide"),
             ("builtin", "read_skill",             "Read Skill"),
+            ("builtin", "list_skills",             "List Skills"),
+            ("builtin", "manage_skill",            "Manage Skill"),
             ("builtin", "get_wordpress_categories", "WP Categories"),
             ("builtin", "publish_to_wordpress",   "Publish to WordPress"),
         ],
@@ -463,10 +465,57 @@ def seed_skills():
                 "description": "Step-by-step instructions for writing SEO blog posts for THE ECHO brand",
                 "content":     skill_content,
                 "source":      "builtin",
+                "category":    "content",
+                "state":       "active",
+                "created_by":  "system",
             }).execute()
             print("  ✅ blog_post_writer: seeded")
     except Exception as e:
         print(f"  ❌ blog_post_writer: {e}")
+
+    # Seed additional skills
+    extra_skills = [
+        {
+            "skill_key": "web_research",
+            "label": "Web Research",
+            "description": "Systematic web research — search strategies, source evaluation, fact verification.",
+            "category": "research",
+        },
+        {
+            "skill_key": "seo_optimizer",
+            "label": "SEO Optimizer",
+            "description": "On-page SEO optimization — keyword placement, meta tags, heading structure.",
+            "category": "content",
+        },
+        {
+            "skill_key": "social_media_writer",
+            "label": "Social Media Writer",
+            "description": "Platform-specific social post creation — hooks, limits, hashtag strategy.",
+            "category": "content",
+        },
+        {
+            "skill_key": "wordpress_publishing",
+            "label": "WordPress Publishing",
+            "description": "End-to-end WordPress publishing — categories, images, post formatting.",
+            "category": "publishing",
+        },
+    ]
+    for sk in extra_skills:
+        try:
+            existing = supabase.table("skills_library").select("id").eq("skill_key", sk["skill_key"]).execute()
+            if existing.data:
+                print(f"  ⏭️  {sk['skill_key']}: already exists — skipping")
+            else:
+                supabase.table("skills_library").insert({
+                    **sk,
+                    "content": f"Skill content for {sk['label']} — run skills_migration.sql to populate full content.",
+                    "source": "system",
+                    "state": "active",
+                    "created_by": "system",
+                }).execute()
+                print(f"  ✅ {sk['skill_key']}: seeded")
+        except Exception as e:
+            print(f"  ❌ {sk['skill_key']}: {e}")
 
 
 def seed_design_assets():

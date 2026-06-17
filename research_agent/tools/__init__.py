@@ -19,10 +19,14 @@ from .parallel_search import parallel_search
 from .tavily_extract import tavily_extract
 from .create_post_image_gemini import create_post_image_gemini
 
-# ── Blog + WordPress tools (new) ──────────────────────────────────────────────
+# ── Blog + WordPress tools ──────────────────────────────────────────────
 from .read_skill import read_skill
 from .embed_blog_images import embed_images_in_blog
 from .wordpress_publisher import get_wordpress_categories, publish_to_wordpress
+
+# ── Skills system (Hermes-style self-improvement) ────────────────────────
+from .list_skills import list_skills, build_skills_index
+from .manage_skill import manage_skill
 
 __all__ = [
     # ── Unified tools (exposed to agent) ─────────────────────────────────────
@@ -41,6 +45,10 @@ __all__ = [
     "embed_images_in_blog",
     "get_wordpress_categories",
     "publish_to_wordpress",
+    # ── Skills system ──────────────────────────────────────────────────────────
+    "list_skills",
+    "manage_skill",
+    "build_skills_index",
     # ── Raw providers (not exposed to agent directly) ─────────────────────────
     "linkup_search",
     "tavily_extract",
@@ -48,3 +56,4 @@ __all__ = [
     "exa_extract",
     "create_post_image_gemini",
 ]
+

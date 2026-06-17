@@ -31,25 +31,39 @@ def read_skill(skill_name: str) -> str:
     """
     # Try to load from Supabase skills_library first
     import os
+    from datetime import datetime, timezone
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
         key = os.environ.get("SUPABASE_ANON_KEY", "")
         if url and key:
             client = create_client(url, key)
-            resp = client.table("skills_library").select("content").eq("skill_key", skill_name).execute()
+            resp = client.table("skills_library").select("content, use_count").eq("skill_key", skill_name).eq("state", "active").execute()
             if resp.data and len(resp.data) > 0:
                 content = resp.data[0].get("content", "").strip()
                 if content:
+                    # Track usage — increment use_count and update last_used_at
+                    try:
+                        current_count = resp.data[0].get("use_count", 0) or 0
+                        client.table("skills_library").update({
+                            "use_count": current_count + 1,
+                            "last_used_at": datetime.now(timezone.utc).isoformat(),
+                        }).eq("skill_key", skill_name).execute()
+                    except Exception:
+                        pass  # Don't fail the skill load if tracking fails
+
                     print(f"[read_skill] ✅ Loaded skill '{skill_name}' from database ({len(content)} chars)")
                     return (
                         f"=== SKILL: {skill_name.upper()} ===\n\n"
                         f"{content}\n\n"
                         f"=== END OF SKILL: {skill_name.upper()} ===\n"
-                        f"Now follow the skill instructions above exactly."
+                        f"Now follow the skill instructions above exactly.\n"
+                        f"If you find any issues with this skill, fix it using "
+                        f"manage_skill(action='update', skill_key='{skill_name}', ...)."
                     )
     except Exception as e:
         print(f"[read_skill] Supabase load failed: {e}. Falling back to filesystem...")
+
 
     skill_path = _SKILLS_ROOT / skill_name / "SKILL.md"
 

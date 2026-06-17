@@ -361,6 +361,9 @@ def load_dynamic_agents_by_workflow():
             read_skill,
             get_wordpress_categories,
             publish_to_wordpress,
+            list_skills,
+            manage_skill,
+            build_skills_index,
         )
 
         tool_lookup = {
@@ -376,6 +379,8 @@ def load_dynamic_agents_by_workflow():
             "read_skill": read_skill,
             "get_wordpress_categories": get_wordpress_categories,
             "publish_to_wordpress": publish_to_wordpress,
+            "list_skills": list_skills,
+            "manage_skill": manage_skill,
         }
 
         tool_assignments_by_agent = {}
@@ -428,6 +433,20 @@ def load_dynamic_agents_by_workflow():
             main_cfg = main_configs[0]
             main_id = main_cfg["id"]
             base_main_prompt = main_cfg.get("system_prompt", "").replace("{date}", datetime.now().strftime("%Y-%m-%d"))
+
+            # ── Inject compact skills index into system prompt ────────────
+            # Hermes-style: only name + 80-char description per skill (~100-200 tokens total)
+            # Full skill content is loaded on-demand via read_skill()
+            # Skills are filtered by agent_tool_assignments (tool_type='skill')
+            # so each agent only sees skills assigned to it in the Settings UI
+            try:
+                skills_index = build_skills_index(agent_id=main_id)
+                if skills_index:
+                    base_main_prompt = base_main_prompt + "\n\n" + skills_index
+                    print(f"[agent] ✅ Skills index injected into system prompt (agent: {main_id[:8]}...)")
+            except Exception as e:
+                print(f"[agent] ⚠️ Failed to build skills index: {e}")
+
             main_prompt = _get_agent_system_prompt_with_images(client, main_id, base_main_prompt)
 
             # Resolve Main Agent provider and model dynamically
@@ -471,6 +490,16 @@ def load_dynamic_agents_by_workflow():
             for sub in sub_configs:
                 sub_id = sub["id"]
                 base_sub_prompt = sub.get("system_prompt", "")
+
+                # ── Inject compact skills index into system prompt for subagents ──
+                try:
+                    skills_index = build_skills_index(agent_id=sub_id)
+                    if skills_index:
+                        base_sub_prompt = base_sub_prompt + "\n\n" + skills_index
+                        print(f"[agent] ✅ Skills index injected into subagent system prompt (agent: {sub_id[:8]}...)")
+                except Exception as e:
+                    print(f"[agent] ⚠️ Failed to build subagent skills index: {e}")
+
                 sub_prompt = _get_agent_system_prompt_with_images(client, sub_id, base_sub_prompt)
                 
                 sub_provider = sub.get("provider") or "vercel"
@@ -650,6 +679,8 @@ else:
             save_posts_to_supabase,
             get_design_guide,
             read_skill,
+            list_skills,
+            manage_skill,
             get_wordpress_categories,
             publish_to_wordpress,
         ],
