@@ -145,7 +145,7 @@ def build_skills_index(agent_id: Optional[str] = None) -> str:
 
 
 @tool(parse_docstring=True)
-def list_skills(category: Optional[str] = None) -> str:
+def list_skills(category: Optional[str] = None, agent_id: Optional[str] = None) -> str:
     """List all available skills with their names, descriptions, and categories.
 
     Use this to discover what specialized knowledge is available before
@@ -155,19 +155,37 @@ def list_skills(category: Optional[str] = None) -> str:
     Args:
         category: Optional filter — only show skills in this category
                   (e.g. 'research', 'content', 'publishing', 'general').
-
-    Returns:
-        A formatted list of available skills with key, label, description,
-        and category for each. Or a message if no skills are found.
+        agent_id: Optional agent ID filter — if provided, only lists skills
+                  assigned to this specific agent.
     """
     try:
         client = _get_supabase_client()
+        
+        assigned_skill_keys: Optional[list[str]] = None
+        if agent_id:
+            try:
+                resp = client.table("agent_tool_assignments") \
+                    .select("tool_key") \
+                    .eq("agent_id", agent_id) \
+                    .eq("tool_type", "skill") \
+                    .eq("enabled", True) \
+                    .execute()
+                if resp.data:
+                    assigned_skill_keys = [r["tool_key"] for r in resp.data]
+            except Exception as e:
+                logger.warning(f"[list_skills] Failed to check skill assignments: {e}")
+
         query = client.table("skills_library") \
             .select("skill_key, label, description, category, use_count, state, created_by") \
             .eq("state", "active")
 
         if category:
             query = query.eq("category", category)
+
+        if assigned_skill_keys is not None:
+            if len(assigned_skill_keys) == 0:
+                return "No skills are assigned to you in the Settings UI. Please attach skills first."
+            query = query.in_("skill_key", assigned_skill_keys)
 
         resp = query.order("category").execute()
         skills = resp.data or []

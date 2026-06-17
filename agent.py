@@ -307,6 +307,46 @@ def _get_agent_system_prompt_with_images(client, agent_id: str, base_prompt: str
     
     return SystemMessage(content=content_blocks)
 
+def _bind_agent_id_to_list_skills(list_skills_tool, agent_id: str):
+    from langchain_core.tools import tool
+    from typing import Optional
+    
+    @tool(name="list_skills")
+    def list_skills_bound(category: Optional[str] = None) -> str:
+        """List all available skills with their names, descriptions, and categories.
+
+        Use this to discover what specialized knowledge is available to you before
+        starting a task. Returns a compact summary — call read_skill() to load
+        the full content of any skill you want to use.
+
+        Args:
+            category: Optional filter — only show skills in this category
+                      (e.g. 'research', 'content', 'publishing', 'general').
+        """
+        return list_skills_tool.callback(category=category, agent_id=agent_id)
+    return list_skills_bound
+
+
+def _bind_agent_id_to_read_skill(read_skill_tool, agent_id: str):
+    from langchain_core.tools import tool
+    
+    @tool(name="read_skill")
+    def read_skill_bound(skill_name: str) -> str:
+        """Load a skill instruction file from disk and return its full content.
+
+        Call this at the START of any task that uses a named skill.
+        For example, call read_skill("blog_post_writer") before writing a blog post.
+
+        The skill file contains detailed step-by-step instructions, rules, templates,
+        and checklists that you MUST follow exactly for that task.
+
+        Args:
+            skill_name: The name of the skill directory (e.g. "blog_post_writer").
+                        Must match a folder inside research_agent/skills/.
+        """
+        return read_skill_tool.callback(skill_name=skill_name, agent_id=agent_id)
+    return read_skill_bound
+
 # Global registry of compiled workflow agents
 compiled_workflows = {}
 default_workflow_id = None
@@ -477,7 +517,12 @@ def load_dynamic_agents_by_workflow():
                 t_key = a.get("tool_key")
                 if t_type == "builtin":
                     if t_key in tool_lookup:
-                        main_tools.append(tool_lookup[t_key])
+                        tool_func = tool_lookup[t_key]
+                        if t_key == "list_skills":
+                            tool_func = _bind_agent_id_to_list_skills(list_skills, main_id)
+                        elif t_key == "read_skill":
+                            tool_func = _bind_agent_id_to_read_skill(read_skill, main_id)
+                        main_tools.append(tool_func)
                     elif t_key.startswith("unified_"):
                         main_tools.append(make_dynamic_unified_tool(t_key))
 
@@ -528,7 +573,12 @@ def load_dynamic_agents_by_workflow():
                     t_key = a.get("tool_key")
                     if t_type == "builtin":
                         if t_key in tool_lookup:
-                            sub_tools.append(tool_lookup[t_key])
+                            tool_func = tool_lookup[t_key]
+                            if t_key == "list_skills":
+                                tool_func = _bind_agent_id_to_list_skills(list_skills, sub_id)
+                            elif t_key == "read_skill":
+                                tool_func = _bind_agent_id_to_read_skill(read_skill, sub_id)
+                            sub_tools.append(tool_func)
                         elif t_key.startswith("unified_"):
                             sub_tools.append(make_dynamic_unified_tool(t_key))
 

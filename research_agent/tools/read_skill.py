@@ -13,7 +13,7 @@ _SKILLS_ROOT = Path(__file__).resolve().parent.parent / "skills"
 
 
 @tool(parse_docstring=True)
-def read_skill(skill_name: str) -> str:
+def read_skill(skill_name: str, agent_id: Optional[str] = None) -> str:
     """Load a skill instruction file from disk and return its full content.
 
     Call this at the START of any task that uses a named skill.
@@ -25,6 +25,8 @@ def read_skill(skill_name: str) -> str:
     Args:
         skill_name: The name of the skill directory (e.g. "blog_post_writer").
                     Must match a folder inside research_agent/skills/.
+        agent_id: Optional agent ID filter — if provided, only allows reading
+                  skills assigned to this specific agent.
 
     Returns:
         The full text of the SKILL.md file, or an error message if not found.
@@ -32,12 +34,26 @@ def read_skill(skill_name: str) -> str:
     # Try to load from Supabase skills_library first
     import os
     from datetime import datetime, timezone
+    from typing import Optional
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
         key = os.environ.get("SUPABASE_ANON_KEY", "")
         if url and key:
             client = create_client(url, key)
+
+            # Check if assigned to this agent
+            if agent_id:
+                resp = client.table("agent_tool_assignments") \
+                    .select("id") \
+                    .eq("agent_id", agent_id) \
+                    .eq("tool_key", skill_name) \
+                    .eq("tool_type", "skill") \
+                    .eq("enabled", True) \
+                    .execute()
+                if not resp.data or len(resp.data) == 0:
+                    return f"⚠️ Access Denied: Skill '{skill_name}' is not assigned to you in the Settings UI. You can only read skills that are attached to you."
+
             resp = client.table("skills_library").select("content, use_count").eq("skill_key", skill_name).eq("state", "active").execute()
             if resp.data and len(resp.data) > 0:
                 content = resp.data[0].get("content", "").strip()
