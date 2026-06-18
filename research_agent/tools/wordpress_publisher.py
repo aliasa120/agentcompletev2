@@ -336,8 +336,8 @@ def publish_to_wordpress(
         category_id: The integer ID of the WordPress category to assign.
             Get this from get_wordpress_categories() first.
         featured_image_path: Optional local file path or public web image URL
-            to upload and set as the post's featured image (thumbnail)
-            (e.g., "output/candidate_images/image_1.jpg" or "https://example.com/image.png").
+            to upload and set as the post featured image (thumbnail).
+            For example, output/candidate_images/image_1.jpg or a web URL link.
             Leave empty to skip featured image.
 
     Returns:
