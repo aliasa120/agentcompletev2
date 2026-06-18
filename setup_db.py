@@ -18,8 +18,14 @@ Requires SUPABASE_URL and SUPABASE_ANON_KEY in .env
 import os
 import json
 import sys
+import io
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Reconfigure stdout/stderr to use UTF-8 on Windows consoles to prevent UnicodeEncodeError
+if sys.platform.startswith("win"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
 load_dotenv()
 
@@ -92,6 +98,54 @@ def _table_exists(table: str) -> bool:
         return False
 
 
+def run_sql_migration_direct(sql: str) -> bool:
+    """Connect to Supabase PostgreSQL database directly using pg8000 and run migrations."""
+    db_password = os.environ.get("SUPABASE_DB_PASSWORD", "")
+    if not db_password:
+        return False
+
+    # Extract project ID from SUPABASE_URL
+    import re
+    match = re.search(r"https://([^.]+)\.supabase\.co", SUPABASE_URL)
+    if not match:
+        print(f"  ❌ Could not parse project ID from SUPABASE_URL: {SUPABASE_URL}")
+        return False
+    
+    project_id = match.group(1)
+    host = f"db.{project_id}.supabase.co"
+    port_str = os.environ.get("SUPABASE_DB_PORT", "5432")
+    try:
+        port = int(port_str)
+    except ValueError:
+        port = 5432
+    
+    print(f"  🔌 Connecting directly to Supabase DB: {host}:{port}...")
+    try:
+        import pg8000
+        conn = pg8000.connect(
+            user="postgres",
+            host=host,
+            database="postgres",
+            port=port,
+            password=db_password
+        )
+        cursor = conn.cursor()
+        
+        print("  🚀 Running migration SQL...")
+        cursor.execute(sql)
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("  ✅ Database schema successfully created/updated!")
+        return True
+    except ImportError:
+        print("  ❌ pg8000 package not installed. Run: pip install pg8000")
+        return False
+    except Exception as e:
+        print(f"  ❌ Failed to execute SQL directly: {e}")
+        return False
+
+
 def create_tables():
     """Print the SQL for creating all tables and guide user through Supabase dashboard."""
     print("\n" + "=" * 60)
@@ -112,19 +166,30 @@ def create_tables():
         print("\n  ✅ All tables already exist — skipping creation.")
         return True
 
+    sql = generate_migration_sql()
+
+    # Save to a file for convenience/reference
+    sql_file = Path("supabase_migration.sql")
+    try:
+        sql_file.write_text(sql, encoding="utf-8")
+        print(f"  💾 SQL script saved to: {sql_file.resolve()}")
+    except Exception:
+        pass
+
+    # Attempt direct postgres execution if DB password is provided
+    if os.environ.get("SUPABASE_DB_PASSWORD"):
+        print(f"\n  ⚠️  {len(tables_to_create)} table(s) need to be created. Attempting automatic migration...")
+        success = run_sql_migration_direct(sql)
+        if success:
+            return True
+        print("  ⚠️  Automatic migration failed. Falling back to manual setup instructions.")
+
     print(f"\n  ⚠️  {len(tables_to_create)} table(s) need to be created.")
     print("\n  Run this SQL in your Supabase SQL Editor:")
     print("  https://supabase.com/dashboard → SQL Editor → New Query\n")
     print("-" * 60)
-
-    sql = generate_migration_sql()
     print(sql)
     print("-" * 60)
-
-    # Also save to a file for convenience
-    sql_file = Path("supabase_migration.sql")
-    sql_file.write_text(sql, encoding="utf-8")
-    print(f"\n  💾 SQL also saved to: {sql_file.resolve()}")
     print("\n  After running the SQL, run this script again to seed data.")
     return False
 

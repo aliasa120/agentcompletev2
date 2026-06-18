@@ -13,6 +13,112 @@ from langchain_core.tools import tool
 _SKILLS_ROOT = Path(__file__).resolve().parent.parent / "skills"
 
 
+# Helper functions for YAML frontmatter parsing and compatibility checks
+def parse_frontmatter(content: str) -> tuple[dict, str]:
+    """Parse YAML frontmatter from markdown content."""
+    import re
+    import yaml
+    frontmatter = {}
+    body = content
+    if not content.startswith("---"):
+        return frontmatter, body
+    
+    # Try finding the closing ---
+    end_match = re.search(r"\r?\n---\r?\n", content[3:])
+    if not end_match:
+        return frontmatter, body
+        
+    yaml_content = content[3 : end_match.start() + 3]
+    body = content[end_match.end() + 3 :]
+    
+    try:
+        parsed = yaml.safe_load(yaml_content)
+        if isinstance(parsed, dict):
+            frontmatter = parsed
+    except Exception:
+        # Fallback to key-value splitting if yaml parser fails
+        for line in yaml_content.strip().split("\n"):
+            if ":" in line:
+                key, val = line.split(":", 1)
+                frontmatter[key.strip()] = val.strip().strip("'\"")
+    return frontmatter, body
+
+def check_skill_compatibility(frontmatter: dict, skill_name: str) -> Optional[str]:
+    """Check if the skill is compatible with the current platform and has all required env vars."""
+    import sys
+    import os
+    
+    # 1. Platform Check
+    platforms = frontmatter.get("platforms")
+    if platforms:
+        if isinstance(platforms, str):
+            platforms = [platforms]
+        
+        platform_map = {
+            "macos": "darwin",
+            "linux": "linux",
+            "windows": "win32"
+        }
+        current_platform = sys.platform
+        matched = False
+        for p in platforms:
+            norm = str(p).lower().strip()
+            mapped = platform_map.get(norm, norm)
+            if current_platform.startswith(mapped):
+                matched = True
+                break
+        if not matched:
+            return (
+                f"⚠️ Platform Incompatible: The skill '{skill_name}' is only compatible with "
+                f"platforms: {platforms}. Current platform is '{sys.platform}'."
+            )
+
+    # 2. Required Env Vars Check
+    required_vars = []
+    
+    # Parse standard required_environment_variables
+    req_raw = frontmatter.get("required_environment_variables") or []
+    if isinstance(req_raw, str):
+        req_raw = [req_raw]
+    elif isinstance(req_raw, dict):
+        req_raw = [req_raw]
+        
+    for item in req_raw:
+        if isinstance(item, str):
+            required_vars.append(item.strip())
+        elif isinstance(item, dict):
+            name = item.get("name") or item.get("env_var")
+            if name:
+                required_vars.append(str(name).strip())
+
+    # Parse legacy prerequisites.env_vars
+    prereqs = frontmatter.get("prerequisites")
+    if isinstance(prereqs, dict):
+        env_vars = prereqs.get("env_vars") or []
+        if isinstance(env_vars, str):
+            env_vars = [env_vars]
+        for v in env_vars:
+            required_vars.append(str(v).strip())
+
+    # De-duplicate required vars
+    required_vars = list(set(required_vars))
+    
+    # Check if any required env vars are missing
+    missing_vars = []
+    for var in required_vars:
+        if not os.environ.get(var):
+            missing_vars.append(var)
+            
+    if missing_vars:
+        missing_str = ", ".join(missing_vars)
+        return (
+            f"⚠️ Setup Needed: The skill '{skill_name}' requires the following environment "
+            f"variables which are currently missing: {missing_str}. Please configure them."
+        )
+        
+    return None
+
+
 @tool(parse_docstring=True)
 def read_skill(skill_name: str, agent_id: Optional[str] = None) -> str:
     """Load a skill instruction file from disk and return its full content.
@@ -59,6 +165,12 @@ def read_skill(skill_name: str, agent_id: Optional[str] = None) -> str:
             if resp.data and len(resp.data) > 0:
                 content = resp.data[0].get("content", "").strip()
                 if content:
+                    # Validate frontmatter and compatibility
+                    frontmatter, body = parse_frontmatter(content)
+                    compatibility_error = check_skill_compatibility(frontmatter, skill_name)
+                    if compatibility_error:
+                        return compatibility_error
+
                     # Track usage — increment use_count and update last_used_at
                     try:
                         current_count = resp.data[0].get("use_count", 0) or 0
@@ -100,6 +212,13 @@ def read_skill(skill_name: str, agent_id: Optional[str] = None) -> str:
     try:
         content = skill_path.read_text(encoding="utf-8")
         char_count = len(content)
+        
+        # Validate frontmatter and compatibility
+        frontmatter, body = parse_frontmatter(content)
+        compatibility_error = check_skill_compatibility(frontmatter, skill_name)
+        if compatibility_error:
+            return compatibility_error
+
         print(f"[read_skill] [OK] Loaded skill '{skill_name}' ({char_count} chars)")
         return (
             f"=== SKILL: {skill_name.upper()} ===\n\n"

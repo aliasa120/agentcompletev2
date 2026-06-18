@@ -37,4 +37,5 @@ ENV LANGGRAPH_PORT=2024
 # For self-hosting LangGraph, we use the integrated open-source CLI server
 # because your Next.js UI strictly expects the LangGraph REST API endpoints.
 # Also run the feeder HTTP server on port 8080 so the frontend can trigger it.
-CMD sh -c "python feeder_server.py & langgraph dev --host 0.0.0.0 --port 2024"
+# We also automatically run setup_db.py to create and seed the database on startup.
+CMD sh -c "python setup_db.py && python feeder_server.py & langgraph dev --host 0.0.0.0 --port 2024"

@@ -10,11 +10,173 @@ import json
 import asyncio
 import logging
 import threading
+import re
 from typing import List, Dict, Any, Optional, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
+import mcp.types
 
 logger = logging.getLogger("mcp_loader")
+
+# --- Environment Sandboxing Definitions ---
+_SAFE_ENV_KEYS = frozenset({
+    "PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM", "SHELL", "TMPDIR",
+})
+
+_SAFE_ENV_KEYS_CASE_INSENSITIVE = frozenset({
+    "ALLUSERSPROFILE",
+    "APPDATA",
+    "COMMONPROGRAMFILES",
+    "COMMONPROGRAMFILES(X86)",
+    "COMMONPROGRAMW6432",
+    "COMPUTERNAME",
+    "COMSPEC",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "LOCALAPPDATA",
+    "NUMBER_OF_PROCESSORS",
+    "OS",
+    "PATHEXT",
+    "PROCESSOR_ARCHITECTURE",
+    "PROGRAMDATA",
+    "PROGRAMFILES",
+    "PROGRAMFILES(X86)",
+    "PROGRAMW6432",
+    "PUBLIC",
+    "SYSTEMDRIVE",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "USERDOMAIN",
+    "USERNAME",
+    "USERPROFILE",
+    "WINDIR",
+})
+
+def _build_safe_env(user_env: Optional[Dict[str, str]]) -> Dict[str, str]:
+    """Build a filtered environment dict for stdio subprocesses to prevent leaking API keys."""
+    env = {}
+    for key, value in os.environ.items():
+        if (
+            key in _SAFE_ENV_KEYS
+            or key.upper() in _SAFE_ENV_KEYS_CASE_INSENSITIVE
+            or key.startswith("XDG_")
+        ):
+            env[key] = value
+    if user_env:
+        for k, v in user_env.items():
+            if v is not None:
+                env[k] = str(v)
+    return env
+
+# --- Credential Redaction Definitions ---
+_CREDENTIAL_PATTERN = re.compile(
+    r"(?:"
+    r"ghp_[A-Za-z0-9_]{1,255}"           # GitHub PAT
+    r"|sk-[A-Za-z0-9_]{1,255}"           # OpenAI-style key
+    r"|Bearer\s+\S+"                      # Bearer token
+    r"|token=[^\s&,;\"']{1,255}"         # token=...
+    r"|key=[^\s&,;\"']{1,255}"           # key=...
+    r"|API_KEY=[^\s&,;\"']{1,255}"       # API_KEY=...
+    r"|password=[^\s&,;\"']{1,255}"      # password=...
+    r"|secret=[^\s&,;\"']{1,255}"        # secret=...
+    r")",
+    re.IGNORECASE,
+)
+
+def sanitize_credentials(text: str) -> str:
+    """Strip credential-like patterns from text to prevent leaking API keys/tokens."""
+    if not isinstance(text, str):
+        return text
+    return _CREDENTIAL_PATTERN.sub("[REDACTED]", text)
+
+def wrap_tool_with_redaction(tool: BaseTool) -> BaseTool:
+    """Wraps a LangChain tool's execution to redact credentials from outputs and error messages."""
+    import functools
+    orig_arun = tool._arun
+    orig_run = tool._run
+
+    @functools.wraps(orig_run)
+    def redacted_run(*args, **kwargs):
+        try:
+            res = orig_run(*args, **kwargs)
+            return sanitize_credentials(str(res)) if isinstance(res, str) else res
+        except Exception as e:
+            raise type(e)(sanitize_credentials(str(e)))
+
+    @functools.wraps(orig_arun)
+    async def redacted_arun(*args, **kwargs):
+        try:
+            res = await orig_arun(*args, **kwargs)
+            return sanitize_credentials(str(res)) if isinstance(res, str) else res
+        except Exception as e:
+            raise type(e)(sanitize_credentials(str(e)))
+
+    tool._arun = redacted_arun
+    tool._run = redacted_run
+    return tool
+
+# --- MCP Sampling Callback Handler ---
+async def handle_sampling_request(ctx, params) -> Any:
+    """Handle a sampling/createMessage request from an MCP server by querying our LLM."""
+    try:
+        from langchain_openai import ChatOpenAI
+        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+        from research_agent.tools.provider_engine import get_llm_config
+        from mcp.types import CreateMessageResult, TextContent
+
+        langchain_messages = []
+        if getattr(params, "systemPrompt", None):
+            langchain_messages.append(SystemMessage(content=params.systemPrompt))
+
+        messages = getattr(params, "messages", [])
+        for msg in messages:
+            role = getattr(msg, "role", "user")
+            content_obj = getattr(msg, "content", None)
+            content_text = ""
+            if content_obj:
+                if hasattr(content_obj, "text"):
+                    content_text = content_obj.text
+                elif isinstance(content_obj, dict) and "text" in content_obj:
+                    content_text = content_obj["text"]
+                elif hasattr(content_obj, "type") and content_obj.type == "text":
+                    content_text = getattr(content_obj, "text", "")
+                else:
+                    content_text = str(content_obj)
+
+            if role == "user":
+                langchain_messages.append(HumanMessage(content=content_text))
+            elif role == "assistant":
+                langchain_messages.append(AIMessage(content=content_text))
+
+        base_url, api_key, model_name = get_llm_config("main_agent")
+        
+        chat = ChatOpenAI(
+            model=model_name,
+            api_key=api_key,
+            base_url=base_url,
+            temperature=getattr(params, "temperature", 0.45) or 0.45,
+            max_tokens=getattr(params, "maxTokens", 1024) or 1024,
+        )
+
+        res = await chat.ainvoke(langchain_messages)
+
+        return CreateMessageResult(
+            role="assistant",
+            content=TextContent(type="text", text=res.content),
+            model=model_name,
+            stopReason="endTurn"
+        )
+    except Exception as e:
+        logger.error(f"Error handling sampling request: {e}", exc_info=True)
+        from mcp.types import CreateMessageResult, TextContent
+        return CreateMessageResult(
+            role="assistant",
+            content=TextContent(type="text", text=f"Error in client sampling: {e}"),
+            model="fallback",
+            stopReason="stop"
+        )
+
 
 class ZapierActionInput(BaseModel):
     instructions: str = Field(description="Natural language instructions for the action (e.g. 'Create a post with title Hello and status publish')")
@@ -58,10 +220,10 @@ class ZapierActionTool(BaseTool):
                             text_parts.append(c["text"])
                         else:
                             text_parts.append(str(c))
-                    return "\n".join(text_parts)
-                return str(result)
+                    return sanitize_credentials("\n".join(text_parts))
+                return sanitize_credentials(str(result))
         except Exception as e:
-            return f"Error executing Zapier action: {e}"
+            return sanitize_credentials(f"Error executing Zapier action: {e}")
 
 def run_sync(coro):
     """Run an async coroutine synchronously, safe for running event loops."""
@@ -123,15 +285,26 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
         if zapier_secret:
             headers["Authorization"] = f"Bearer {zapier_secret}"
 
+    # Setup safe environment for Stdio subprocess sandboxing
+    safe_env = None
+
+    # Setup session_kwargs to enable sampling capability callback
+    session_kwargs = {
+        "sampling_callback": handle_sampling_request,
+        "sampling_capabilities": mcp.types.SamplingCapability()
+    }
+
     if config_data and isinstance(config_data, dict):
         transport = config_data.get("transport", "sse")
         if transport == "stdio":
+            safe_env = _build_safe_env(config_data.get("env", {}))
             server_config = {
                 "manual_server": {
                     "transport": "stdio",
                     "command": config_data.get("command"),
                     "args": config_data.get("args", []),
-                    "env": config_data.get("env", {}),
+                    "env": safe_env,
+                    "session_kwargs": session_kwargs,
                 }
             }
         else:
@@ -140,6 +313,7 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
                     "transport": "streamable-http" if is_zapier else transport,
                     "url": config_data.get("url", base_url),
                     "headers": headers,
+                    "session_kwargs": session_kwargs,
                 }
             }
     else:
@@ -148,6 +322,7 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
                 "transport": "streamable-http" if is_zapier else "sse",
                 "url": base_url,
                 "headers": headers,
+                "session_kwargs": session_kwargs,
             }
         }
 
@@ -172,6 +347,8 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
             matched = [t for t in all_tools if t.name == tool_key]
             if matched:
                 logger.info(f"Loaded manual MCP tool: {tool_key} from server")
+                # Wrap each tool with credential redaction
+                matched = [wrap_tool_with_redaction(t) for t in matched]
             else:
                 logger.warning(f"Manual MCP tool '{tool_key}' not found on server. Available: {[t.name for t in all_tools]}")
             return matched
