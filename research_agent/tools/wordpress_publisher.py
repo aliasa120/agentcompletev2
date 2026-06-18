@@ -180,17 +180,44 @@ def _upload_media(
     title: str,
     alt_text: str = "",
 ) -> int | None:
-    """Upload a local image to WordPress Media Library.
+    """Upload a local image or download and upload a remote web image URL to WordPress Media Library.
 
     Returns the media ID (integer) on success, or None on failure.
     """
-    img = Path(image_path)
-    if not img.exists():
-        print(f"[wp_publisher] ⚠️  Image not found: {image_path}")
+    filename = "featured_image.jpg"
+    is_url = image_path.startswith(("http://", "https://"))
+
+    try:
+        if is_url:
+            print(f"[wp_publisher] Downloading remote image URL: {image_path}")
+            # Determine filename from URL if possible
+            url_path = image_path.split("?")[0]
+            if url_path.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".gif")):
+                filename = url_path.split("/")[-1]
+            else:
+                filename = "remote_image.jpg"
+
+            resp = requests.get(image_path, timeout=30)
+            resp.raise_for_status()
+            img_bytes = resp.content
+        else:
+            img = Path(image_path)
+            if not img.exists():
+                print(f"[wp_publisher] ⚠️  Image not found: {image_path}")
+                return None
+            filename = img.name
+            img_bytes = img.read_bytes()
+    except Exception as e:
+        print(f"[wp_publisher] ❌ Failed to retrieve image from {image_path}: {e}")
         return None
 
-    filename = img.name
-    content_type = "image/jpeg" if filename.lower().endswith((".jpg", ".jpeg")) else "image/png"
+    content_type = "image/jpeg"
+    if filename.lower().endswith(".png"):
+        content_type = "image/png"
+    elif filename.lower().endswith(".gif"):
+        content_type = "image/gif"
+    elif filename.lower().endswith(".webp"):
+        content_type = "image/webp"
 
     headers = {
         "Content-Disposition": f"attachment; filename={filename}",
@@ -198,14 +225,13 @@ def _upload_media(
     }
 
     try:
-        with open(img, "rb") as f:
-            resp = requests.post(
-                f"{_wp_base()}/media",
-                auth=_wp_auth(),
-                headers=headers,
-                data=f,
-                timeout=60,
-            )
+        resp = requests.post(
+            f"{_wp_base()}/media",
+            auth=_wp_auth(),
+            headers=headers,
+            data=img_bytes,
+            timeout=60,
+        )
 
         if resp.status_code in (200, 201):
             media_id = resp.json().get("id")
@@ -309,9 +335,9 @@ def publish_to_wordpress(
             title, slug, meta_description, and excerpt from the frontmatter.
         category_id: The integer ID of the WordPress category to assign.
             Get this from get_wordpress_categories() first.
-        featured_image_path: Optional absolute or relative path to the image
-            file to upload as the post's featured image (thumbnail)
-            (e.g., "output/candidate_images/image_1.jpg").
+        featured_image_path: Optional local file path or public web image URL
+            to upload and set as the post's featured image (thumbnail)
+            (e.g., "output/candidate_images/image_1.jpg" or "https://example.com/image.png").
             Leave empty to skip featured image.
 
     Returns:
