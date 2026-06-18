@@ -351,6 +351,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Error searching assistants: {ae}")
             RESOLVED_ASSISTANT_ID = "research"
 
+    # Verify if thread exists in LangGraph. Recreate it if missing/expired.
+    try:
+        await langgraph_client.threads.get(thread_id)
+    except Exception as te:
+        if "not found" in str(te).lower():
+            logger.info(f"Thread {thread_id} not found in LangGraph. Recreating a new one...")
+            try:
+                thread = await langgraph_client.threads.create()
+                thread_id = thread["thread_id"]
+                # Save the new active thread ID in Supabase
+                await set_active_workflow(chat_id, workflow_id, thread_id)
+            except Exception as ce:
+                logger.error(f"Failed to recreate missing thread: {ce}")
+        else:
+            logger.warning(f"Unexpected error validating thread existence: {te}")
+
     input_data = {"messages": [{"role": "user", "content": user_text}]}
     config = {
         "configurable": {
