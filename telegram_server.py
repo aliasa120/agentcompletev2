@@ -95,6 +95,8 @@ else:
     ALLOWED_USERS = None
     logger.info("Access open to all users (TELEGRAM_ALLOWED_USERS is wildcard or empty).")
 
+RESOLVED_ASSISTANT_ID = None
+
 def is_user_allowed(user) -> bool:
     """Check if a Telegram user is allowed to run workflows."""
     if ALLOWED_USERS is None:
@@ -332,6 +334,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Send typing status
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
+    global RESOLVED_ASSISTANT_ID
+    if not RESOLVED_ASSISTANT_ID:
+        try:
+            assistants = await langgraph_client.assistants.search()
+            if assistants:
+                for a in assistants:
+                    if a.get("name") == "research" or a.get("assistant_id") == "research":
+                        RESOLVED_ASSISTANT_ID = a["assistant_id"]
+                        break
+                else:
+                    RESOLVED_ASSISTANT_ID = assistants[0]["assistant_id"]
+            else:
+                RESOLVED_ASSISTANT_ID = "research"
+        except Exception as ae:
+            logger.error(f"Error searching assistants: {ae}")
+            RESOLVED_ASSISTANT_ID = "research"
+
     input_data = {"messages": [{"role": "user", "content": user_text}]}
     config = {
         "configurable": {
@@ -344,11 +363,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     last_edit_time = 0.0
 
     try:
-        # Stream events from the LangGraph server
-        # Target assistant_id="research" as compiled in langgraph.json
+        # Stream events from the LangGraph server using the resolved assistant ID
         async for chunk in langgraph_client.runs.stream(
             thread_id=thread_id,
-            assistant_id="research",
+            assistant_id=RESOLVED_ASSISTANT_ID,
             input=input_data,
             config=config,
             stream_mode="messages"
