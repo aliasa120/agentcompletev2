@@ -114,7 +114,7 @@ async def get_active_workflows() -> list[dict]:
         # Wrap blocking Supabase sync call in an executor
         resp = await loop.run_in_executor(
             None,
-            lambda: supabase.table("workflows").select("id, name, description").eq("enabled", True).execute()
+            lambda: supabase.table("workflows").select("id, name, description").execute()
         )
         return resp.data or []
     except Exception as e:
