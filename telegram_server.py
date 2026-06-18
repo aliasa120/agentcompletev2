@@ -387,9 +387,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             config=config,
             stream_mode="messages"
         ):
-            # Parse token deltas from the stream
-            event_type = chunk.get("event")
-            data = chunk.get("data", [])
+            # Parse token deltas from the stream (handles both dict and StreamPart objects)
+            if isinstance(chunk, dict):
+                event_type = chunk.get("event")
+                data = chunk.get("data", [])
+            else:
+                event_type = getattr(chunk, "event", None)
+                data = getattr(chunk, "data", [])
             
             if event_type == "messages/partial":
                 for msg in data:
