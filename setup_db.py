@@ -101,7 +101,7 @@ def create_tables():
     # Check which tables already exist
     tables_to_create = []
     for table in ["workflows", "agent_configs", "agent_tool_assignments",
-                  "mcp_connections", "skills_library", "design_assets"]:
+                  "mcp_connections", "skills_library", "design_assets", "telegram_chat_bindings"]:
         exists = _table_exists(table)
         status = "✅ exists" if exists else "❌ missing"
         print(f"  {table}: {status}")
@@ -223,6 +223,17 @@ CREATE TABLE IF NOT EXISTS design_assets (
   updated_at  TIMESTAMPTZ DEFAULT now()
 );
 
+-- ── telegram_chat_bindings ──────────────────────────────────
+CREATE TABLE IF NOT EXISTS telegram_chat_bindings (
+  chat_id     TEXT,
+  workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE,
+  thread_id   TEXT NOT NULL,
+  is_active   BOOLEAN DEFAULT true,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (chat_id, workflow_id)
+);
+
 -- ── Add workflow_id references to feeder/social tables if they exist ──
 ALTER TABLE feeder_sources ADD COLUMN IF NOT EXISTS workflow_id UUID REFERENCES workflows(id) ON DELETE SET NULL;
 ALTER TABLE feeder_articles ADD COLUMN IF NOT EXISTS workflow_id UUID REFERENCES workflows(id) ON DELETE SET NULL;
@@ -235,12 +246,14 @@ ALTER TABLE agent_tool_assignments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE mcp_connections        DISABLE ROW LEVEL SECURITY;
 ALTER TABLE skills_library         DISABLE ROW LEVEL SECURITY;
 ALTER TABLE design_assets          DISABLE ROW LEVEL SECURITY;
+ALTER TABLE telegram_chat_bindings  DISABLE ROW LEVEL SECURITY;
 
 -- ── Realtime: Enable for instant config reloads ──────────────
 ALTER PUBLICATION supabase_realtime ADD TABLE workflows;
 ALTER PUBLICATION supabase_realtime ADD TABLE agent_configs;
 ALTER PUBLICATION supabase_realtime ADD TABLE agent_tool_assignments;
 ALTER PUBLICATION supabase_realtime ADD TABLE mcp_connections;
+ALTER PUBLICATION supabase_realtime ADD TABLE telegram_chat_bindings;
 
 -- ── Indexes ──────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_agent_configs_type

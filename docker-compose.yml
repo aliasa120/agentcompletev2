@@ -49,6 +49,21 @@ services:
       - backend
       - feeder_svc
 
+  # ── Telegram Bot (long polling — internal only) ──────────────────────────
+  telegram:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent-telegram
+    restart: unless-stopped
+    command: python telegram_server.py
+    env_file:
+      - .env
+    environment:
+      - LANGGRAPH_API_URL=http://backend:2024
+    depends_on:
+      - backend
+
   # ── Next.js frontend (port 3000, public) ───────────────────────────────
   frontend:
     build:
