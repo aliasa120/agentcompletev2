@@ -100,26 +100,118 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant, onStar
     }) => {
       // 1. Process files client-side and upload them to the agent state
       const fileContents: Record<string, string> = {};
+      const contentParts: any[] = [];
+
+      // Add main message text if it exists
+      if (data.message.trim()) {
+        contentParts.push({ type: "text", text: data.message });
+      }
+
       for (const f of data.files) {
         try {
-          if (
-            f.file.type.startsWith("text/") ||
+          let mimeType = f.file.type;
+          if (!mimeType) {
+            // Guess mime type from extension
+            const ext = f.file.name.split(".").pop()?.toLowerCase();
+            if (ext === "pdf") mimeType = "application/pdf";
+            else if (["mp3", "wav", "ogg", "m4a", "aac"].includes(ext || "")) mimeType = `audio/${ext === "mp3" ? "mpeg" : ext}`;
+            else if (["mp4", "webm", "mov", "avi"].includes(ext || "")) mimeType = `video/${ext === "mov" ? "quicktime" : ext}`;
+            else mimeType = "application/octet-stream";
+          }
+
+          const isText =
+            mimeType.startsWith("text/") ||
             f.file.name.endsWith(".txt") ||
             f.file.name.endsWith(".md") ||
             f.file.name.endsWith(".json") ||
             f.file.name.endsWith(".js") ||
             f.file.name.endsWith(".ts") ||
-            f.file.name.endsWith(".tsx")
-          ) {
+            f.file.name.endsWith(".tsx");
+
+          if (isText) {
             const text = await f.file.text();
             fileContents[f.file.name] = text;
+            contentParts.push({
+              type: "text",
+              text: `\n\n[Attached text file: ${f.file.name}]\n${text}`
+            });
+          } else {
+            // Read binary file as base64
+            const base64Data = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const result = reader.result as string;
+                const base64 = result.split(",")[1];
+                resolve(base64);
+              };
+              reader.onerror = (err) => reject(err);
+              reader.readAsDataURL(f.file);
+            });
+
+            const dataUrl = `data:${mimeType};base64,${base64Data}`;
+            fileContents[f.file.name] = dataUrl;
+
+            // Attach block based on file MIME type
+            if (mimeType.startsWith("image/")) {
+              contentParts.push({
+                type: "image_url",
+                image_url: {
+                  url: dataUrl
+                }
+              });
+            } else if (mimeType.startsWith("audio/")) {
+              const format = f.file.name.split(".").pop()?.toLowerCase() || "mp3";
+              // Attach both input_audio (for OpenAI/MiMo) and image_url (for Gemini compatible layer)
+              contentParts.push({
+                type: "input_audio",
+                input_audio: {
+                  data: base64Data,
+                  format: format === "mp3" ? "mp3" : "wav"
+                }
+              });
+              contentParts.push({
+                type: "image_url",
+                image_url: {
+                  url: dataUrl
+                }
+              });
+            } else if (mimeType.startsWith("video/")) {
+              // Attach both video_url (for MiMo) and image_url (for Gemini compatible layer)
+              contentParts.push({
+                type: "video_url",
+                video_url: {
+                  url: dataUrl
+                },
+                fps: 2,
+                media_resolution: "default"
+              });
+              contentParts.push({
+                type: "image_url",
+                image_url: {
+                  url: dataUrl
+                }
+              });
+            } else {
+              // For PDF and other documents, attach as image_url block containing dataURI
+              contentParts.push({
+                type: "image_url",
+                image_url: {
+                  url: dataUrl
+                }
+              });
+            }
           }
         } catch (err) {
           console.error("Failed to read file:", f.file.name, err);
         }
       }
+
       for (const p of data.pastedContent) {
         fileContents[`pasted_text_${p.id}.txt`] = p.content;
+        contentParts.push({
+          type: "text",
+          text: `\n\n[Pasted content]\n${p.content}`
+        });
       }
 
       if (Object.keys(fileContents).length > 0) {
@@ -127,7 +219,13 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant, onStar
       }
 
       // 2. Send the message
-      sendMessage(data.message);
+      if (contentParts.length > 0) {
+        if (contentParts.length === 1 && contentParts[0].type === "text") {
+          sendMessage(data.message);
+        } else {
+          sendMessage(contentParts);
+        }
+      }
     },
     [files, sendMessage, setFiles]
   );

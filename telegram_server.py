@@ -261,6 +261,44 @@ async def workflows_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Select a workflow to connect to this chat:", reply_markup=reply_markup)
 
+async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /clear or /newthread command. Creates a new thread for the active workflow."""
+    if not is_user_allowed(update.effective_user):
+        await update.message.reply_text("⛔ Access denied.")
+        return
+
+    chat_id = update.effective_chat.id
+    binding = await get_active_binding(chat_id)
+    if not binding:
+        await update.message.reply_text(
+            "❌ No workflow is currently connected to this chat.\n"
+            "Please use `/workflows` to select one."
+        )
+        return
+
+    workflow_id = binding["workflow_id"]
+    workflow_name = binding["workflow_name"]
+
+    try:
+        # Create a fresh thread in LangGraph API
+        thread = await langgraph_client.threads.create()
+        thread_id = thread["thread_id"]
+        logger.info(f"Created new LangGraph thread {thread_id} for chat {chat_id} via /clear command")
+
+        # Save the active workflow binding in Supabase
+        await set_active_workflow(chat_id, workflow_id, thread_id)
+
+        await update.message.reply_text(
+            f"🔄 **Conversation Reset!**\n\n"
+            f"🤖 **Workflow:** `{workflow_name}`\n"
+            f"🧵 **New Thread ID:** `{thread_id}`\n\n"
+            f"A new thread has been created. Your previous history for this workflow in this chat is cleared.",
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        logger.exception("Error clearing conversation")
+        await update.message.reply_text(f"❌ Failed to reset conversation: {e}")
+
 # ── Callback Query Handling (Workflow Selection) ─────────────────────────────
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -281,13 +319,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(f"⏳ Connecting chat to `{workflow_name}`...")
 
         try:
-            # Check if a thread ID already exists for this workflow+chat
-            thread_id = await get_thread_for_workflow(chat_id, workflow_id)
-            if not thread_id:
-                # Create a fresh thread in LangGraph API
-                thread = await langgraph_client.threads.create()
-                thread_id = thread["thread_id"]
-                logger.info(f"Created new LangGraph thread {thread_id} for chat {chat_id}")
+            # Create a fresh thread in LangGraph API every time a workflow is selected/switched
+            thread = await langgraph_client.threads.create()
+            thread_id = thread["thread_id"]
+            logger.info(f"Created new LangGraph thread {thread_id} for chat {chat_id}")
 
             # Save the active workflow binding in Supabase
             await set_active_workflow(chat_id, workflow_id, thread_id)
@@ -496,6 +531,8 @@ def main():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("workflows", workflows_command))
     application.add_handler(CommandHandler("status", status_command))
+    application.add_handler(CommandHandler("clear", clear_command))
+    application.add_handler(CommandHandler("newthread", clear_command))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 

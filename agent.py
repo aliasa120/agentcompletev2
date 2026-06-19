@@ -74,6 +74,163 @@ class ResilientChatModel(ChatOpenAI):
 
     max_retries: int = 0  # Disable built-in tenacity retries — we handle it ourselves
 
+    def _filter_messages_by_capability(self, messages: list) -> list:
+        """Filter message content blocks based on the model's capabilities to avoid API errors."""
+        raw_model = getattr(self, "model_name", None) or getattr(self, "model", "unknown-model")
+        model_name = str(raw_model).lower()
+
+        # Determine capabilities based on model name
+        supports_video = False
+        supports_audio = False
+        supports_image = False
+        supports_pdf = False
+
+        # mimo-v2.5 supports video, audio, image
+        if "mimo-v2.5" in model_name:
+            if "pro" not in model_name and "tts" not in model_name:
+                supports_video = True
+                supports_audio = True
+                supports_image = True
+            else:
+                # mimo-v2.5-pro / mimo-v2.5-tts are text or specific output only
+                pass
+        # gemini or xiaomi/mimo omni models or vercel AI endpoints that might proxy to gemini/kimi
+        elif any(kw in model_name for kw in ["gemini", "flash", "pro", "kimi"]):
+            supports_image = True
+            supports_audio = True
+            supports_video = True
+            supports_pdf = True
+        elif "gpt-4o" in model_name:
+            supports_image = True
+            supports_audio = True
+        elif "claude" in model_name:
+            supports_image = True
+            supports_pdf = True
+        elif any(kw in model_name for kw in ["pixtral", "vision", "vl", "llava"]):
+            supports_image = True
+        else:
+            # Fallback/default: assume typical modern omni/vision models support images
+            supports_image = True
+
+        cleaned_messages = []
+        for msg in messages:
+            if not hasattr(msg, "content"):
+                cleaned_messages.append(msg)
+                continue
+
+            if isinstance(msg.content, list):
+                new_content = []
+                for block in msg.content:
+                    if isinstance(block, str):
+                        new_content.append(block)
+                        continue
+
+                    if not isinstance(block, dict):
+                        new_content.append(block)
+                        continue
+
+                    block_type = block.get("type")
+                    if block_type == "text":
+                        new_content.append(block)
+                    elif block_type == "image_url":
+                        url = block.get("image_url", {}).get("url", "")
+                        
+                        is_pdf = url.startswith("data:application/pdf")
+                        is_audio = url.startswith("data:audio/")
+                        is_video = url.startswith("data:video/")
+                        is_image = url.startswith("data:image/") or not url.startswith("data:")
+
+                        if is_image and supports_image:
+                            new_content.append(block)
+                        elif is_pdf:
+                            if "claude" in model_name:
+                                # Convert to Claude document block format
+                                base64_data = url.split(",")[1] if "," in url else url
+                                new_content.append({
+                                    "type": "document",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "application/pdf",
+                                        "data": base64_data
+                                    }
+                                })
+                            elif supports_pdf:
+                                new_content.append(block)
+                            else:
+                                new_content.append({
+                                    "type": "text",
+                                    "text": f"\n[Attachment omitted: PDF Document is not supported by {model_name}]"
+                                })
+                        elif is_audio:
+                            # If model expects input_audio (mimo or gpt-4o), keep that block and drop this image_url duplicate
+                            if "mimo" in model_name or "gpt-4o" in model_name:
+                                pass
+                            elif supports_audio:
+                                new_content.append(block)
+                            else:
+                                new_content.append({
+                                    "type": "text",
+                                    "text": f"\n[Attachment omitted: Audio File is not supported by {model_name}]"
+                                })
+                        elif is_video:
+                            # If model expects video_url (mimo), keep that block and drop this image_url duplicate
+                            if "mimo" in model_name:
+                                pass
+                            elif supports_video:
+                                new_content.append(block)
+                            else:
+                                new_content.append({
+                                    "type": "text",
+                                    "text": f"\n[Attachment omitted: Video File is not supported by {model_name}]"
+                                })
+                        else:
+                            new_content.append(block)
+
+                    elif block_type == "input_audio":
+                        if supports_audio:
+                            new_content.append(block)
+                        else:
+                            new_content.append({
+                                    "type": "text",
+                                    "text": f"\n[Attachment omitted: Audio File is not supported by {model_name}]"
+                                })
+                    elif block_type == "video_url":
+                        if supports_video:
+                            new_content.append(block)
+                        else:
+                            new_content.append({
+                                    "type": "text",
+                                    "text": f"\n[Attachment omitted: Video File is not supported by {model_name}]"
+                                })
+                    else:
+                        new_content.append(block)
+
+                if not new_content:
+                    new_content = [""]
+
+                # If all blocks are text/strings, simplify to a single string
+                if all(isinstance(c, str) or (isinstance(c, dict) and c.get("type") == "text") for c in new_content):
+                    simplified_text = []
+                    for c in new_content:
+                        if isinstance(c, str):
+                            simplified_text.append(c)
+                        else:
+                            simplified_text.append(c.get("text", ""))
+                    msg.content = "".join(simplified_text)
+                else:
+                    msg.content = new_content
+
+            cleaned_messages.append(msg)
+        return cleaned_messages
+
+    def _filter_input(self, input_val):
+        if isinstance(input_val, list):
+            return self._filter_messages_by_capability(input_val)
+        elif hasattr(input_val, "to_messages"):
+            messages = input_val.to_messages()
+            return self._filter_messages_by_capability(messages)
+        return input_val
+
     def _is_fatal_error(self, e: Exception) -> bool:
         """Client-side config errors that will never succeed on retry."""
         error_msg = str(e).lower()
@@ -102,6 +259,11 @@ class ResilientChatModel(ChatOpenAI):
         Guard: if streaming already started (tokens sent), do NOT retry — that would
         send duplicate content to the frontend. Only retry before first token.
         """
+        args_list = list(args)
+        if len(args_list) > 0:
+            args_list[0] = self._filter_input(args_list[0])
+        args = tuple(args_list)
+
         for attempt in range(1, _LLM_MAX_ATTEMPTS + 1):
             stream_started = False
             try:
@@ -135,6 +297,11 @@ class ResilientChatModel(ChatOpenAI):
                     await asyncio.sleep(delay)
 
     async def ainvoke(self, *args, **kwargs):
+        args_list = list(args)
+        if len(args_list) > 0:
+            args_list[0] = self._filter_input(args_list[0])
+        args = tuple(args_list)
+
         for attempt in range(1, _LLM_MAX_ATTEMPTS + 1):
             try:
                 return await super().ainvoke(*args, **kwargs)
@@ -158,6 +325,11 @@ class ResilientChatModel(ChatOpenAI):
                     await asyncio.sleep(delay)
 
     def invoke(self, *args, **kwargs):
+        args_list = list(args)
+        if len(args_list) > 0:
+            args_list[0] = self._filter_input(args_list[0])
+        args = tuple(args_list)
+
         for attempt in range(1, _LLM_MAX_ATTEMPTS + 1):
             try:
                 return super().invoke(*args, **kwargs)
@@ -172,7 +344,7 @@ class ResilientChatModel(ChatOpenAI):
 
                 if self._is_rate_limit(e):
                     print(f"[LLM] ⏳ Rate limit (429) on attempt {attempt}/{_LLM_MAX_ATTEMPTS}. "
-                          f"Waiting {_LLM_RATE_LIMIT_DELAY:.0f}s for provider reset...")
+                    f"Waiting {_LLM_RATE_LIMIT_DELAY:.0f}s for provider reset...")
                     time.sleep(_LLM_RATE_LIMIT_DELAY)
                 else:
                     delay = self._get_backoff_delay(attempt)

@@ -16,7 +16,7 @@ import {
   extractStringFromMessageContent,
 } from "@/app/utils/utils";
 import { cn } from "@/lib/utils";
-import { Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, FileText, Headphones, Video } from "lucide-react";
 
 interface ChatMessageProps {
   message: Message;
@@ -195,6 +195,109 @@ function LiveSubagentCard({
   );
 }
 
+const MediaBlockRenderer = ({ block }: { block: any }) => {
+  if (block.type === "image_url" && block.image_url?.url) {
+    const url = block.image_url.url;
+    const match = url.match(/^data:([^;]+);base64,/);
+    const mimeType = match ? match[1] : "";
+
+    if (mimeType.startsWith("image/") || !url.startsWith("data:")) {
+      return (
+        <div className="mt-2 relative rounded-lg overflow-hidden border border-border max-w-xs max-h-48 group">
+          <img src={url} alt="Attached image" className="w-full h-full object-cover" />
+        </div>
+      );
+    }
+
+    if (mimeType.startsWith("audio/")) {
+      return (
+        <div className="mt-2 flex flex-col gap-1 p-2 bg-muted/45 border border-border/50 rounded-lg max-w-xs">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+            <Headphones size={12} className="text-primary" />
+            <span>Audio Attachment</span>
+          </div>
+          <audio src={url} controls className="w-full h-8 mt-1" />
+        </div>
+      );
+    }
+
+    if (mimeType.startsWith("video/")) {
+      return (
+        <div className="mt-2 flex flex-col gap-1 p-2 bg-muted/45 border border-border/50 rounded-lg max-w-xs">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+            <Video size={12} className="text-primary" />
+            <span>Video Attachment</span>
+          </div>
+          <video src={url} controls className="w-full max-h-40 rounded mt-1" />
+        </div>
+      );
+    }
+
+    if (mimeType === "application/pdf") {
+      return (
+        <div className="mt-2 flex items-center gap-2 p-2 bg-muted/45 border border-border/50 rounded-lg max-w-xs">
+          <FileText size={18} className="text-red-500 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold truncate">PDF Document</p>
+            <a href={url} download="document.pdf" className="text-[10px] text-primary hover:underline">
+              Download PDF
+            </a>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  if (block.type === "video_url" && block.video_url?.url) {
+    const url = block.video_url.url;
+    return (
+      <div className="mt-2 flex flex-col gap-1 p-2 bg-muted/45 border border-border/50 rounded-lg max-w-xs">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+          <Video size={12} className="text-primary" />
+          <span>Video Attachment</span>
+        </div>
+        <video src={url} controls className="w-full max-h-40 rounded mt-1" />
+      </div>
+    );
+  }
+
+  if (block.type === "input_audio" && block.input_audio?.data) {
+    const data = block.input_audio.data;
+    const format = block.input_audio.format || "mp3";
+    const url = data.startsWith("data:") || data.startsWith("http")
+      ? data
+      : `data:audio/${format};base64,${data}`;
+    return (
+      <div className="mt-2 flex flex-col gap-1 p-2 bg-muted/45 border border-border/50 rounded-lg max-w-xs">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+          <Headphones size={12} className="text-primary" />
+          <span>Audio Attachment</span>
+        </div>
+        <audio src={url} controls className="w-full h-8 mt-1" />
+      </div>
+    );
+  }
+
+  if (block.type === "document" && block.source?.data) {
+    const data = block.source.data;
+    const mimeType = block.source.media_type || "application/pdf";
+    const url = `data:${mimeType};base64,${data}`;
+    return (
+      <div className="mt-2 flex items-center gap-2 p-2 bg-muted/45 border border-border/50 rounded-lg max-w-xs">
+        <FileText size={18} className="text-red-500 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold truncate">PDF Document</p>
+          <a href={url} download="document.pdf" className="text-[10px] text-primary hover:underline">
+            Download PDF
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+};
+
 export const ChatMessage = React.memo<ChatMessageProps>(
   ({
     message,
@@ -208,8 +311,25 @@ export const ChatMessage = React.memo<ChatMessageProps>(
     graphId,
   }) => {
     const isUser = message.type === "human";
+    const mediaBlocks = useMemo(() => {
+      if (!message.content || !Array.isArray(message.content)) {
+        return [];
+      }
+      return message.content.filter(
+        (block: any) =>
+          block &&
+          typeof block === "object" &&
+          (block.type === "image_url" ||
+            block.type === "video_url" ||
+            block.type === "input_audio" ||
+            block.type === "document")
+      );
+    }, [message.content]);
+
     const messageContent = extractStringFromMessageContent(message);
     const hasContent = messageContent && messageContent.trim() !== "";
+    const hasMedia = mediaBlocks.length > 0;
+    const shouldRenderMessage = hasContent || hasMedia;
     const hasToolCalls = toolCalls.length > 0;
     const subAgents = useMemo(() => {
       return toolCalls
@@ -263,7 +383,7 @@ export const ChatMessage = React.memo<ChatMessageProps>(
             isUser ? "max-w-[70%]" : "w-full"
           )}
         >
-          {hasContent && (
+          {shouldRenderMessage && (
             <div className={cn("relative flex items-end gap-0")}>
               <div
                 className={cn(
@@ -279,12 +399,24 @@ export const ChatMessage = React.memo<ChatMessageProps>(
                 }
               >
                 {isUser ? (
-                  <p className="m-0 whitespace-pre-wrap break-words text-sm leading-relaxed">
-                    {messageContent}
-                  </p>
-                ) : hasContent ? (
-                  <MarkdownContent content={messageContent} />
-                ) : null}
+                  <div className="flex flex-col gap-1">
+                    {hasContent && (
+                      <p className="m-0 whitespace-pre-wrap break-words text-sm leading-relaxed">
+                        {messageContent}
+                      </p>
+                    )}
+                    {mediaBlocks.map((block: any, idx: number) => (
+                      <MediaBlockRenderer key={idx} block={block} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {hasContent && <MarkdownContent content={messageContent} />}
+                    {mediaBlocks.map((block: any, idx: number) => (
+                      <MediaBlockRenderer key={idx} block={block} />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

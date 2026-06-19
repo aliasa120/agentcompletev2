@@ -133,8 +133,8 @@ export function useChat({
   }, [threadId, client, stream.isLoading, stream.isThreadLoading]);
 
   const sendMessage = useCallback(
-    (content: string) => {
-      const newMessage: Message = { id: uuidv4(), type: "human", content };
+    (content: string | any[]) => {
+      const newMessage: Message = { id: uuidv4(), type: "human", content: content as any };
       stream.submit(
         { messages: [newMessage] },
         {
