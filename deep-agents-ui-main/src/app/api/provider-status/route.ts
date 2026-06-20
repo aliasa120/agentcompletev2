@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 /**
  * GET /api/provider-status
@@ -159,15 +165,35 @@ const PROVIDER_REGISTRY: Record<string, {
 };
 
 export async function GET() {
+  let custom_models: Record<string, string[]> = {};
+  try {
+    const { data } = await supabase
+      .from("agent_settings")
+      .select("value")
+      .eq("key", "custom_models_by_provider")
+      .single();
+    if (data?.value) {
+      custom_models = JSON.parse(data.value);
+    }
+  } catch { /* no saved custom models yet */ }
+
   const providers: ProviderMeta[] = Object.entries(PROVIDER_REGISTRY).map(
-    ([id, cfg]) => ({
-      id,
-      label: cfg.label,
-      badgeColor: cfg.badgeColor,
-      // Only boolean — NEVER send the actual key value
-      keySet: Boolean(process.env[cfg.envKey]),
-      defaultModels: cfg.defaultModels,
-    })
+    ([id, cfg]) => {
+      const custom = custom_models[id] ?? [];
+      const customModelsFormatted = custom.map(v => ({
+        value: v,
+        label: v,
+        badge: "Custom",
+      }));
+      return {
+        id,
+        label: cfg.label,
+        badgeColor: cfg.badgeColor,
+        // Only boolean — NEVER send the actual key value
+        keySet: Boolean(process.env[cfg.envKey]),
+        defaultModels: [...cfg.defaultModels, ...customModelsFormatted],
+      };
+    }
   );
 
   return NextResponse.json({ providers });

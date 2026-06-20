@@ -374,55 +374,59 @@ async def execute_with_fallback(
 _providers_cache: dict[str, list[dict]] = {}
 _providers_cache_loaded_at: float = 0.0
 
+def _fetch_ordered_providers_from_supabase() -> list[dict]:
+    try:
+        from supabase import create_client
+        url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        if url and key:
+            client = create_client(url, key)
+            resp = client.table("tool_provider_configs").select("*").execute()
+            return resp.data or []
+    except Exception as e:
+        logger.warning(f"[provider_engine] Supabase tool provider configs fetch failed: {e}")
+    return []
+
 def get_ordered_providers(category: str) -> list[dict]:
     """Fetch enabled providers for a tool category, sorted by priority_order."""
     global _providers_cache, _providers_cache_loaded_at
     now = time.time()
     if now - _providers_cache_loaded_at >= _CACHE_TTL_SECONDS or not _providers_cache:
-        try:
-            from supabase import create_client
-            url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-            key = os.environ.get("SUPABASE_ANON_KEY", "")
-            if url and key:
-                client = create_client(url, key)
-                resp = client.table("tool_provider_configs").select("*").execute()
-                grouped = {}
-                for row in (resp.data or []):
-                    cat = row.get("tool_category")
-                    if cat not in grouped:
-                        grouped[cat] = []
-                    grouped[cat].append(row)
-                for cat in grouped:
-                    grouped[cat].sort(key=lambda x: x.get("priority_order", 999))
-                _providers_cache = grouped
-                _providers_cache_loaded_at = now
-                logger.debug("[provider_engine] Tool provider configs cache refreshed.")
-        except Exception as e:
-            logger.warning(f"[provider_engine] Supabase tool provider configs fetch failed: {e}")
+        data = run_in_thread(_fetch_ordered_providers_from_supabase)
+        if data:
+            grouped = {}
+            for row in data:
+                cat = row.get("tool_category")
+                if cat not in grouped:
+                    grouped[cat] = []
+                grouped[cat].append(row)
+            for cat in grouped:
+                grouped[cat].sort(key=lambda x: x.get("priority_order", 999))
+            _providers_cache = grouped
+            _providers_cache_loaded_at = now
+            logger.debug("[provider_engine] Tool provider configs cache refreshed.")
 
     rows = _providers_cache.get(category, [])
     return [row for row in rows if row.get("enabled", True)]
 
 
+def _fetch_active_mcp_connections() -> list[dict]:
+    try:
+        from supabase import create_client
+        url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        if url and key:
+            client = create_client(url, key)
+            resp = client.table("mcp_connections").select("*").eq("status", "active").execute()
+            return resp.data or []
+    except Exception:
+        pass
+    return []
+
 async def load_mcp_tool_by_key(tool_key: str) -> list[BaseTool]:
     """Find and load a specific MCP tool by its key from active connections."""
     import os
-    try:
-        from supabase import create_client
-    except ImportError:
-        return []
-
-    url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    key = os.environ.get("SUPABASE_ANON_KEY", "")
-    if not url or not key:
-        return []
-
-    try:
-        client = create_client(url, key)
-        resp = client.table("mcp_connections").select("*").eq("status", "active").execute()
-        connections = resp.data or []
-    except Exception:
-        return []
+    connections = run_in_thread(_fetch_active_mcp_connections)
 
     for conn in connections:
         available = conn.get("available_tools") or []
