@@ -15,7 +15,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
   try {
     const { data, error } = await supabase
       .from("agent_configs")
-      .select(`*, agent_tool_assignments(*)`)
+      .select(`*, agent_tool_assignments(*), workflow_agent_assignments(workflow_id)`)
       .eq("id", id)
       .single();
     if (error) throw error;
@@ -33,16 +33,42 @@ export async function PATCH(req: Request, { params }: RouteParams) {
   const { id } = await params;
   try {
     const body = await req.json();
-    const { tool_keys, ...agentFields } = body;
+    const { tool_keys, workflow_ids, workflow_id, ...agentFields } = body;
+
+    const idsToAssign = workflow_ids || (workflow_id !== undefined ? (workflow_id ? [workflow_id] : []) : null);
+    const updatePayload: Record<string, any> = { ...agentFields };
+    if (idsToAssign !== null) {
+      updatePayload.workflow_id = idsToAssign.length > 0 ? idsToAssign[0] : null; // fallback legacy column support
+    }
 
     // Update agent config
     const { data: agent, error: agentErr } = await supabase
       .from("agent_configs")
-      .update({ ...agentFields, updated_at: new Date().toISOString() })
+      .update({ ...updatePayload, updated_at: new Date().toISOString() })
       .eq("id", id)
       .select()
       .single();
     if (agentErr) throw agentErr;
+
+    // Replace workflow assignments if provided
+    if (idsToAssign !== null) {
+      const { error: delErr } = await supabase
+        .from("workflow_agent_assignments")
+        .delete()
+        .eq("agent_id", id);
+      if (delErr) throw delErr;
+
+      if (idsToAssign.length > 0) {
+        const assignmentRows = idsToAssign.map((wId: string) => ({
+          workflow_id: wId,
+          agent_id: id,
+        }));
+        const { error: insErr } = await supabase
+          .from("workflow_agent_assignments")
+          .insert(assignmentRows);
+        if (insErr) throw insErr;
+      }
+    }
 
     // Replace tool assignments if provided
     if (Array.isArray(tool_keys)) {

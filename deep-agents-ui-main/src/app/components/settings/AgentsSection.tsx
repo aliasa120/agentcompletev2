@@ -28,6 +28,7 @@ interface AgentConfig {
   provider?: string;
   model?: string;
   workflow_id?: string | null;
+  workflow_agent_assignments?: { workflow_id: string }[];
   enabled: boolean;
   sort_order: number;
   is_builtin: boolean;
@@ -406,7 +407,7 @@ function AgentEditorCard({
   toolSettings: ToolSetting[];
   providerMetas: any[];
   workflows: { id: string; name: string }[];
-  onSave: (id: string, data: Partial<AgentConfig> & { tool_keys: ToolAssignment[] }) => Promise<void>;
+  onSave: (id: string, data: Partial<AgentConfig> & { tool_keys: ToolAssignment[]; workflow_ids?: string[] }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
   const [name, setName] = useState(agent.name);
@@ -414,7 +415,15 @@ function AgentEditorCard({
   const [systemPrompt, setSystemPrompt] = useState(agent.system_prompt);
   const [provider, setProvider] = useState(agent.provider || "vercel");
   const [model, setModel] = useState(agent.model || "xiaomi/mimo-v2.5-pro");
-  const [workflowId, setWorkflowId] = useState(agent.workflow_id || "");
+  const initialWorkflowIds = React.useMemo(() => {
+    const list = (agent.workflow_agent_assignments ?? []).map((w: any) => w.workflow_id).filter(Boolean);
+    if (agent.workflow_id && !list.includes(agent.workflow_id)) {
+      list.push(agent.workflow_id);
+    }
+    return list;
+  }, [agent.workflow_agent_assignments, agent.workflow_id]);
+
+  const [workflowIds, setWorkflowIds] = useState<string[]>(initialWorkflowIds);
   const [tools, setTools] = useState<ToolAssignment[]>(agent.agent_tool_assignments ?? []);
   const [showTools, setShowTools] = useState(false);
   const [showImages, setShowImages] = useState(false);
@@ -429,7 +438,7 @@ function AgentEditorCard({
     systemPrompt !== agent.system_prompt ||
     provider !== (agent.provider || "vercel") ||
     model !== (agent.model || "xiaomi/mimo-v2.5-pro") ||
-    workflowId !== (agent.workflow_id || "") ||
+    JSON.stringify([...workflowIds].sort()) !== JSON.stringify([...initialWorkflowIds].sort()) ||
     JSON.stringify(tools.map(t => t.tool_key).sort()) !==
     JSON.stringify((agent.agent_tool_assignments ?? []).map(t => t.tool_key).sort());
 
@@ -442,7 +451,7 @@ function AgentEditorCard({
         system_prompt: systemPrompt,
         provider,
         model,
-        workflow_id: workflowId || null,
+        workflow_ids: workflowIds,
         tool_keys: tools,
       });
       setSavedOk(true);
@@ -458,7 +467,7 @@ function AgentEditorCard({
     setSystemPrompt(agent.system_prompt);
     setProvider(agent.provider || "vercel");
     setModel(agent.model || "xiaomi/mimo-v2.5-pro");
-    setWorkflowId(agent.workflow_id || "");
+    setWorkflowIds(initialWorkflowIds);
     setTools(agent.agent_tool_assignments ?? []);
   };
 
@@ -541,17 +550,30 @@ function AgentEditorCard({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Workflow Association</label>
-            <select
-              value={workflowId}
-              onChange={e => setWorkflowId(e.target.value)}
-              className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="">(Unassigned / Global)</option>
-              {workflows.map(wf => (
-                <option key={wf.id} value={wf.id}>{wf.name}</option>
-              ))}
-            </select>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Workflow Associations</label>
+            <div className="flex flex-wrap gap-2 border rounded-md p-2 bg-background min-h-8">
+              {workflows.map(wf => {
+                const isChecked = workflowIds.includes(wf.id);
+                return (
+                  <label key={wf.id} className="flex items-center gap-1.5 text-xs font-medium cursor-pointer bg-muted/40 px-2 py-0.5 rounded hover:bg-muted/70 transition-colors select-none">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => {
+                        if (isChecked) {
+                          setWorkflowIds(prev => prev.filter(id => id !== wf.id));
+                        } else {
+                          setWorkflowIds(prev => [...prev, wf.id]);
+                        }
+                      }}
+                      className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
+                    />
+                    <span>{wf.name}</span>
+                  </label>
+                );
+              })}
+              {workflows.length === 0 && <span className="text-xs text-muted-foreground italic">No workflows created yet</span>}
+            </div>
           </div>
         </div>
 
@@ -737,7 +759,7 @@ export function AgentsSection({ agentType, skills, mcpConnections, toolSettings 
     fetchWorkflows();
   }, [fetchAgents, fetchProviderMetas, fetchWorkflows]);
 
-  const handleSave = async (id: string, data: Partial<AgentConfig> & { tool_keys: ToolAssignment[] }) => {
+  const handleSave = async (id: string, data: Partial<AgentConfig> & { tool_keys: ToolAssignment[]; workflow_ids?: string[] }) => {
     await fetch(`/api/agents/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

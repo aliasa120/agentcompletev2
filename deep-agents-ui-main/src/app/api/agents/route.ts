@@ -14,6 +14,9 @@ export async function GET() {
       .from("agent_configs")
       .select(`
         *,
+        workflow_agent_assignments (
+          workflow_id
+        ),
         agent_tool_assignments (
           id,
           tool_type,
@@ -38,13 +41,13 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, agent_type, description, system_prompt, model_key, sort_order, provider, model, workflow_id } = body;
+    const { name, agent_type, description, system_prompt, model_key, sort_order, provider, model, workflow_id, workflow_ids } = body;
 
     if (!name) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const { data: agent, error } = await supabase
       .from("agent_configs")
       .insert({
         name,
@@ -55,7 +58,7 @@ export async function POST(req: Request) {
         provider: provider ?? "vercel",
         model: model ?? "xiaomi/mimo-v2.5-pro",
         sort_order: sort_order ?? 99,
-        workflow_id: workflow_id ?? null,
+        workflow_id: workflow_id ?? (workflow_ids && workflow_ids.length > 0 ? workflow_ids[0] : null), // fallback legacy column support
         is_builtin: false,
         enabled: true,
         updated_at: new Date().toISOString(),
@@ -65,13 +68,26 @@ export async function POST(req: Request) {
 
     if (error) throw error;
 
+    // Insert many-to-many workflow assignments
+    const idsToAssign: string[] = workflow_ids || (workflow_id ? [workflow_id] : []);
+    if (idsToAssign.length > 0) {
+      const assignmentRows = idsToAssign.map((wId: string) => ({
+        workflow_id: wId,
+        agent_id: agent.id,
+      }));
+      const { error: assignError } = await supabase
+        .from("workflow_agent_assignments")
+        .insert(assignmentRows);
+      if (assignError) throw assignError;
+    }
+
     try {
       triggerAgentReload();
     } catch (reloadErr) {
       console.warn("[agents] Failed to trigger agent reload:", reloadErr);
     }
 
-    return NextResponse.json({ agent: data });
+    return NextResponse.json({ agent });
   } catch (e: unknown) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Unknown error" },

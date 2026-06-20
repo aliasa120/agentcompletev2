@@ -561,6 +561,14 @@ def load_dynamic_agents_by_workflow():
         assign_resp = client.table("agent_tool_assignments").select("*").eq("enabled", True).execute()
         assignments = assign_resp.data or []
 
+        # 3.5 Load workflow-agent assignments (many-to-many)
+        try:
+            mappings_resp = client.table("workflow_agent_assignments").select("*").execute()
+            mappings = mappings_resp.data or []
+        except Exception as e:
+            print(f"[agent] [WARNING] Failed to fetch workflow_agent_assignments (using legacy workflow_id fallback): {e}")
+            mappings = []
+
         # Tool lookup for built-in tools
         from research_agent.tools import (
             unified_search,
@@ -632,16 +640,25 @@ def load_dynamic_agents_by_workflow():
         for wf in workflows:
             wf_id = wf["id"]
             # Filter agents belonging to this workflow
-            wf_configs = [c for c in configs if c.get("workflow_id") == wf_id]
+            if mappings:
+                mapped_agent_ids = {m["agent_id"] for m in mappings if str(m["workflow_id"]) == str(wf_id)}
+                wf_configs = [c for c in configs if c["id"] in mapped_agent_ids]
+            else:
+                wf_configs = [c for c in configs if c.get("workflow_id") == wf_id]
+
             if not wf_configs:
                 print(f"[agent] Workflow '{wf['name']}' has no agent configs. Skipping.")
                 continue
 
             main_configs = [c for c in wf_configs if c.get("agent_type") == "main"]
             
-            # Subagents: Include both workflow-specific subagents and global/shared subagents (workflow_id is null)
+            # Subagents: Include both workflow-specific subagents and global/shared subagents (unmapped subagents)
             local_subs = [c for c in wf_configs if c.get("agent_type") == "subagent"]
-            global_subs = [c for c in configs if c.get("agent_type") == "subagent" and c.get("workflow_id") is None]
+            if mappings:
+                mapped_all_agent_ids = {m["agent_id"] for m in mappings}
+                global_subs = [c for c in configs if c.get("agent_type") == "subagent" and c["id"] not in mapped_all_agent_ids]
+            else:
+                global_subs = [c for c in configs if c.get("agent_type") == "subagent" and c.get("workflow_id") is None]
             sub_configs = local_subs + global_subs
 
             if not main_configs:

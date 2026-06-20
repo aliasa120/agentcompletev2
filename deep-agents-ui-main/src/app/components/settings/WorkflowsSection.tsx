@@ -29,6 +29,7 @@ interface Agent {
   name: string;
   agent_type: string;
   workflow_id: string | null;
+  workflow_agent_assignments?: { workflow_id: string }[];
 }
 
 interface DelayedInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange"> {
@@ -218,15 +219,43 @@ export function WorkflowsSection() {
     }
   };
 
-  const handleAssignAgent = async (agentId: string, workflowId: string | null) => {
+  const handleAssignAgent = async (agentId: string, targetWorkflowId: string, action: "link" | "unlink") => {
     try {
+      const agent = agents.find(a => a.id === agentId);
+      if (!agent) return;
+
+      const currentWfs = (agent.workflow_agent_assignments ?? [])
+        .map((w: any) => w.workflow_id)
+        .filter(Boolean);
+
+      if (agent.workflow_id && !currentWfs.includes(agent.workflow_id)) {
+        currentWfs.push(agent.workflow_id);
+      }
+
+      let nextWfs: string[];
+      if (action === "link") {
+        nextWfs = currentWfs.includes(targetWorkflowId) ? currentWfs : [...currentWfs, targetWorkflowId];
+      } else {
+        nextWfs = currentWfs.filter(id => id !== targetWorkflowId);
+      }
+
       const res = await fetch(`/api/agents/${agentId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workflow_id: workflowId })
+        body: JSON.stringify({ workflow_ids: nextWfs })
       });
+
       if (res.ok) {
-        setAgents(prev => prev.map(a => a.id === agentId ? { ...a, workflow_id: workflowId } : a));
+        setAgents(prev => prev.map(a => {
+          if (a.id === agentId) {
+            return {
+              ...a,
+              workflow_id: nextWfs.length > 0 ? nextWfs[0] : null,
+              workflow_agent_assignments: nextWfs.map(wId => ({ workflow_id: wId }))
+            };
+          }
+          return a;
+        }));
       }
     } catch (e) {
       console.error("Error assigning agent", e);
@@ -241,7 +270,7 @@ export function WorkflowsSection() {
     );
   }
 
-  const unassignedAgents = agents.filter(a => a.workflow_id === null);
+
 
   return (
     <div className="space-y-6">
@@ -346,7 +375,16 @@ export function WorkflowsSection() {
 
       <div className="grid grid-cols-1 gap-6">
         {workflows.map(wf => {
-          const wfAgents = agents.filter(a => a.workflow_id === wf.id);
+          const wfAgents = agents.filter(a => {
+            const wfs = (a.workflow_agent_assignments ?? []).map((w: any) => w.workflow_id);
+            if (a.workflow_id && !wfs.includes(a.workflow_id)) wfs.push(a.workflow_id);
+            return wfs.includes(wf.id);
+          });
+          const availableAgents = agents.filter(a => {
+            const wfs = (a.workflow_agent_assignments ?? []).map((w: any) => w.workflow_id);
+            if (a.workflow_id && !wfs.includes(a.workflow_id)) wfs.push(a.workflow_id);
+            return !wfs.includes(wf.id);
+          });
           const hasMain = wfAgents.some(a => a.agent_type === "main");
           const isSaving = savingId === wf.id;
 
@@ -529,7 +567,7 @@ export function WorkflowsSection() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => handleAssignAgent(agent.id, null)}
+                          onClick={() => handleAssignAgent(agent.id, wf.id, "unlink")}
                           className="h-7 px-2 text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-1"
                         >
                           <Unlink className="h-3 w-3" /> Unlink
@@ -540,16 +578,16 @@ export function WorkflowsSection() {
                 )}
 
                 {/* Available unassigned agents */}
-                {unassignedAgents.length > 0 && (
+                {availableAgents.length > 0 && (
                   <div className="border-t pt-4">
                     <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
                       Assign Unlinked Agents
                     </label>
                     <div className="flex flex-wrap gap-2">
-                      {unassignedAgents.map(agent => (
+                      {availableAgents.map(agent => (
                         <button
                           key={agent.id}
-                          onClick={() => handleAssignAgent(agent.id, wf.id)}
+                          onClick={() => handleAssignAgent(agent.id, wf.id, "link")}
                           className="flex items-center gap-1.5 border hover:border-primary hover:bg-primary/5 rounded-full px-3 py-1 text-xs font-medium transition-all"
                         >
                           <Link className="h-3 w-3 text-muted-foreground" />
