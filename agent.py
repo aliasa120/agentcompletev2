@@ -638,7 +638,11 @@ def load_dynamic_agents_by_workflow():
                 continue
 
             main_configs = [c for c in wf_configs if c.get("agent_type") == "main"]
-            sub_configs = [c for c in wf_configs if c.get("agent_type") == "subagent"]
+            
+            # Subagents: Include both workflow-specific subagents and global/shared subagents (workflow_id is null)
+            local_subs = [c for c in wf_configs if c.get("agent_type") == "subagent"]
+            global_subs = [c for c in configs if c.get("agent_type") == "subagent" and c.get("workflow_id") is None]
+            sub_configs = local_subs + global_subs
 
             if not main_configs:
                 print(f"[agent] Workflow '{wf['name']}' has no Main Agent. Skipping.")
@@ -831,14 +835,28 @@ except Exception as e:
 
 def route_workflow(state, config):
     workflow_id = config.get("configurable", {}).get("workflow_id")
-    if not workflow_id:
-        raise ValueError("workflow_id is not set. Please configure a workflow_id in your request configuration.")
+    node_key = str(workflow_id) if workflow_id else None
     
-    node_key = str(workflow_id)
-    if node_key not in compiled_workflows:
-        raise ValueError(f"Workflow '{workflow_id}' is not compiled or not active. Active workflows: {list(compiled_workflows.keys())}")
-    
-    return node_key
+    # 1. Check if the requested workflow_id is directly compiled
+    if node_key and node_key in compiled_workflows:
+        return node_key
+        
+    # 2. Fallback: Find the first compiled workflow UUID (contains hyphens) to route to.
+    # This prevents the run from crashing if the requested workflow is disabled/empty/missing a main agent.
+    active_uuids = [k for k in compiled_workflows.keys() if "-" in k]
+    if active_uuids:
+        fallback_key = active_uuids[0]
+        print(f"[agent] [WARNING] Requested workflow '{workflow_id}' is not compiled or active. Falling back to active workflow: '{fallback_key}'")
+        return fallback_key
+        
+    # 3. Ultimate fallback: if no UUID keys exist, try any compiled workflow key
+    active_keys = list(compiled_workflows.keys())
+    if active_keys:
+        fallback_key = active_keys[0]
+        print(f"[agent] [WARNING] Requested workflow '{workflow_id}' is not compiled. Falling back to: '{fallback_key}'")
+        return fallback_key
+        
+    raise ValueError(f"No active compiled workflows found. Available workflows: {list(compiled_workflows.keys())}")
 
 
 # Define the master StateGraph
