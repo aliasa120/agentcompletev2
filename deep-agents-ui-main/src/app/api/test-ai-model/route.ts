@@ -20,6 +20,7 @@ export async function GET() {
     nvidia:      "NVIDIA_API_KEY",
     mimo:        "MIMO_API_KEY",
     novita:      "NOVITA_API_KEY",
+    opencode:    "OPENCODE_API_KEY",
   };
 
   const env_status: Record<string, boolean> = {};
@@ -95,6 +96,7 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   nvidia:     "NVIDIA_API_KEY",
   mimo:       "MIMO_API_KEY",
   novita:     "NOVITA_API_KEY",
+  opencode:   "OPENCODE_API_KEY",
 };
 
 // Provider → base URL (mirrors provider_registry.py)
@@ -110,6 +112,7 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
   nvidia:     "https://integrate.api.nvidia.com/v1",
   mimo:       "https://api.xiaomimimo.com/v1",
   novita:     "https://api.novita.ai/openai/v1",
+  opencode:   "https://opencode.ai/zen/v1",
 };
 
 export async function POST(request: NextRequest) {

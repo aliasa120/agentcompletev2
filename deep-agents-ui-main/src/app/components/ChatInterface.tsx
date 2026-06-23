@@ -277,16 +277,42 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant, onStar
             args?: unknown;
             input?: unknown;
           }) => {
-            const name =
+            let name =
               toolCall.function?.name ||
               toolCall.name ||
               toolCall.type ||
               "unknown";
-            const args =
+            let args =
               toolCall.function?.arguments ||
               toolCall.args ||
               toolCall.input ||
               {};
+
+            if (typeof args === "string") {
+              try {
+                args = JSON.parse(args);
+              } catch (e) {
+                // ignore
+              }
+            }
+
+            if (name === "call_tool") {
+              const argsObj = args as Record<string, any>;
+              const toolName = argsObj?.tool_name || argsObj?.toolName;
+              let targetArgs = argsObj?.arguments || argsObj?.args || argsObj?.params || {};
+              if (typeof targetArgs === "string") {
+                try {
+                  targetArgs = JSON.parse(targetArgs);
+                } catch (e) {
+                  // ignore
+                }
+              }
+              if (toolName) {
+                name = toolName;
+                args = targetArgs;
+              }
+            }
+
             return {
               id: toolCall.id || `tool-${Math.random()}`,
               name,

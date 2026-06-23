@@ -1283,3 +1283,988 @@ Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 're
 Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
 Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
 Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-20T12:35:57.145298 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'unified_extract', 'think_tool', 'fetch_images_brave', 'view_candidate_images', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'unified_extract', 'think_tool', 'fetch_images_brave', 'view_candidate_images', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T01:26:31.711698 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T02:11:51.261340 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T02:12:30.214007 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T02:13:16.050037 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T02:14:43.167449 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T02:15:30.384253 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T02:16:15.648598 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T02:16:57.248015 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T02:26:39.800366 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T02:38:56.507349 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T03:12:28.202801 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T03:13:24.345131 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T03:14:26.081581 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T03:25:56.775085 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 13 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+
+--- Load at 2026-06-21T03:53:07.706897 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'GOOGLEDOCS_CREATE_DOCUMENT', 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN', 'GOOGLEDOCS_CREATE_FOOTER', 'GOOGLEDOCS_CREATE_FOOTNOTE', 'GOOGLEDOCS_CREATE_HEADER', 'GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS', 'GOOGLEDOCS_INSERT_INLINE_IMAGE', 'GOOGLEDOCS_INSERT_PAGE_BREAK', 'GOOGLEDOCS_INSERT_TABLE_ACTION']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 4 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-21T03:55:38.542193 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 4 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-21T04:01:15.798708 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+[mcp_loader] Loaded 3 Composio tools for agent 73595e81-db09-4d1b-b7af-07837f4198a9: ['GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+[mcp_loader] Loaded 4 Composio tools for agent f19fd982-22fe-4d0d-8c99-2fe0b5f1084e: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+
+--- Load at 2026-06-21T04:06:21.486008 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool', 'GMAIL_FETCH_EMAILS', 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID', 'GMAIL_GET_ATTACHMENT']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_GET_CONTACTS', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL']
+[mcp_loader] Loaded 4 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:07:12.161169 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_SEND_DRAFT', 'GMAIL_SEND_EMAIL', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:08:00.791304 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:09:23.010737 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:10:13.502513 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:15:29.317050 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:16:28.240199 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:17:28.107471 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:18:27.763585 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:19:17.897975 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:20:09.221140 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:25:52.066041 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:38:04.629268 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'think_tool', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'think_tool']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'think_tool', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:39:02.125608 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:39:56.182192 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_extract', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'unified_search', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'unified_search', 'unified_extract', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T04:51:50.729830 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T05:41:11.415201 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T05:48:52.485679 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T06:52:16.877712 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T06:54:21.068130 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'fetch_images_brave', 'create_post_image', 'save_posts_to_supabase', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'view_candidate_images', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'fetch_images_brave', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T06:55:03.482533 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'publish_to_wordpress', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'publish_to_wordpress', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T06:55:44.589822 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T06:56:28.898415 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T08:21:15.184783 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T20:34:01.418205 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T20:55:04.063105 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T20:55:53.045258 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T20:58:53.656732 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'get_wordpress_categories', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'get_wordpress_categories', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T20:59:43.250945 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T21:00:29.536821 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T21:07:39.127932 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T21:09:01.257310 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T21:32:20.426174 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T21:33:13.553545 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T21:34:48.830156 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T21:53:15.851820 ---
+Compiled workflows keys: []
+compiled_workflows is empty!
+
+--- Load at 2026-06-21T21:53:16.957415 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T21:53:48.602609 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T21:57:06.636762 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T22:04:09.820260 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T22:19:33.515011 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T22:26:03.634663 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T22:47:35.582617 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T22:47:46.946144 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T22:51:08.560239 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T22:52:21.450804 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T22:52:58.469911 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+
+--- Composio Load Error for 'GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN' ---
+Traceback (most recent call last):
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\composio_client\_base_client.py", line 1007, in request
+    response = self._client.send(
+               ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\httpx\_client.py", line 914, in send
+    response = self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\httpx\_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\httpx\_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\httpx\_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\httpx\_transports\default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\httpcore\_sync\connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\httpcore\_sync\connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\httpcore\_sync\connection.py", line 101, in handle_request
+    raise exc
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\httpcore\_sync\connection.py", line 78, in handle_request
+    stream = self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\httpcore\_sync\connection.py", line 124, in _connect
+    stream = self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\httpcore\_backends\sync.py", line 208, in connect_tcp
+    sock = socket.create_connection(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\socket.py", line 850, in create_connection
+    sock.connect(sa)
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\blockbuster\blockbuster.py", line 109, in wrapper
+    raise BlockingError(func_name)
+blockbuster.blockbuster.BlockingError: Blocking call to socket.socket.connect
+
+Heads up! LangGraph dev identified a synchronous blocking call in your code. When running in an ASGI web server, blocking calls can degrade performance for everyone since they tie up the event loop.
+
+Here are your options to fix this:
+
+1. Best approach: Convert any blocking code to use async/await patterns
+   For example, use 'await aiohttp.get()' instead of 'requests.get()'
+
+2. Quick fix: Move blocking operations to a separate thread
+   Example: 'await asyncio.to_thread(your_blocking_function)'
+
+3. Override (if you can't change the code):
+   - For development: Run 'langgraph dev --allow-blocking'
+   - For deployment: Set 'BG_JOB_ISOLATED_LOOPS=true' environment variable
+
+These blocking operations can prevent health checks and slow down other runs in your deployment. Following these recommendations will help keep your LangGraph application running smoothly!
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\research_agent\tools\provider_engine.py", line 456, in load_mcp_tool_by_key
+    return composio.tools.get(user_id="default", tools=[tool_key])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\composio\core\models\base.py", line 63, in trace_wrapper
+    raise e
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\composio\core\models\base.py", line 54, in trace_wrapper
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\composio\core\models\tools.py", line 431, in get
+    return self._get(
+           ^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\composio\core\models\tools.py", line 335, in _get
+    tools_list = self.get_raw_composio_tools(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\composio\core\models\base.py", line 63, in trace_wrapper
+    raise e
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\composio\core\models\base.py", line 54, in trace_wrapper
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\composio\core\models\tools.py", line 222, in get_raw_composio_tools
+    self._client.tools.list(
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\composio_client\resources\tools.py", line 179, in list
+    return self._get(
+           ^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\composio_client\_base_client.py", line 1215, in get
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\composio_client\_base_client.py", line 1030, in request
+    self._sleep_for_retry(
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\composio_client\_base_client.py", line 1097, in _sleep_for_retry
+    time.sleep(timeout)
+  File "C:\Users\kashif\Downloads\agentcompletev2-main\.venv\Lib\site-packages\blockbuster\blockbuster.py", line 109, in wrapper
+    raise BlockingError(func_name)
+blockbuster.blockbuster.BlockingError: Blocking call to time.sleep
+
+Heads up! LangGraph dev identified a synchronous blocking call in your code. When running in an ASGI web server, blocking calls can degrade performance for everyone since they tie up the event loop.
+
+Here are your options to fix this:
+
+1. Best approach: Convert any blocking code to use async/await patterns
+   For example, use 'await aiohttp.get()' instead of 'requests.get()'
+
+2. Quick fix: Move blocking operations to a separate thread
+   Example: 'await asyncio.to_thread(your_blocking_function)'
+
+3. Override (if you can't change the code):
+   - For development: Run 'langgraph dev --allow-blocking'
+   - For deployment: Set 'BG_JOB_ISOLATED_LOOPS=true' environment variable
+
+These blocking operations can prevent health checks and slow down other runs in your deployment. Following these recommendations will help keep your LangGraph application running smoothly!
+
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-21T22:56:04.173759 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-22T22:50:52.682326 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-22T22:57:14.859496 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-22T23:04:46.778837 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-22T23:07:38.011487 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-22T23:12:52.569279 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-22T23:14:53.941414 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-22T23:16:50.912386 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-23T19:54:24.499839 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-23T20:46:31.897116 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-23T20:46:59.559596 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-23T20:47:26.261480 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-23T20:48:17.017890 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-23T20:48:41.150792 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-23T21:33:17.519375 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-23T21:41:27.240265 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-23T21:42:58.641421 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-23T21:49:01.224999 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+[mcp_loader] Loaded 1 Composio tools for agent b6fe95ce-5ffb-487f-8493-3d87fe5c1118: ['HACKERNEWS_GET_LATEST_POSTS']
+
+--- Load at 2026-06-23T21:49:34.058387 ---
+Compiled workflows keys: ['918e2dc3-6025-475b-8e96-c2573e4f4e4d', 'research', 'ccdad18a-9e70-4013-a01b-e6659584087a', 'gamilsummerizer', '59bfd808-c28f-44b3-adf2-a5506fbc627c', 'global']
+Workflow '918e2dc3-6025-475b-8e96-c2573e4f4e4d' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'research' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'read_skill', 'list_skills', 'manage_skill', 'HACKERNEWS_GET_LATEST_POSTS']
+Workflow 'ccdad18a-9e70-4013-a01b-e6659584087a' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow 'gamilsummerizer' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task']
+Workflow '59bfd808-c28f-44b3-adf2-a5506fbc627c' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']
+Workflow 'global' tools: ['write_todos', 'ls', 'read_file', 'write_file', 'edit_file', 'glob', 'grep', 'execute', 'task', 'list_tools', 'load_tools', 'call_tool', 'read_skill', 'list_skills', 'manage_skill']

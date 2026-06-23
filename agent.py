@@ -1,5 +1,6 @@
 """Research Agent - Standalone script for LangGraph deployment.
 
+# Forced reload trigger
 This module creates a single self-researching agent with a unified tool set.
 Provider selection (Linkup vs Parallel AI, Tavily vs Exa, KIE vs Gemini Flash)
 is managed automatically by the unified tools based on settings in Supabase.
@@ -48,6 +49,11 @@ from research_agent.tools import (
     manage_skill,
     get_wordpress_categories,
     publish_to_wordpress,
+    # ── Dynamic Tool Routing ─────────────────────────────────────────────────
+    list_tools,
+    load_tools,
+    call_tool,
+    build_tools_index,
 )
 from research_agent.tools.provider_engine import get_llm_config
 
@@ -521,6 +527,64 @@ def _bind_agent_id_to_read_skill(read_skill_tool, agent_id: str):
         return read_skill_tool.func(skill_name=skill_name, agent_id=agent_id)
     return read_skill_bound
 
+
+def _bind_agent_id_to_list_tools(list_tools_tool, agent_id: str):
+    from langchain_core.tools import tool
+    from typing import Optional
+    
+    @tool("list_tools")
+    def list_tools_bound(query: Optional[str] = None, mcp_name: Optional[str] = None) -> str:
+        """Perform a search or discovery to find tools.
+
+        If mcp_name is provided, retrieves all active tools for that specific MCP connection
+        assigned to the agent.
+        If query is provided, performs a local lexical keyword search on normal-indexed tools.
+
+        Args:
+            query: Natural language query describing what task you need to perform (optional).
+            mcp_name: The name of the MCP connection (e.g., 'googledocs', 'gmail') to list its tools (optional).
+        """
+        return list_tools_tool.func(query=query, mcp_name=mcp_name, agent_id=agent_id)
+    return list_tools_bound
+
+
+def _bind_agent_id_to_load_tools(load_tools_tool, agent_id: str):
+    from langchain_core.tools import tool
+    from typing import List
+    
+    @tool("load_tools")
+    def load_tools_bound(tool_names: List[str]) -> str:
+        """Load the complete JSON schemas for the specified tool names.
+
+        Fetches full schemas (parameters, types, required fields) from the master registry.
+        Returns these schemas so they can be injected directly into the active prompt or context.
+
+        Args:
+            tool_names: List of tool names to load (e.g. ['think_tool', 'unified_search'])
+        """
+        return load_tools_tool.func(tool_names=tool_names, agent_id=agent_id)
+    return load_tools_bound
+
+
+def _bind_agent_id_to_call_tool(call_tool_tool, agent_id: str):
+    from langchain_core.tools import tool
+    from typing import Dict, Any
+    
+    @tool("call_tool")
+    def call_tool_bound(tool_name: str, arguments: Dict[str, Any]) -> str:
+        """Execute a dynamically loaded tool with the specified arguments.
+
+        Use this tool to execute any tool from the <available_tools> index or found via list_tools
+        after you have loaded its schema via load_tools. Do NOT call dynamic tools directly;
+        you must route them through this call_tool function.
+
+        Args:
+            tool_name: The name of the tool to execute (e.g. 'publish_to_wordpress')
+            arguments: A dictionary of arguments to pass to the tool (e.g. {'blog_post_markdown': '...', 'category_id': 1})
+        """
+        return call_tool_tool.func(tool_name=tool_name, arguments=arguments, agent_id=agent_id)
+    return call_tool_bound
+
 # Global registry of compiled workflow agents
 compiled_workflows = {}
 default_workflow_id = None
@@ -537,6 +601,15 @@ def load_dynamic_agents_by_workflow():
             return {}
 
         client = create_client(url, key)
+
+        # ── Sync Pinecone vector index on reload ────────────────────────
+        try:
+            from research_agent.tools.dynamic_router import sync_pinecone_vector_index
+            print("[agent] Synchronizing Pinecone vector index...")
+            sync_pinecone_vector_index(client)
+            print("[agent] Pinecone synchronization complete.")
+        except Exception as e:
+            print(f"[agent] [WARNING] Pinecone synchronization failed: {e}")
 
         # 1. Fetch all workflows (scheduler status is checked by cron_scheduler.py)
         workflows_resp = client.table("workflows").select("*").execute()
@@ -568,6 +641,33 @@ def load_dynamic_agents_by_workflow():
         except Exception as e:
             print(f"[agent] [WARNING] Failed to fetch workflow_agent_assignments (using legacy workflow_id fallback): {e}")
             mappings = []
+
+        # Fetch agent settings from Supabase
+        try:
+            settings_resp = client.table("agent_settings").select("key,value").execute()
+            db_settings = {row["key"]: row["value"] for row in (settings_resp.data or [])}
+        except Exception as e:
+            print(f"[agent] Failed to fetch agent settings: {e}")
+            db_settings = {}
+
+        super_enabled = db_settings.get("super_indexing_enabled", "true").lower() == "true"
+        normal_enabled = db_settings.get("normal_indexing_enabled", "true").lower() == "true"
+
+        # Parse built-in tools loading modes
+        builtin_loading_modes_str = db_settings.get("builtin_tools_loading_modes", "{}")
+        try:
+            import json
+            builtin_loading_modes = json.loads(builtin_loading_modes_str)
+        except Exception:
+            builtin_loading_modes = {}
+
+        # Fetch global MCP tool settings
+        try:
+            mcp_settings_resp = client.table("mcp_tool_settings").select("tool_key, loading_mode").execute()
+            mcp_tool_modes = {row["tool_key"]: row["loading_mode"] for row in (mcp_settings_resp.data or [])}
+        except Exception as e:
+            print(f"[agent] Failed to fetch mcp_tool_settings: {e}")
+            mcp_tool_modes = {}
 
         # Tool lookup for built-in tools
         from research_agent.tools import (
@@ -603,6 +703,9 @@ def load_dynamic_agents_by_workflow():
             "publish_to_wordpress": publish_to_wordpress,
             "list_skills": list_skills,
             "manage_skill": manage_skill,
+            "list_tools": list_tools,
+            "load_tools": load_tools,
+            "call_tool": call_tool,
         }
 
         tool_assignments_by_agent = {}
@@ -639,31 +742,29 @@ def load_dynamic_agents_by_workflow():
         # Compile each workflow
         for wf in workflows:
             wf_id = wf["id"]
-            # Filter agents belonging to this workflow
-            if mappings:
-                mapped_agent_ids = {m["agent_id"] for m in mappings if str(m["workflow_id"]) == str(wf_id)}
-                wf_configs = [c for c in configs if c["id"] in mapped_agent_ids]
-            else:
-                wf_configs = [c for c in configs if c.get("workflow_id") == wf_id]
-
-            if not wf_configs:
-                print(f"[agent] Workflow '{wf['name']}' has no agent configs. Skipping.")
-                continue
-
-            main_configs = [c for c in wf_configs if c.get("agent_type") == "main"]
-            
-            # Subagents: Include both workflow-specific subagents and global/shared subagents (unmapped subagents)
-            local_subs = [c for c in wf_configs if c.get("agent_type") == "subagent"]
-            if mappings:
-                mapped_all_agent_ids = {m["agent_id"] for m in mappings}
-                global_subs = [c for c in configs if c.get("agent_type") == "subagent" and c["id"] not in mapped_all_agent_ids]
-            else:
-                global_subs = [c for c in configs if c.get("agent_type") == "subagent" and c.get("workflow_id") is None]
-            sub_configs = local_subs + global_subs
+            # 1. Resolve Main Agents for this workflow
+            main_configs = []
+            for c in configs:
+                if c.get("agent_type") == "main":
+                    is_mapped = any(str(m["agent_id"]) == str(c["id"]) and str(m["workflow_id"]) == str(wf_id) for m in mappings) if mappings else False
+                    is_direct = str(c.get("workflow_id")) == str(wf_id)
+                    if is_mapped or is_direct:
+                        main_configs.append(c)
 
             if not main_configs:
                 print(f"[agent] Workflow '{wf['name']}' has no Main Agent. Skipping.")
                 continue
+
+            # 2. Resolve subagents explicitly assigned to this workflow
+            local_subs = []
+            for c in configs:
+                if c.get("agent_type") == "subagent":
+                    is_mapped = any(str(m["agent_id"]) == str(c["id"]) and str(m["workflow_id"]) == str(wf_id) for m in mappings) if mappings else False
+                    is_direct = str(c.get("workflow_id")) == str(wf_id)
+                    if is_mapped or is_direct:
+                        local_subs.append(c)
+
+            sub_configs = local_subs
 
             main_cfg = main_configs[0]
             main_id = main_cfg["id"]
@@ -681,6 +782,14 @@ def load_dynamic_agents_by_workflow():
                     print(f"[agent] [OK] Skills index injected into system prompt (agent: {main_id[:8]}...)")
             except Exception as e:
                 print(f"[agent] [WARNING] Failed to build skills index: {e}")
+
+            try:
+                tools_index = build_tools_index(agent_id=main_id)
+                if tools_index:
+                    base_main_prompt = base_main_prompt + "\n\n" + tools_index
+                    print(f"[agent] [OK] Tools index injected into system prompt (agent: {main_id[:8]}...)")
+            except Exception as e:
+                print(f"[agent] [WARNING] Failed to build tools index: {e}")
 
             main_prompt = _get_agent_system_prompt_with_images(client, main_id, base_main_prompt)
 
@@ -710,6 +819,29 @@ def load_dynamic_agents_by_workflow():
             for a in tool_assignments_by_agent.get(main_id, []):
                 t_type = a.get("tool_type")
                 t_key = a.get("tool_key")
+                
+                # Resolve global loading mode
+                if t_type == "builtin":
+                    loading_mode = builtin_loading_modes.get(t_key, "primary")
+                else:  # mcp
+                    loading_mode = mcp_tool_modes.get(t_key, "primary")
+
+                if t_key in ["list_tools", "load_tools", "call_tool"]:
+                    loading_mode = "primary"
+                
+                # Map legacy vector to super
+                if loading_mode == "vector":
+                    loading_mode = "super"
+
+                # Apply override if disabled
+                if loading_mode == "super" and not super_enabled:
+                    loading_mode = "primary"
+                if loading_mode == "normal" and not normal_enabled:
+                    loading_mode = "primary"
+                
+                if loading_mode != "primary":
+                    continue
+
                 if t_type == "builtin":
                     if t_key in tool_lookup:
                         tool_func = tool_lookup[t_key]
@@ -717,6 +849,12 @@ def load_dynamic_agents_by_workflow():
                             tool_func = _bind_agent_id_to_list_skills(list_skills, main_id)
                         elif t_key == "read_skill":
                             tool_func = _bind_agent_id_to_read_skill(read_skill, main_id)
+                        elif t_key == "list_tools":
+                            tool_func = _bind_agent_id_to_list_tools(list_tools, main_id)
+                        elif t_key == "load_tools":
+                            tool_func = _bind_agent_id_to_load_tools(load_tools, main_id)
+                        elif t_key == "call_tool":
+                            tool_func = _bind_agent_id_to_call_tool(call_tool, main_id)
                         main_tools.append(tool_func)
                     elif t_key.startswith("unified_"):
                         main_tools.append(make_dynamic_unified_tool(t_key))
@@ -739,6 +877,14 @@ def load_dynamic_agents_by_workflow():
                         print(f"[agent] [OK] Skills index injected into subagent system prompt (agent: {sub_id[:8]}...)")
                 except Exception as e:
                     print(f"[agent] [WARNING] Failed to build subagent skills index: {e}")
+
+                try:
+                    tools_index = build_tools_index(agent_id=sub_id)
+                    if tools_index:
+                        base_sub_prompt = base_sub_prompt + "\n\n" + tools_index
+                        print(f"[agent] [OK] Tools index injected into subagent system prompt (agent: {sub_id[:8]}...)")
+                except Exception as e:
+                    print(f"[agent] [WARNING] Failed to build subagent tools index: {e}")
 
                 sub_prompt = _get_agent_system_prompt_with_images(client, sub_id, base_sub_prompt)
                 
@@ -766,6 +912,29 @@ def load_dynamic_agents_by_workflow():
                 for a in tool_assignments_by_agent.get(sub_id, []):
                     t_type = a.get("tool_type")
                     t_key = a.get("tool_key")
+                    
+                    # Resolve global loading mode
+                    if t_type == "builtin":
+                        loading_mode = builtin_loading_modes.get(t_key, "primary")
+                    else:  # mcp
+                        loading_mode = mcp_tool_modes.get(t_key, "primary")
+
+                    if t_key in ["list_tools", "load_tools", "call_tool"]:
+                        loading_mode = "primary"
+                    
+                    # Map legacy vector to super
+                    if loading_mode == "vector":
+                        loading_mode = "super"
+
+                    # Apply override if disabled
+                    if loading_mode == "super" and not super_enabled:
+                        loading_mode = "primary"
+                    if loading_mode == "normal" and not normal_enabled:
+                        loading_mode = "primary"
+                    
+                    if loading_mode != "primary":
+                        continue
+
                     if t_type == "builtin":
                         if t_key in tool_lookup:
                             tool_func = tool_lookup[t_key]
@@ -773,6 +942,12 @@ def load_dynamic_agents_by_workflow():
                                 tool_func = _bind_agent_id_to_list_skills(list_skills, sub_id)
                             elif t_key == "read_skill":
                                 tool_func = _bind_agent_id_to_read_skill(read_skill, sub_id)
+                            elif t_key == "list_tools":
+                                tool_func = _bind_agent_id_to_list_tools(list_tools, sub_id)
+                            elif t_key == "load_tools":
+                                tool_func = _bind_agent_id_to_load_tools(load_tools, sub_id)
+                            elif t_key == "call_tool":
+                                tool_func = _bind_agent_id_to_call_tool(call_tool, sub_id)
                             sub_tools.append(tool_func)
                         elif t_key.startswith("unified_"):
                             sub_tools.append(make_dynamic_unified_tool(t_key))

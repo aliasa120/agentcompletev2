@@ -182,6 +182,21 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
             {"value": "google/gemma-3-27b-it",                 "label": "Gemma 3 27B",           "badge": "Google"},
         ],
     },
+    "opencode": {
+        "base_url": "https://opencode.ai/zen/v1",
+        "env_key": "OPENCODE_API_KEY",
+        "label": "OpenCode AI",
+        "openai_compat": True,
+        "badge_color": "from-violet-600 to-indigo-700",
+        "default_models": [
+            {"value": "minimax-m3-free",       "label": "MiniMax M3 Free",       "badge": "MiniMax"},
+            {"value": "mimo-v2.5-free",        "label": "MiMo V2.5 Free",        "badge": "Xiaomi"},
+            {"value": "north-mini-code-free",  "label": "North Mini Code Free",  "badge": "Stealth"},
+            {"value": "nemotron-3-ultra-free", "label": "Nemotron 3 Ultra Free", "badge": "NVIDIA"},
+            {"value": "deepseek-v4-flash-free", "label": "DeepSeek V4 Flash Free", "badge": "DeepSeek"},
+            {"value": "qwen3.6-plus",          "label": "Qwen3.6 Plus Free",     "badge": "Qwen"},
+        ],
+    },
 }
 
 

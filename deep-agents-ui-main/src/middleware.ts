@@ -17,10 +17,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Allow public routes and Zapier OAuth API endpoints
+  // Allow public routes and all API endpoints
   if (
     PUBLIC_ROUTES.some(route => pathname.startsWith(route)) ||
-    pathname.startsWith('/api/oauth/')
+    pathname.startsWith('/api/')
   ) {
     return NextResponse.next()
   }
@@ -72,6 +72,6 @@ export const config = {
      * - public folder files
      * - api routes (they handle auth themselves if needed)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

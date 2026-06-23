@@ -38,6 +38,7 @@ interface ToolSetting {
   tool_key: string;
   tool_name: string;
   enabled: boolean;
+  loading_mode?: string;
 }
 
 // ── Tool toggle component ─────────────────────────────────────────────────────
@@ -45,35 +46,57 @@ interface ToolSetting {
 function ToolToggle({
   setting,
   onToggle,
+  onModeChange,
   toggling,
+  togglingMode,
 }: {
   setting: ToolSetting;
   onToggle: (key: string, enabled: boolean) => void;
+  onModeChange: (key: string, mode: string) => void;
   toggling: boolean;
+  togglingMode: boolean;
 }) {
+  const currentMode = setting.loading_mode || "primary";
+
   return (
-    <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all
+    <div className={`flex flex-col gap-2 px-3 py-2.5 rounded-lg border transition-all
       ${setting.enabled
         ? "bg-card border-border"
         : "bg-muted/30 border-border/50 opacity-60"
       }`}>
-      <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-semibold truncate text-foreground">{setting.tool_name || setting.tool_key}</p>
-        <p className="text-[10px] text-muted-foreground font-mono truncate">{setting.tool_key}</p>
+      <div className="flex items-center justify-between w-full">
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] font-semibold truncate text-foreground">{setting.tool_name || setting.tool_key}</p>
+          <p className="text-[10px] text-muted-foreground font-mono truncate">{setting.tool_key}</p>
+        </div>
+        <button
+          onClick={() => onToggle(setting.tool_key, !setting.enabled)}
+          disabled={toggling}
+          className={`shrink-0 transition-colors ${setting.enabled ? "text-primary hover:text-primary/80" : "text-muted-foreground hover:text-foreground"}`}
+          title={setting.enabled ? "Disable tool" : "Enable tool"}
+        >
+          {toggling
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : setting.enabled
+              ? <ToggleRight className="h-5 w-5" />
+              : <ToggleLeft className="h-5 w-5" />
+          }
+        </button>
       </div>
-      <button
-        onClick={() => onToggle(setting.tool_key, !setting.enabled)}
-        disabled={toggling}
-        className={`shrink-0 transition-colors ${setting.enabled ? "text-primary hover:text-primary/80" : "text-muted-foreground hover:text-foreground"}`}
-        title={setting.enabled ? "Disable tool" : "Enable tool"}
-      >
-        {toggling
-          ? <Loader2 className="h-4 w-4 animate-spin" />
-          : setting.enabled
-            ? <ToggleRight className="h-5 w-5" />
-            : <ToggleLeft className="h-5 w-5" />
-        }
-      </button>
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-dashed border-border/50">
+        <span className="text-[9px] text-muted-foreground font-medium uppercase shrink-0">Indexing Mode</span>
+        <select
+          value={currentMode}
+          disabled={!setting.enabled || togglingMode}
+          onChange={(e) => onModeChange(setting.tool_key, e.target.value)}
+          style={{ width: "120px", minWidth: "120px", paddingLeft: "6px", paddingRight: "20px", paddingTop: "0px", paddingBottom: "0px" }}
+          className="h-6 shrink-0 text-[10px] rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary font-medium cursor-pointer"
+        >
+          <option value="primary">Primary</option>
+          <option value="normal">Normal</option>
+          <option value="super">Super</option>
+        </select>
+      </div>
     </div>
   );
 }
@@ -93,6 +116,7 @@ function ConnectedIntegrationRow({
   const [toolSettings, setToolSettings] = useState<ToolSetting[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
+  const [togglingModeKey, setTogglingModeKey] = useState<string | null>(null);
   const [seeded, setSeeded] = useState(false);
 
   const loadTools = useCallback(async () => {
@@ -139,6 +163,23 @@ function ConnectedIntegrationRow({
     }
   };
 
+  const handleModeChange = async (toolKey: string, loadingMode: string) => {
+    setTogglingModeKey(toolKey);
+    try {
+      await fetch("/api/mcp/tool-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ connection_id: conn.id, tool_key: toolKey, loading_mode: loadingMode }),
+      });
+      setToolSettings(prev =>
+        prev.map(s => s.tool_key === toolKey ? { ...s, loading_mode: loadingMode } : s)
+      );
+      if (onReloadAgent) onReloadAgent();
+    } finally {
+      setTogglingModeKey(null);
+    }
+  };
+
   const handleBulk = async (enabled: boolean) => {
     await fetch("/api/mcp/tool-settings", {
       method: "PUT",
@@ -146,6 +187,16 @@ function ConnectedIntegrationRow({
       body: JSON.stringify({ connection_id: conn.id, enabled }),
     });
     setToolSettings(prev => prev.map(s => ({ ...s, enabled })));
+    if (onReloadAgent) onReloadAgent();
+  };
+
+  const handleBulkMode = async (loadingMode: string) => {
+    await fetch("/api/mcp/tool-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ connection_id: conn.id, loading_mode: loadingMode }),
+    });
+    setToolSettings(prev => prev.map(s => ({ ...s, loading_mode: loadingMode })));
     if (onReloadAgent) onReloadAgent();
   };
 
@@ -195,15 +246,15 @@ function ConnectedIntegrationRow({
       {expanded && (
         <div className="border-t bg-muted/10">
           {/* Toolbar */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-dashed bg-background/50">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-dashed bg-background/50 flex-wrap gap-2">
             <div className="flex items-center gap-1.5">
               <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Tool Settings</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap text-xs">
               <button
                 onClick={() => handleBulk(true)}
-                className="text-[10px] font-medium text-primary hover:underline"
+                className="text-[10px] font-medium text-primary hover:underline font-semibold"
               >
                 Enable all
               </button>
@@ -213,6 +264,27 @@ function ConnectedIntegrationRow({
                 className="text-[10px] font-medium text-muted-foreground hover:text-foreground hover:underline"
               >
                 Disable all
+              </button>
+              <span className="text-muted-foreground text-[10px]">·</span>
+              <button
+                onClick={() => handleBulkMode("primary")}
+                className="text-[10px] font-medium text-primary hover:underline"
+              >
+                Set all Primary
+              </button>
+              <span className="text-muted-foreground text-[10px]">·</span>
+              <button
+                onClick={() => handleBulkMode("normal")}
+                className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 hover:underline"
+              >
+                Set all Normal
+              </button>
+              <span className="text-muted-foreground text-[10px]">·</span>
+              <button
+                onClick={() => handleBulkMode("super")}
+                className="text-[10px] font-medium text-violet-600 dark:text-violet-400 hover:underline"
+              >
+                Set all Super
               </button>
               <span className="text-muted-foreground text-[10px]">·</span>
               <button
@@ -242,12 +314,15 @@ function ConnectedIntegrationRow({
                   tool_key: t.tool_key,
                   tool_name: t.tool_name,
                   enabled: true,
+                  loading_mode: "primary",
                 }))).map(setting => (
                   <ToolToggle
                     key={setting.tool_key}
                     setting={setting as ToolSetting}
                     onToggle={handleToggle}
+                    onModeChange={handleModeChange}
                     toggling={togglingKey === setting.tool_key}
+                    togglingMode={togglingModeKey === setting.tool_key}
                   />
                 ))}
               </div>
@@ -806,7 +881,11 @@ const BUILTIN_TOOLS = [
   { key: "create_post_image", label: "Image Generator", desc: "KIE AI / Gemini" },
   { key: "read_skill", label: "Read Skill", desc: "Load SKILL.md instructions" },
   { key: "save_posts_to_supabase", label: "Save to DB", desc: "Supabase storage" },
+  { key: "get_wordpress_categories", label: "WP Categories", desc: "Fetch WordPress categories" },
   { key: "publish_to_wordpress", label: "WordPress Publish", desc: "WP REST API" },
+  { key: "list_tools", label: "List Tools", desc: "Discover tools via semantic search" },
+  { key: "load_tools", label: "Load Tools", desc: "Load parameters and schemas on demand" },
+  { key: "call_tool", label: "Call Tool", desc: "Execute dynamically routed tools" },
 ];
 
 function ToolsTab({
@@ -821,7 +900,99 @@ function ToolsTab({
   onReloadAgent?: () => void;
 }) {
   const [builtinExpanded, setBuiltinExpanded] = useState(false);
+  const [builtinModes, setBuiltinModes] = useState<Record<string, string>>({});
   const activeConns = connections.filter(c => c.status === "active");
+
+  useEffect(() => {
+    async function loadBuiltinModes() {
+      try {
+        let { data, error } = await supabase
+          .from("agent_settings")
+          .select("value")
+          .eq("key", "builtin_tools_loading_modes")
+          .single();
+        if (error) {
+          if (error.code === "PGRST303" || error.message?.includes("JWT expired")) {
+            console.warn("JWT expired. Cleaning session and retrying loadBuiltinModes...");
+            await supabase.auth.signOut().catch(() => {});
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && key.includes("-auth-token")) {
+                localStorage.removeItem(key);
+              }
+            }
+            const retry = await supabase
+              .from("agent_settings")
+              .select("value")
+              .eq("key", "builtin_tools_loading_modes")
+              .single();
+            data = retry.data;
+            error = retry.error;
+            if (error) {
+              console.error("Error loading built-in tool modes after retry:", error);
+            }
+          } else {
+            console.error("Error loading built-in tool modes:", error);
+          }
+        }
+        if (data?.value) {
+          setBuiltinModes(JSON.parse(data.value));
+        }
+      } catch (e) {
+        console.error("Failed to load built-in tool modes:", e);
+      }
+    }
+    loadBuiltinModes();
+  }, []);
+
+  const handleBuiltinModeChange = async (toolKey: string, nextMode: string) => {
+    const updatedModes = { ...builtinModes, [toolKey]: nextMode };
+    setBuiltinModes(updatedModes);
+    try {
+      let { data, error } = await supabase
+        .from("agent_settings")
+        .upsert({
+          key: "builtin_tools_loading_modes",
+          value: JSON.stringify(updatedModes),
+          updated_at: new Date().toISOString()
+        }, { onConflict: "key" })
+        .select();
+      if (error) {
+        if (error.code === "PGRST303" || error.message?.includes("JWT expired")) {
+          console.warn("JWT expired. Cleaning session and retrying handleBuiltinModeChange...");
+          await supabase.auth.signOut().catch(() => {});
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.includes("-auth-token")) {
+              localStorage.removeItem(key);
+            }
+          }
+          const retry = await supabase
+            .from("agent_settings")
+            .upsert({
+              key: "builtin_tools_loading_modes",
+              value: JSON.stringify(updatedModes),
+              updated_at: new Date().toISOString()
+            }, { onConflict: "key" })
+            .select();
+          data = retry.data;
+          error = retry.error;
+          if (error) {
+            console.error("Error saving built-in tool modes after retry:", error);
+          } else {
+            console.log("Successfully saved built-in tool modes after retry:", data);
+          }
+        } else {
+          console.error("Error saving built-in tool modes:", error);
+        }
+      } else {
+        console.log("Successfully saved built-in tool modes:", data);
+      }
+      if (onReloadAgent) onReloadAgent();
+    } catch (e) {
+      console.error("Failed to save built-in tool modes:", e);
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -871,18 +1042,39 @@ function ToolsTab({
         {builtinExpanded && (
           <div className="border-t bg-muted/10 p-4">
             <div className="grid grid-cols-2 gap-2">
-              {BUILTIN_TOOLS.map(tool => (
-                <div key={tool.key}
-                  className="flex items-center gap-2 px-3 py-2.5 rounded-lg border bg-card">
-                  <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-semibold truncate">{tool.label}</p>
-                    <p className="text-[10px] font-mono text-muted-foreground truncate">{tool.key}</p>
-                    <p className="text-[10px] text-muted-foreground">{tool.desc}</p>
+              {BUILTIN_TOOLS.map(tool => {
+                const currentMode = builtinModes[tool.key] || "primary";
+                return (
+                  <div key={tool.key}
+                    className="flex flex-col gap-2 p-3 rounded-lg border bg-card shadow-xs">
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold truncate">{tool.label}</p>
+                          <p className="text-[10px] font-mono text-muted-foreground truncate">{tool.key}</p>
+                        </div>
+                      </div>
+                      <ToggleRight className="h-5 w-5 text-primary shrink-0" />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground line-clamp-1 leading-tight">{tool.desc}</p>
+                    
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-dashed border-border/50 mt-1">
+                      <span className="text-[9px] text-muted-foreground font-medium uppercase shrink-0">Indexing Mode</span>
+                      <select
+                        value={currentMode}
+                        onChange={(e) => handleBuiltinModeChange(tool.key, e.target.value)}
+                        style={{ width: "120px", minWidth: "120px", paddingLeft: "6px", paddingRight: "20px", paddingTop: "0px", paddingBottom: "0px" }}
+                        className="h-6 shrink-0 text-[10px] rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary font-medium cursor-pointer"
+                      >
+                        <option value="primary">Primary</option>
+                        <option value="normal">Normal</option>
+                        <option value="super">Super</option>
+                      </select>
+                    </div>
                   </div>
-                  <ToggleRight className="h-5 w-5 text-primary shrink-0" />
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

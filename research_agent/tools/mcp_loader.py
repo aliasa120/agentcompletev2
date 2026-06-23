@@ -380,7 +380,7 @@ def load_mcp_tools_for_agent(agent_id: str) -> List[BaseTool]:
     # Get enabled MCP tool assignments for this agent
     try:
         resp = client.table("agent_tool_assignments")\
-                     .select("tool_key,tool_label")\
+                     .select("*")\
                      .eq("agent_id", agent_id)\
                      .eq("tool_type", "mcp")\
                      .eq("enabled", True)\
@@ -393,7 +393,44 @@ def load_mcp_tools_for_agent(agent_id: str) -> List[BaseTool]:
     if not assignments:
         return []
 
-    assigned_keys = {a["tool_key"] for a in assignments}
+    # Fetch agent settings from Supabase
+    try:
+        settings_resp = client.table("agent_settings").select("key,value").execute()
+        db_settings = {row["key"]: row["value"] for row in (settings_resp.data or [])}
+    except Exception as e:
+        logger.warning(f"Failed to fetch agent settings in mcp_loader: {e}")
+        db_settings = {}
+
+    vector_enabled = db_settings.get("vector_indexing_enabled", "true").lower() == "true"
+    normal_enabled = db_settings.get("normal_indexing_enabled", "true").lower() == "true"
+
+    # Fetch global MCP tool settings
+    try:
+        mcp_settings_resp = client.table("mcp_tool_settings").select("tool_key, loading_mode").execute()
+        mcp_tool_modes = {row["tool_key"]: row["loading_mode"] for row in (mcp_settings_resp.data or [])}
+    except Exception as e:
+        logger.warning(f"Failed to fetch mcp_tool_settings in mcp_loader: {e}")
+        mcp_tool_modes = {}
+
+    # Only load tools with loading_mode == 'primary' (after global resolution and overrides)
+    primary_assignments = []
+    for a in assignments:
+        tool_key = a.get("tool_key")
+        # Resolve global loading mode
+        mode = mcp_tool_modes.get(tool_key, "primary")
+        if tool_key in ["list_tools", "load_tools", "call_tool"]:
+            mode = "primary"
+            
+        # Apply override if disabled
+        if mode == "vector" and not vector_enabled:
+            mode = "primary"
+        if mode == "normal" and not normal_enabled:
+            mode = "primary"
+            
+        if mode == "primary":
+            primary_assignments.append(a)
+
+    assigned_keys = {a["tool_key"] for a in primary_assignments}
     logger.info(f"Loading {len(assigned_keys)} MCP tools for agent {agent_id}: {assigned_keys}")
 
     # Load active connections to classify tool_keys

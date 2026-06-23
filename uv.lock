@@ -908,7 +908,7 @@ requires-dist = [
     { name = "langchain-google-genai", specifier = ">=3.1.0" },
     { name = "langchain-mcp-adapters", specifier = ">=0.1.0" },
     { name = "langchain-openai", specifier = ">=1.0.2" },
-    { name = "langgraph-cli", extras = ["inmem"], specifier = ">=0.1.55" },
+    { name = "langgraph-cli", extras = ["inmem"], specifier = "==0.4.12" },
     { name = "langgraph-sdk", specifier = ">=0.1.33" },
     { name = "linkup-sdk", specifier = ">=0.3.0" },
     { name = "litellm", specifier = ">=1.81.16" },

@@ -162,6 +162,19 @@ const PROVIDER_REGISTRY: Record<string, {
       { value: "google/gemma-3-27b-it",              label: "Gemma 3 27B",         badge: "Google" },
     ],
   },
+  opencode: {
+    envKey: "OPENCODE_API_KEY",
+    label: "OpenCode AI",
+    badgeColor: "from-violet-600 to-indigo-700",
+    defaultModels: [
+      { value: "minimax-m3-free",       label: "MiniMax M3 Free",       badge: "MiniMax" },
+      { value: "mimo-v2.5-free",        label: "MiMo V2.5 Free",        badge: "Xiaomi" },
+      { value: "north-mini-code-free",  label: "North Mini Code Free",  badge: "Stealth" },
+      { value: "nemotron-3-ultra-free", label: "Nemotron 3 Ultra Free", badge: "NVIDIA" },
+      { value: "deepseek-v4-flash-free", label: "DeepSeek V4 Flash Free", badge: "DeepSeek" },
+      { value: "qwen3.6-plus",          label: "Qwen3.6 Plus Free",     badge: "Qwen" },
+    ],
+  },
 };
 
 export async function GET() {

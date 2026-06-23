@@ -58,6 +58,7 @@ export async function POST(req: Request) {
       tool_key: t.tool_key,
       tool_name: t.tool_name ?? t.tool_key,
       enabled: true,
+      loading_mode: "primary",
       updated_at: new Date().toISOString(),
     }));
 
@@ -79,18 +80,22 @@ export async function POST(req: Request) {
   }
 }
 
-// PATCH /api/mcp/tool-settings — toggle a tool enabled/disabled
-// Body: { connection_id, tool_key, enabled }
+// PATCH /api/mcp/tool-settings — toggle a tool enabled/disabled or change loading_mode
+// Body: { connection_id, tool_key, enabled, loading_mode }
 export async function PATCH(req: Request) {
   try {
-    const { connection_id, tool_key, enabled } = await req.json();
+    const { connection_id, tool_key, enabled, loading_mode } = await req.json();
     if (!connection_id || !tool_key) {
       return NextResponse.json({ error: "connection_id and tool_key required" }, { status: 400 });
     }
 
+    const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (enabled !== undefined) updatePayload.enabled = enabled;
+    if (loading_mode !== undefined) updatePayload.loading_mode = loading_mode;
+
     const { data, error } = await supabase
       .from("mcp_tool_settings")
-      .update({ enabled, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq("connection_id", connection_id)
       .eq("tool_key", tool_key)
       .select()
@@ -106,18 +111,22 @@ export async function PATCH(req: Request) {
   }
 }
 
-// PUT /api/mcp/tool-settings — bulk update (enable all / disable all)
-// Body: { connection_id, enabled }
+// PUT /api/mcp/tool-settings — bulk update (enable all / disable all or change mode)
+// Body: { connection_id, enabled, loading_mode }
 export async function PUT(req: Request) {
   try {
-    const { connection_id, enabled } = await req.json();
+    const { connection_id, enabled, loading_mode } = await req.json();
     if (!connection_id) {
       return NextResponse.json({ error: "connection_id required" }, { status: 400 });
     }
 
+    const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (enabled !== undefined) updatePayload.enabled = enabled;
+    if (loading_mode !== undefined) updatePayload.loading_mode = loading_mode;
+
     const { error } = await supabase
       .from("mcp_tool_settings")
-      .update({ enabled, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq("connection_id", connection_id);
 
     if (error) throw error;

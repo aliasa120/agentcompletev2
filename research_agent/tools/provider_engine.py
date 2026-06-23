@@ -155,6 +155,11 @@ _AGENT_DEFAULTS: dict[str, dict[str, str]] = {
         "provider": "vercel",
         "model": "xiaomi/mimo-v2.5-pro",
     },
+    # Vector indexing: default to Vercel/Gemini 2.5 Flash
+    "vector_indexing": {
+        "provider": "vercel",
+        "model": "google/gemini-2.5-flash",
+    },
 }
 
 
@@ -448,7 +453,20 @@ async def load_mcp_tool_by_key(tool_key: str) -> list[BaseTool]:
                             from composio import Composio
                             from composio_langchain import LangchainProvider
                             composio = Composio(api_key=composio_api_key, provider=LangchainProvider())
-                            return composio.tools.get(user_id="default", tools=[tool_key])
+                            return await asyncio.to_thread(composio.tools.get, user_id="default", tools=[tool_key])
+                        except Exception as e:
+                            logger.error(f"Failed to load Composio tool '{tool_key}': {e}", exc_info=True)
+                            try:
+                                with open("agent_load.log", "a", encoding="utf-8") as f:
+                                    import traceback
+                                    f.write(f"\n--- Composio Load Error for '{tool_key}' ---\n{traceback.format_exc()}\n")
+                            except Exception:
+                                pass
+                            pass
+                    else:
+                        try:
+                            with open("agent_load.log", "a", encoding="utf-8") as f:
+                                f.write(f"\n[load_mcp_tool_by_key] WARNING: COMPOSIO_API_KEY is missing or empty! Env keys: {[k for k in os.environ.keys() if 'COMPOSIO' in k]}\n")
                         except Exception:
                             pass
     return []

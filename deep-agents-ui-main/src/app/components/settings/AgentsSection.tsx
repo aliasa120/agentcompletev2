@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { supabase } from "@/lib/supabase";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,9 +67,12 @@ const BUILTIN_TOOLS = [
   { tool_key: "save_posts_to_supabase", tool_label: "Save to Database",      category: "Output" },
   { tool_key: "get_wordpress_categories", tool_label: "WP Categories",       category: "Output" },
   { tool_key: "publish_to_wordpress",   tool_label: "Publish to WordPress",  category: "Output" },
+  { tool_key: "list_tools",             tool_label: "List Tools",            category: "Routing" },
+  { tool_key: "load_tools",             tool_label: "Load Tools",            category: "Routing" },
+  { tool_key: "call_tool",              tool_label: "Call Tool",             category: "Routing" },
 ];
 
-const TOOL_CATEGORIES = ["Search", "Reasoning", "Images", "Skills", "Output"];
+const TOOL_CATEGORIES = ["Search", "Reasoning", "Images", "Skills", "Output", "Routing"];
 
 interface ToolSetting {
   id: string;
@@ -76,6 +80,7 @@ interface ToolSetting {
   tool_key: string;
   tool_name: string;
   enabled: boolean;
+  loading_mode?: string;
 }
 
 interface DesignAsset {
@@ -227,162 +232,324 @@ function ReferenceImagesPicker({ agentId }: { agentId: string }) {
   );
 }
 
-// ── Tool Assignment Panel ────────────────────────────────────────────────────
-
 function ToolAssignmentPanel({
   assigned,
   onChange,
   skills,
   mcpConnections,
   toolSettings,
+  builtinModes,
 }: {
   assigned: ToolAssignment[];
   onChange: (tools: ToolAssignment[]) => void;
   skills: Skill[];
   mcpConnections: MCPConnection[];
   toolSettings: ToolSetting[];
+  builtinModes: Record<string, string>;
 }) {
   const [selectedSource, setSelectedSource] = useState<string>("");
 
+  const getToolLoadingMode = (toolKey: string, toolType: string) => {
+    if (toolType === "skill") {
+      return "normal";
+    }
+    if (toolType === "builtin") {
+      return builtinModes[toolKey] || "primary";
+    }
+    if (toolType === "mcp") {
+      const setting = toolSettings.find(s => s.tool_key === toolKey);
+      return setting?.loading_mode || "primary";
+    }
+    return "primary";
+  };
+
+  const renderLoadingModeBadge = (toolKey: string, toolType: string) => {
+    const mode = getToolLoadingMode(toolKey, toolType);
+    if (mode === "super" || mode === "vector") {
+      return (
+        <span className="text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase bg-violet-500/10 border-violet-500/20 text-violet-600 dark:text-violet-400 shrink-0">
+          Super Index
+        </span>
+      );
+    }
+    if (mode === "normal") {
+      return (
+        <span className="text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0">
+          Normal Index
+        </span>
+      );
+    }
+    return (
+      <span className="text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase bg-primary/10 border-primary/20 text-primary shrink-0">
+        Primary
+      </span>
+    );
+  };
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [newToolKeys, setNewToolKeys] = useState<string[]>([]);
+
   const removeTool = (toolKey: string) => {
     onChange(assigned.filter(t => t.tool_key !== toolKey));
+    setSelectedKeys(prev => prev.filter(k => k !== toolKey));
+  };
+
+  const bulkDetach = () => {
+    onChange(assigned.filter(t => !selectedKeys.includes(t.tool_key)));
+    setSelectedKeys([]);
+  };
+
+  // Get available tools to add from selected source
+  const getAvailableTools = () => {
+    if (selectedSource === "builtin") {
+      return BUILTIN_TOOLS
+        .filter(t => !assigned.some(a => a.tool_key === t.tool_key))
+        .map(t => ({ key: t.tool_key, label: t.tool_label, type: "builtin" }));
+    }
+    if (selectedSource === "skill") {
+      return skills
+        .filter(s => !assigned.some(a => a.tool_key === s.skill_key))
+        .map(s => ({ key: s.skill_key, label: s.label, type: "skill" }));
+    }
+    if (selectedSource?.startsWith("mcp:")) {
+      const connId = selectedSource.split(":")[1];
+      const conn = mcpConnections.find(c => c.id === connId);
+      if (!conn) return [];
+      const enabledMcpTools = conn.available_tools?.filter(t => {
+        const setting = toolSettings.find(s => s.connection_id === conn.id && s.tool_key === t.tool_key);
+        return !setting || setting.enabled;
+      }) ?? [];
+      return enabledMcpTools
+        .filter(t => !assigned.some(a => a.tool_key === t.tool_key))
+        .map(t => ({ key: t.tool_key, label: t.tool_name ?? t.tool_key, type: "mcp" }));
+    }
+    return [];
+  };
+
+  const available = getAvailableTools();
+
+  const handleAttachSelected = () => {
+    const newAssignments = available
+      .filter(t => newToolKeys.includes(t.key))
+      .map(t => ({
+        tool_type: t.type,
+        tool_key: t.key,
+        tool_label: t.label,
+        enabled: true,
+      }));
+
+    onChange([...assigned, ...newAssignments]);
+    setNewToolKeys([]);
+    setSelectedSource("");
   };
 
   return (
     <div className="space-y-4">
-      {/* Attached Tools Tags */}
-      <div>
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
-          <Wrench className="h-3 w-3 text-primary" /> Attached Tools & Skills ({assigned.length})
-        </p>
+      {/* Attached Tools Toolbar & List */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between border-b pb-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={assigned.length > 0 && selectedKeys.length === assigned.length}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setSelectedKeys(assigned.map(t => t.tool_key));
+                } else {
+                  setSelectedKeys([]);
+                }
+              }}
+              className="rounded border-input text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+            />
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <Wrench className="h-3 w-3 text-primary" /> Attached Tools & Skills ({assigned.length})
+            </span>
+          </div>
+
+          {selectedKeys.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={bulkDetach}
+              className="h-7 px-2.5 text-xs text-destructive hover:bg-destructive/10 gap-1"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Detach Selected ({selectedKeys.length})
+            </Button>
+          )}
+        </div>
 
         {assigned.length === 0 ? (
-          <div className="text-center py-5 border border-dashed rounded-lg bg-muted/5 text-muted-foreground text-xs">
+          <div className="text-center py-6 border border-dashed rounded-lg bg-muted/5 text-muted-foreground text-xs italic">
             No tools attached to this agent. Select a source below to add tools.
           </div>
         ) : (
-          <div className="flex flex-wrap gap-2 p-2 max-h-48 overflow-y-auto border rounded-lg bg-muted/5">
-            {assigned.map(t => {
-              let bg = "bg-primary/5 hover:bg-primary/10 border-primary/20 text-primary";
-              let Icon = Wrench;
-              if (t.tool_type === "skill") {
-                bg = "bg-emerald-500/5 hover:bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400";
-                Icon = BookOpen;
-              } else if (t.tool_type === "mcp") {
-                bg = "bg-violet-500/5 hover:bg-violet-500/10 border-violet-500/20 text-violet-600 dark:text-violet-400";
-                Icon = Puzzle;
-              }
-              return (
-                <span
-                  key={t.tool_key}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium transition-all ${bg}`}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate max-w-[180px]">{t.tool_label}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeTool(t.tool_key)}
-                    className="ml-1 p-0.5 rounded-full hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors"
-                    title="Detach tool"
+          <div className="border rounded-lg bg-card/50 overflow-hidden">
+            <div className="max-h-60 overflow-y-auto divide-y">
+              {assigned.map(t => {
+                const isSelected = selectedKeys.includes(t.tool_key);
+                return (
+                  <div
+                    key={t.tool_key}
+                    className={`flex items-center justify-between p-2 hover:bg-muted/30 transition-colors ${
+                      isSelected ? "bg-primary/5" : ""
+                    }`}
                   >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              );
-            })}
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedKeys(prev => [...prev, t.tool_key]);
+                          } else {
+                            setSelectedKeys(prev => prev.filter(k => k !== t.tool_key));
+                          }
+                        }}
+                        className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-xs text-foreground truncate max-w-[240px]">
+                            {t.tool_label}
+                          </span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase shrink-0 ${
+                            t.tool_type === "skill"
+                              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                              : t.tool_type === "mcp"
+                              ? "bg-violet-500/10 border-violet-500/20 text-violet-600 dark:text-violet-400"
+                              : "bg-primary/10 border-primary/20 text-primary"
+                          }`}>
+                            {t.tool_type}
+                          </span>
+                          {renderLoadingModeBadge(t.tool_key, t.tool_type)}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground font-mono truncate">{t.tool_key}</p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => removeTool(t.tool_key)}
+                      className="p-1 rounded-full hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors mr-1"
+                      title="Detach tool"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
 
       {/* Selectors for adding tools */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t">
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
-            Select Tool Source
-          </label>
-          <select
-            value={selectedSource}
-            onChange={e => setSelectedSource(e.target.value)}
-            className="w-full h-9 rounded-lg border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            <option value="">-- Choose Source --</option>
-            <option value="builtin">Built-in Tools</option>
-            {skills.length > 0 && <option value="skill">Skills Library</option>}
-            {mcpConnections.map(conn => {
-              const enabledMcpTools = conn.available_tools?.filter(t => {
-                const setting = toolSettings.find(s => s.connection_id === conn.id && s.tool_key === t.tool_key);
-                return !setting || setting.enabled;
-              }) ?? [];
-              if (enabledMcpTools.length === 0) return null;
-              return (
-                <option key={conn.id} value={`mcp:${conn.id}`}>
-                  {conn.label} ({conn.connection_type === "composio" ? "Composio" : "Manual"})
-                </option>
-              );
-            })}
-          </select>
-        </div>
+      <div className="pt-4 border-t space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+          <Plus className="h-3.5 w-3.5 text-primary" /> Attach New Tools
+        </p>
 
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
-            Select Tool to Add
-          </label>
-          <select
-            value=""
-            disabled={!selectedSource}
-            onChange={e => {
-              const val = e.target.value;
-              if (!val) return;
-              const [toolKey, toolLabel, toolType] = JSON.parse(val);
-              // Avoid duplicates
-              if (!assigned.some(x => x.tool_key === toolKey)) {
-                onChange([...assigned, { tool_type: toolType, tool_key: toolKey, tool_label: toolLabel, enabled: true }]);
-              }
-              setSelectedSource("");
-            }}
-            className="w-full h-9 rounded-lg border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
-          >
-            <option value="">
-              {!selectedSource ? "Choose source first..." : "-- Select Tool --"}
-            </option>
-
-            {selectedSource === "builtin" &&
-              BUILTIN_TOOLS
-                .filter(t => !assigned.some(a => a.tool_key === t.tool_key))
-                .map(t => (
-                  <option key={t.tool_key} value={JSON.stringify([t.tool_key, t.tool_label, "builtin"])}>
-                    {t.tool_label} ({t.category})
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="sm:col-span-1 space-y-1.5">
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
+              Choose Source
+            </label>
+            <select
+              value={selectedSource}
+              onChange={e => {
+                setSelectedSource(e.target.value);
+                setNewToolKeys([]);
+              }}
+              className="w-full h-9 rounded-lg border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">-- Choose Source --</option>
+              <option value="builtin">Built-in Tools</option>
+              {skills.length > 0 && <option value="skill">Skills Library</option>}
+              {mcpConnections.map(conn => {
+                const enabledMcpTools = conn.available_tools?.filter(t => {
+                  const setting = toolSettings.find(s => s.connection_id === conn.id && s.tool_key === t.tool_key);
+                  return !setting || setting.enabled;
+                }) ?? [];
+                if (enabledMcpTools.length === 0) return null;
+                return (
+                  <option key={conn.id} value={`mcp:${conn.id}`}>
+                    {conn.label} ({conn.connection_type === "composio" ? "Composio" : "Manual"})
                   </option>
-                ))
-            }
+                );
+              })}
+            </select>
+          </div>
 
-            {selectedSource === "skill" &&
-              skills
-                .filter(s => !assigned.some(a => a.tool_key === s.skill_key))
-                .map(s => (
-                  <option key={s.skill_key} value={JSON.stringify([s.skill_key, s.label, "skill"])}>
-                    {s.label}
-                  </option>
-                ))
-            }
+          {selectedSource && (
+            <div className="sm:col-span-2 space-y-2 border rounded-lg p-3 bg-muted/10">
+              <div className="flex items-center justify-between border-b pb-1.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={available.length > 0 && newToolKeys.length === available.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setNewToolKeys(available.map(t => t.key));
+                      } else {
+                        setNewToolKeys([]);
+                      }
+                    }}
+                    className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
+                  />
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Select Tools to Attach
+                  </span>
+                </div>
 
-            {selectedSource?.startsWith("mcp:") && (() => {
-              const connId = selectedSource.split(":")[1];
-              const conn = mcpConnections.find(c => c.id === connId);
-              if (!conn) return null;
-              const enabledMcpTools = conn.available_tools?.filter(t => {
-                const setting = toolSettings.find(s => s.connection_id === conn.id && s.tool_key === t.tool_key);
-                return !setting || setting.enabled;
-              }) ?? [];
-              return enabledMcpTools
-                .filter(t => !assigned.some(a => a.tool_key === t.tool_key))
-                .map(t => (
-                  <option key={t.tool_key} value={JSON.stringify([t.tool_key, t.tool_name ?? t.tool_key, "mcp"])}>
-                    {t.tool_name ?? t.tool_key}
-                  </option>
-                ));
-            })()}
-          </select>
+                <Button
+                  size="sm"
+                  disabled={newToolKeys.length === 0}
+                  onClick={handleAttachSelected}
+                  className="h-7 px-3 text-xs gap-1"
+                >
+                  <Plus className="h-3 w-3" /> Attach Selected ({newToolKeys.length})
+                </Button>
+              </div>
+
+              <div className="max-h-40 overflow-y-auto divide-y text-xs">
+                {available.length === 0 ? (
+                  <p className="text-center py-4 text-muted-foreground italic text-[11px]">All tools in this source are already attached.</p>
+                ) : (
+                  available.map(t => {
+                    const isChecked = newToolKeys.includes(t.key);
+                    return (
+                      <label
+                        key={t.key}
+                        className="flex items-center gap-2.5 py-1.5 px-1 hover:bg-muted/30 rounded cursor-pointer transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewToolKeys(prev => [...prev, t.key]);
+                            } else {
+                              setNewToolKeys(prev => prev.filter(k => k !== t.key));
+                            }
+                          }}
+                          className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
+                        />
+                        <div className="min-w-0 flex-1 flex items-center justify-between gap-2 pr-1">
+                          <div>
+                            <span className="font-semibold block text-[11px] text-foreground leading-none">{t.label}</span>
+                            <span className="text-[9px] text-muted-foreground font-mono">{t.key}</span>
+                          </div>
+                          <div className="shrink-0">
+                            {renderLoadingModeBadge(t.key, t.type)}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -400,6 +567,7 @@ function AgentEditorCard({
   workflows,
   onSave,
   onDelete,
+  builtinModes,
 }: {
   agent: AgentConfig;
   skills: Skill[];
@@ -409,6 +577,7 @@ function AgentEditorCard({
   workflows: { id: string; name: string }[];
   onSave: (id: string, data: Partial<AgentConfig> & { tool_keys: ToolAssignment[]; workflow_ids?: string[] }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  builtinModes: Record<string, string>;
 }) {
   const [name, setName] = useState(agent.name);
   const [description, setDescription] = useState(agent.description);
@@ -679,6 +848,7 @@ function AgentEditorCard({
                 skills={skills}
                 mcpConnections={mcpConnections}
                 toolSettings={toolSettings}
+                builtinModes={builtinModes}
               />
             </div>
           )}
@@ -721,6 +891,49 @@ export function AgentsSection({ agentType, skills, mcpConnections, toolSettings 
   const [creating, setCreating] = useState(false);
   const [providerMetas, setProviderMetas] = useState<any[]>([]);
   const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
+  const [builtinModes, setBuiltinModes] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    async function loadBuiltinModes() {
+      try {
+        let { data, error } = await supabase
+          .from("agent_settings")
+          .select("value")
+          .eq("key", "builtin_tools_loading_modes")
+          .single();
+        if (error) {
+          if (error.code === "PGRST303" || error.message?.includes("JWT expired")) {
+            console.warn("JWT expired. Cleaning session and retrying loadBuiltinModes in AgentsSection...");
+            await supabase.auth.signOut().catch(() => {});
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && key.includes("-auth-token")) {
+                localStorage.removeItem(key);
+              }
+            }
+            const retry = await supabase
+              .from("agent_settings")
+              .select("value")
+              .eq("key", "builtin_tools_loading_modes")
+              .single();
+            data = retry.data;
+            error = retry.error;
+            if (error) {
+              console.error("Error loading built-in tool modes after retry in AgentsSection:", error);
+            }
+          } else {
+            console.error("Error loading built-in tool modes in AgentsSection:", error);
+          }
+        }
+        if (data?.value) {
+          setBuiltinModes(JSON.parse(data.value));
+        }
+      } catch (e) {
+        console.error("Failed to load built-in tool modes in AgentsSection:", e);
+      }
+    }
+    loadBuiltinModes();
+  }, []);
 
   const fetchAgents = useCallback(async () => {
     setLoading(true);
@@ -853,6 +1066,7 @@ export function AgentsSection({ agentType, skills, mcpConnections, toolSettings 
             workflows={workflows}
             onSave={handleSave}
             onDelete={handleDelete}
+            builtinModes={builtinModes}
           />
         ))}
       </div>

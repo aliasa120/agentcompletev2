@@ -968,7 +968,90 @@ function LLMProvidersPanel() {
   );
 }
 
-export function ProviderOrderingSection() {
+function SuperIndexingSettingsPanel({
+  globalSettings,
+  setGlobalSetting,
+  saveGlobalSettings,
+  saveStatus,
+}: {
+  globalSettings: Record<string, string>;
+  setGlobalSetting: (k: string, v: string) => void;
+  saveGlobalSettings: () => Promise<void>;
+  saveStatus: "idle" | "saving" | "saved" | "error";
+}) {
+  const superEnabled = globalSettings.super_indexing_enabled === "true";
+  const normalEnabled = globalSettings.normal_indexing_enabled === "true";
+
+  return (
+    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2.5 px-4 py-3 border-b bg-muted/20">
+        <Brain className="h-4 w-4 text-primary" />
+        <span className="font-semibold text-sm">Super Index & Sync Settings</span>
+        <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full ml-1">
+          Control tool indexing and progressive disclosure behavior
+        </span>
+      </div>
+
+      <div className="p-5 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex items-center justify-between p-3.5 rounded-lg border bg-muted/20">
+            <div>
+              <p className="text-xs font-semibold">Enable Super Indexing</p>
+              <p className="text-[10px] text-muted-foreground">Summarize MCP connections and load tools on-demand via list_tools(mcp_name="...")</p>
+            </div>
+            <button
+              onClick={() => setGlobalSetting("super_indexing_enabled", superEnabled ? "false" : "true")}
+              className={`relative w-11 h-6 rounded-full transition-colors ${superEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}
+            >
+              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${superEnabled ? "left-6" : "left-1"}`} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between p-3.5 rounded-lg border bg-muted/20">
+            <div>
+              <p className="text-xs font-semibold">Enable Normal Prompt Indexing</p>
+              <p className="text-[10px] text-muted-foreground">Inject compact tool summaries directly into agent system prompt</p>
+            </div>
+            <button
+              onClick={() => setGlobalSetting("normal_indexing_enabled", normalEnabled ? "false" : "true")}
+              className={`relative w-11 h-6 rounded-full transition-colors ${normalEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}
+            >
+              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${normalEnabled ? "left-6" : "left-1"}`} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 pt-3 border-t">
+          <Button
+            onClick={saveGlobalSettings}
+            disabled={saveStatus === "saving"}
+            className="bg-primary text-primary-foreground text-xs font-semibold h-9 px-4 flex items-center gap-1.5"
+          >
+            {saveStatus === "saving" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Save Indexing Settings
+          </Button>
+          {saveStatus === "saved" && (
+            <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1 animate-pulse">
+              <CheckCircle2 className="h-4 w-4" /> Saved successfully!
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ProviderOrderingSection({
+  globalSettings,
+  setGlobalSetting,
+  saveGlobalSettings,
+  saveStatus,
+}: {
+  globalSettings?: Record<string, string>;
+  setGlobalSetting?: (k: string, v: string) => void;
+  saveGlobalSettings?: () => Promise<void>;
+  saveStatus?: "idle" | "saving" | "saved" | "error";
+}) {
   const [providers, setProviders] = useState<ToolProvider[]>([]);
   const [mcpTools, setMcpTools] = useState<MCPToolOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1062,6 +1145,16 @@ export function ProviderOrderingSection() {
         <h2 className="font-semibold text-base mb-3">AI Providers</h2>
         <LLMProvidersPanel />
       </div>
+
+      {/* Super Indexing Settings */}
+      {globalSettings && setGlobalSetting && saveGlobalSettings && saveStatus && (
+        <SuperIndexingSettingsPanel
+          globalSettings={globalSettings}
+          setGlobalSetting={setGlobalSetting}
+          saveGlobalSettings={saveGlobalSettings}
+          saveStatus={saveStatus}
+        />
+      )}
 
       {/* Divider */}
       <div className="relative">

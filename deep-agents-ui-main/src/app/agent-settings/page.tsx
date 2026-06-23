@@ -42,6 +42,8 @@ const AGENT_SETTING_KEYS = [
   "research_subagent_provider", "research_subagent_model",
   "content_subagent_provider", "content_subagent_model",
   "custom_models",
+  "vector_indexing_provider", "vector_indexing_model",
+  "super_indexing_enabled", "normal_indexing_enabled",
 ];
 
 const DEFAULTS: Record<string, string> = {
@@ -57,6 +59,10 @@ const DEFAULTS: Record<string, string> = {
   research_subagent_provider: "vercel", research_subagent_model: "xiaomi/mimo-v2.5-pro",
   content_subagent_provider: "vercel", content_subagent_model: "xiaomi/mimo-v2.5-pro",
   custom_models: "{\"main_agent\":[],\"analyzer\":[],\"feeder\":[],\"research_subagent\":[],\"content_subagent\":[]}",
+  vector_indexing_provider: "vercel",
+  vector_indexing_model: "google/gemini-2.5-flash",
+  super_indexing_enabled: "true",
+  normal_indexing_enabled: "true",
 };
 
 const SEARCH_PROVIDERS = [
@@ -453,7 +459,26 @@ export default function AgentSettingsPage() {
   // Load settings
   const loadSettings = useCallback(async () => {
     try {
-      const { data } = await supabase.from("agent_settings").select("key,value");
+      let { data, error } = await supabase.from("agent_settings").select("key,value");
+      if (error) {
+        if (error.code === "PGRST303" || error.message?.includes("JWT expired")) {
+          console.warn("JWT expired. Cleaning session and retrying loadSettings...");
+          await supabase.auth.signOut().catch(() => {});
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.includes("-auth-token")) {
+              localStorage.removeItem(key);
+            }
+          }
+          const retry = await supabase.from("agent_settings").select("key,value");
+          data = retry.data;
+          if (retry.error) {
+            console.error("Error loading settings after retry:", retry.error);
+          }
+        } else {
+          console.error("Error loading settings:", error);
+        }
+      }
       if (data?.length) {
         const m: Record<string, string> = { ...DEFAULTS };
         for (const { key, value } of data) m[key] = value;
@@ -465,11 +490,39 @@ export default function AgentSettingsPage() {
 
   // Load queue
   const loadQueue = useCallback(async () => {
-    const { data } = await supabase.from("news_articles").select("*").eq("status", "pending")
+    let { data, error } = await supabase.from("feeder_articles").select("*").eq("status", "Pending")
       .order("created_at", { ascending: true });
+    if (error) {
+      if (error.code === "PGRST303" || error.message?.includes("JWT expired")) {
+        console.warn("JWT expired. Cleaning session and retrying loadQueue...");
+        await supabase.auth.signOut().catch(() => {});
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.includes("-auth-token")) {
+            localStorage.removeItem(key);
+          }
+        }
+        const retry = await supabase.from("feeder_articles").select("*").eq("status", "Pending")
+          .order("created_at", { ascending: true });
+        data = retry.data;
+        if (retry.error) {
+          console.error("Error loading queue after retry:", retry.error);
+        }
+      } else {
+        console.error("Error loading queue:", error);
+      }
+    }
     setQueue(data ?? []);
-    const { data: all } = await supabase.from("news_articles").select("*")
+
+    let { data: all, error: errorAll } = await supabase.from("feeder_articles").select("*")
       .order("created_at", { ascending: false }).limit(30);
+    if (errorAll) {
+      if (errorAll.code === "PGRST303" || errorAll.message?.includes("JWT expired")) {
+        const retryAll = await supabase.from("feeder_articles").select("*")
+          .order("created_at", { ascending: false }).limit(30);
+        all = retryAll.data;
+      }
+    }
     setAllArticles(all ?? []);
   }, []);
 
@@ -524,11 +577,34 @@ export default function AgentSettingsPage() {
     setSaveStatus("saving");
     try {
       const rows = AGENT_SETTING_KEYS.map(key => ({ key, value: settings[key] ?? "" }));
-      await supabase.from("agent_settings").upsert(rows, { onConflict: "key" });
-      setInitialSettings({ ...settings });
-      setIsDirty(false);
-      setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 3000);
+      let { error } = await supabase.from("agent_settings").upsert(rows, { onConflict: "key" });
+      if (error) {
+        if (error.code === "PGRST303" || error.message?.includes("JWT expired")) {
+          console.warn("JWT expired. Cleaning session and retrying saveSettings...");
+          await supabase.auth.signOut().catch(() => {});
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.includes("-auth-token")) {
+              localStorage.removeItem(key);
+            }
+          }
+          const retry = await supabase.from("agent_settings").upsert(rows, { onConflict: "key" });
+          error = retry.error;
+          if (error) {
+            console.error("Error saving settings after retry:", error);
+          }
+        } else {
+          console.error("Error saving settings:", error);
+        }
+      }
+      if (error) {
+        setSaveStatus("error");
+      } else {
+        setInitialSettings({ ...settings });
+        setIsDirty(false);
+        setSaveStatus("saved");
+        setTimeout(() => setSaveStatus("idle"), 3000);
+      }
     } catch {
       setSaveStatus("error");
     }
@@ -570,14 +646,14 @@ export default function AgentSettingsPage() {
   };
 
   const resetStuckArticles = async () => {
-    await supabase.from("news_articles").update({ status: "pending" }).eq("status", "processing");
+    await supabase.from("feeder_articles").update({ status: "Pending" }).eq("status", "Processing");
     loadQueue();
   };
 
   const fireAgent = async () => {
     const toProcess = queue.slice(0, batchSize);
     for (const art of toProcess) {
-      await supabase.from("news_articles").update({ status: "processing" }).eq("id", art.id);
+      await supabase.from("feeder_articles").update({ status: "Processing" }).eq("id", art.id);
     }
     const res = await fetch("/api/social-settings", {
       method: "POST",
@@ -741,7 +817,14 @@ export default function AgentSettingsPage() {
       case "tools-composio": return <ToolsSection initialTab="composio" />;
       case "tools-manual": return <ToolsSection initialTab="manual" />;
       case "tools-zapier": return <ToolsSection initialTab="zapier" />;
-      case "providers": return <ProviderOrderingSection />;
+      case "providers": return (
+        <ProviderOrderingSection
+          globalSettings={settings}
+          setGlobalSetting={setSetting}
+          saveGlobalSettings={saveSettings}
+          saveStatus={saveStatus}
+        />
+      );
       case "agents":    return <AgentsSection agentType="main" skills={skills} mcpConnections={mcpConnections} toolSettings={toolSettings} />;
       case "subagents": return <AgentsSection agentType="subagent" skills={skills} mcpConnections={mcpConnections} toolSettings={toolSettings} />;
       case "skills":    return <SkillsSection />;

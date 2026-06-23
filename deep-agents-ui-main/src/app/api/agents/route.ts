@@ -22,7 +22,8 @@ export async function GET() {
           tool_type,
           tool_key,
           tool_label,
-          enabled
+          enabled,
+          loading_mode
         )
       `)
       .order("sort_order", { ascending: true });

@@ -28,11 +28,20 @@ from .wordpress_publisher import get_wordpress_categories, publish_to_wordpress
 from .list_skills import list_skills, build_skills_index
 from .manage_skill import manage_skill
 
+# ── Dynamic Tool Routing ──────────────────────────────────────────────────
+from .dynamic_router import list_tools, load_tools, unload_unused_tools, build_tools_index, call_tool
+
 __all__ = [
     # ── Unified tools (exposed to agent) ─────────────────────────────────────
     "unified_search",
     "unified_extract",
     "create_post_image",
+    # ── Dynamic Tool Routing ─────────────────────────────────────────────────
+    "list_tools",
+    "load_tools",
+    "unload_unused_tools",
+    "build_tools_index",
+    "call_tool",
     # ── Support tools ─────────────────────────────────────────────────────────
     "think_tool",
     "fetch_images_brave",
@@ -56,4 +65,5 @@ __all__ = [
     "exa_extract",
     "create_post_image_gemini",
 ]
+
 
