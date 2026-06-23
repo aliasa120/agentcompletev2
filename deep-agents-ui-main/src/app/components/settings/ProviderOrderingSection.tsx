@@ -686,6 +686,20 @@ const LLM_PROVIDERS = [
       { value: "google/gemma-3-27b-it", label: "Gemma 3 27B", badge: "Google" },
     ],
   },
+  {
+    id: "opencode",
+    label: "OpenCode AI",
+    envKey: "OPENCODE_API_KEY",
+    docsUrl: "https://opencode.ai",
+    defaultModels: [
+      { value: "minimax-m3-free", label: "MiniMax M3 Free", badge: "MiniMax" },
+      { value: "mimo-v2.5-free", label: "MiMo V2.5 Free", badge: "Xiaomi" },
+      { value: "north-mini-code-free", label: "North Mini Code Free", badge: "Stealth" },
+      { value: "nemotron-3-ultra-free", label: "Nemotron 3 Ultra Free", badge: "NVIDIA" },
+      { value: "deepseek-v4-flash-free", label: "DeepSeek V4 Flash Free", badge: "DeepSeek" },
+      { value: "qwen3.6-plus", label: "Qwen3.6 Plus Free", badge: "Qwen" },
+    ],
+  },
 ];
 
 type TestResult = { status: "idle" | "testing" | "ok" | "error"; latency?: number; error?: string };
