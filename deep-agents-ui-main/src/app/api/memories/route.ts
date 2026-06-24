@@ -310,17 +310,7 @@ export async function DELETE(request: NextRequest) {
         console.warn("[DELETE memories] Failed to clean up entities for workflow:", err);
       }
 
-      // Trigger Neo4j graph cleanup in Python backend via Feeder HTTP endpoint
-      try {
-        const feederServerUrl = process.env.FEEDER_SERVER_URL || "http://127.0.0.1:8080";
-        await fetch(`${feederServerUrl}/clear_graph_memory`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ workflow_id: workflowId }),
-        });
-      } catch (err) {
-        console.warn("[DELETE memories] Failed to trigger Neo4j clear via feeder server:", err);
-      }
+
 
       return NextResponse.json({
         success: true,
