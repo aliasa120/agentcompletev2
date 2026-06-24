@@ -1302,16 +1302,6 @@ def save_chat_history(state, config: RunnableConfig):
                 print(f"[agent] Adding turn to Mem0 for scope {scope_id}...")
                 mem0.add(mem0_data, user_id=scope_id)
                 print(f"[agent] Successfully added turn to Mem0.")
-                
-                # Graph database Neo4j saving if enabled
-                enabled = os.environ.get("GRAPH_MEMORY_ENABLED", "false").lower() == "true"
-                if enabled:
-                    try:
-                        from research_agent.tools.graph_memory import add_graph_memory
-                        print(f"[agent] Saving relationships to Neo4j for user={user_id}, workflow={workflow_id}...")
-                        add_graph_memory(f"User: {user_text}\nAssistant: {ai_text}", user_id=user_id or "system", workflow_id=str(workflow_id))
-                    except Exception as ge:
-                        print(f"[agent] Error writing to Neo4j Graph DB: {ge}")
     except Exception as e:
         print(f"[agent] Error writing to Mem0: {e}")
 
