@@ -18,6 +18,7 @@ export function useThreads(props: {
   status?: Thread["status"];
   limit?: number;
   workflowId?: string | null;
+  userId?: string;
 }) {
   const pageSize = props.limit || DEFAULT_PAGE_SIZE;
 
@@ -47,6 +48,7 @@ export function useThreads(props: {
         apiKey,
         status: props?.status,
         workflowId: props?.workflowId,
+        userId: props?.userId,
       };
     },
     async ({
@@ -55,6 +57,7 @@ export function useThreads(props: {
       apiKey,
       status,
       workflowId,
+      userId,
       pageIndex,
       pageSize,
     }: {
@@ -66,6 +69,7 @@ export function useThreads(props: {
       apiKey: string;
       status?: Thread["status"];
       workflowId?: string | null;
+      userId?: string;
     }) => {
       const client = new Client({
         apiUrl: deploymentUrl,
@@ -84,6 +88,9 @@ export function useThreads(props: {
       }
       if (workflowId) {
         metadataFilter.workflow_id = workflowId;
+      }
+      if (userId) {
+        metadataFilter.user_id = userId;
       }
 
       const threads = await client.threads.search({

@@ -17,6 +17,7 @@ interface ChatProviderProps {
   /** Called when the stream errors */
   onStreamError?: () => void;
   workflowId: string | null;
+  userId?: string;
 }
 
 export function ChatProvider({
@@ -28,6 +29,7 @@ export function ChatProvider({
   onStreamFinish,
   onStreamError,
   workflowId,
+  userId,
 }: ChatProviderProps) {
   const chat = useChat({
     activeAssistant,
@@ -36,6 +38,7 @@ export function ChatProvider({
     onFinishCallback: onStreamFinish,
     onErrorCallback: onStreamError,
     workflowId,
+    userId,
   });
 
   // Expose stream.submit to parent via ref

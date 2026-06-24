@@ -26,12 +26,14 @@ function HomePageInner({
   config,
 }: HomePageInnerProps) {
   const [userEmail, setUserEmail] = useState<string>("");
+  const [userId, setUserId] = useState<string>("");
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
         setUserEmail(data.user.email ?? "User");
+        setUserId(data.user.id);
       }
     });
   }, []);
@@ -48,6 +50,7 @@ function HomePageInner({
   const threads = useThreads({
     workflowId: activeWorkflowId,
     limit: 30,
+    userId: userId || undefined,
   });
 
   const threadItems = useMemo(() => {
@@ -282,6 +285,7 @@ function HomePageInner({
             recursion_limit: 200,
             configurable: {
               workflow_id: activeWorkflowId,
+              user_id: userId || undefined,
             },
           },
           streamSubgraphs: true,
@@ -386,6 +390,7 @@ function HomePageInner({
                   recursion_limit: 200,
                   configurable: {
                     workflow_id: activeWorkflowId,
+                    user_id: userId || undefined,
                   },
                 },
                 streamSubgraphs: true,
@@ -409,6 +414,7 @@ function HomePageInner({
           const thread = await client.threads.create({
             metadata: {
               workflow_id: activeWorkflowId,
+              user_id: userId || undefined,
             },
           });
           const run = await client.runs.create(thread.thread_id, assistant.assistant_id, {
@@ -418,6 +424,7 @@ function HomePageInner({
             config: {
               configurable: {
                 workflow_id: activeWorkflowId,
+                user_id: userId || undefined,
               },
             },
           });
@@ -766,6 +773,7 @@ function HomePageInner({
           onStreamFinish={handleStreamFinish}
           onStreamError={handleStreamError}
           workflowId={activeWorkflowId}
+          userId={userId || undefined}
         >
           <ChatInterface assistant={assistant} onStartAgent={handleStartAgent} />
         </ChatProvider>

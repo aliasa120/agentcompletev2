@@ -41,6 +41,7 @@ export function useChat({
   /** Called when the stream errors */
   onErrorCallback?: () => void;
   workflowId: string | null;
+  userId?: string;
 }) {
   const [threadId, setThreadId] = useQueryState("threadId");
   const client = useClient();
@@ -73,9 +74,12 @@ export function useChat({
     onCreated: (thread: any) => {
       if (thread?.thread_id && workflowId) {
         client.threads.update(thread.thread_id, {
-          metadata: { workflow_id: workflowId }
+          metadata: {
+            workflow_id: workflowId,
+            user_id: userId || undefined,
+          }
         }).catch(err => {
-          console.error("[useChat] Failed to set workflow_id on new thread:", err);
+          console.error("[useChat] Failed to set workflow_id/user_id on new thread:", err);
         });
       }
       onHistoryRevalidate?.();
@@ -147,6 +151,7 @@ export function useChat({
             configurable: {
               ...(activeAssistant?.config?.configurable ?? {}),
               workflow_id: workflowId,
+              user_id: userId || undefined,
             },
           },
           streamSubgraphs: true,  // enable live subagent streaming
@@ -155,7 +160,7 @@ export function useChat({
       // Update thread list immediately when sending a message
       onHistoryRevalidate?.();
     },
-    [stream, activeAssistant?.config, onHistoryRevalidate, workflowId]
+    [stream, activeAssistant?.config, onHistoryRevalidate, workflowId, userId]
   );
 
   const runSingleStep = useCallback(
@@ -170,6 +175,7 @@ export function useChat({
         configurable: {
           ...(activeAssistant?.config?.configurable ?? {}),
           workflow_id: workflowId,
+          user_id: userId || undefined,
         },
       };
       if (checkpoint) {
@@ -191,7 +197,7 @@ export function useChat({
         );
       }
     },
-    [stream, activeAssistant?.config, workflowId]
+    [stream, activeAssistant?.config, workflowId, userId]
   );
 
   const setFiles = useCallback(
@@ -213,6 +219,7 @@ export function useChat({
           configurable: {
             ...(activeAssistant?.config?.configurable ?? {}),
             workflow_id: workflowId,
+            user_id: userId || undefined,
           },
         },
         streamSubgraphs: true,
@@ -223,7 +230,7 @@ export function useChat({
       // Update thread list when continuing stream
       onHistoryRevalidate?.();
     },
-    [stream, activeAssistant?.config, onHistoryRevalidate, workflowId]
+    [stream, activeAssistant?.config, onHistoryRevalidate, workflowId, userId]
   );
 
   const markCurrentThreadAsResolved = useCallback(() => {
