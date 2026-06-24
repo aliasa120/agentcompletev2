@@ -255,14 +255,14 @@ class TelegramBotInstance:
         self.active_sessions: dict[int, dict] = {}
 
     async def get_enabled_workflows(self) -> list[dict]:
-        """Fetch all enabled workflows from Supabase."""
+        """Fetch all workflows from Supabase."""
         loop = asyncio.get_running_loop()
         try:
             resp = await loop.run_in_executor(
                 None,
                 lambda: supabase.table("workflows")
                 .select("id, name")
-                .eq("enabled", True)
+                .eq("is_active", True)
                 .order("created_at", desc=False)
                 .execute()
             )

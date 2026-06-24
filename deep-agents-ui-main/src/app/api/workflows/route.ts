@@ -29,7 +29,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, description, interval_minutes, batch_size, enabled } = body;
+    const { name, description, interval_minutes, batch_size, enabled, is_active } = body;
 
     if (!name) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
@@ -43,6 +43,7 @@ export async function POST(req: Request) {
         interval_minutes: interval_minutes ?? 30,
         batch_size: batch_size ?? 2,
         enabled: enabled ?? true,
+        is_active: is_active ?? true,
         updated_at: new Date().toISOString(),
       })
       .select()

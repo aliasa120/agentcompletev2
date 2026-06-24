@@ -165,6 +165,11 @@ def check_feeder() -> None:
             wf_id = wf["id"]
             wf_name = wf["name"]
 
+            # Check if workflow itself is active
+            is_active = str(wf.get("is_active", "true")).lower() == "true"
+            if not is_active:
+                continue
+
             # Workflow-specific feeder auto-trigger
             # Default to True if not explicitly set to False
             feeder_enabled = str(wf.get("feeder_enabled", "true")).lower() == "true"
@@ -256,6 +261,11 @@ def check_agent() -> None:
         for wf in workflows:
             wf_id = wf["id"]
             wf_name = wf["name"]
+            # Check if workflow itself is active
+            is_active = str(wf.get("is_active", "true")).lower() == "true"
+            if not is_active:
+                continue
+
             enabled = str(wf.get("enabled", "true")).lower() == "true"
             if not enabled:
                 continue

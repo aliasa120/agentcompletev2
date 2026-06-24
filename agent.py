@@ -611,8 +611,8 @@ def load_dynamic_agents_by_workflow():
         except Exception as e:
             print(f"[agent] [WARNING] Pinecone synchronization failed: {e}")
 
-        # 1. Fetch all workflows (scheduler status is checked by cron_scheduler.py)
-        workflows_resp = client.table("workflows").select("*").execute()
+        # 1. Fetch all active workflows (scheduler status is checked by cron_scheduler.py)
+        workflows_resp = client.table("workflows").select("*").eq("is_active", True).execute()
         workflows = workflows_resp.data or []
         if not workflows:
             print("[agent] No workflows found in database.")

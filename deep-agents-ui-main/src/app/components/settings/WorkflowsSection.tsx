@@ -20,6 +20,7 @@ interface Workflow {
   feeder_enabled: boolean;
   feeder_interval_minutes: number;
   feeder_last_trigger_at: string | null;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -168,7 +169,8 @@ export function WorkflowsSection() {
           description: newDescription,
           interval_minutes: newInterval,
           batch_size: newBatchSize,
-          enabled: true
+          enabled: true,
+          is_active: true
         })
       });
       if (res.ok) {
@@ -407,6 +409,15 @@ export function WorkflowsSection() {
                 </div>
                 <div className="flex items-center gap-3">
                   {isSaving && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                  <div className="flex items-center gap-2 border rounded-full px-2.5 py-1 bg-background/50 text-xs">
+                    <span className="font-semibold text-muted-foreground">Workflow Active:</span>
+                    <button
+                      onClick={() => handleUpdateWorkflow(wf.id, { is_active: !wf.is_active })}
+                      className={`relative inline-flex w-9 h-5 items-center rounded-full transition-colors ${wf.is_active ? "bg-primary" : "bg-muted-foreground/30"}`}
+                    >
+                      <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${wf.is_active ? "translate-x-[18px]" : "translate-x-[2px]"}`} />
+                    </button>
+                  </div>
                   <div className="flex items-center gap-2 border rounded-full px-2.5 py-1 bg-background/50 text-xs">
                     <span className="font-semibold text-muted-foreground">Agent Scheduler:</span>
                     <button

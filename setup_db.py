@@ -217,6 +217,7 @@ CREATE TABLE IF NOT EXISTS workflows (
   feeder_enabled  BOOLEAN DEFAULT true,
   feeder_interval_minutes INTEGER DEFAULT 30,
   feeder_last_trigger_at TIMESTAMPTZ,
+  is_active       BOOLEAN DEFAULT true,
   created_at      TIMESTAMPTZ DEFAULT now(),
   updated_at      TIMESTAMPTZ DEFAULT now()
 );
@@ -312,6 +313,9 @@ CREATE TABLE IF NOT EXISTS telegram_bots (
 );
 -- Migration: drop legacy workflow_id column if it exists
 ALTER TABLE telegram_bots DROP COLUMN IF EXISTS workflow_id;
+
+-- Migration: add is_active column to workflows table if it doesn't exist
+ALTER TABLE workflows ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
 
 -- ── Add workflow_id references to feeder/social tables if they exist ──
 ALTER TABLE feeder_sources ADD COLUMN IF NOT EXISTS workflow_id UUID REFERENCES workflows(id) ON DELETE SET NULL;
