@@ -32,6 +32,7 @@ export function useChat({
   onFinishCallback,
   onErrorCallback,
   workflowId,
+  userId,
 }: {
   activeAssistant: Assistant | null;
   onHistoryRevalidate?: () => void;
