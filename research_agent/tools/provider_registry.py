@@ -197,6 +197,18 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
             {"value": "qwen3.6-plus",          "label": "Qwen3.6 Plus Free",     "badge": "Qwen"},
         ],
     },
+    "deepseek": {
+        "base_url": "https://api.deepseek.com",
+        "env_key": "DEEPSEEK_API_KEY",
+        "label": "DeepSeek",
+        "openai_compat": True,
+        "badge_color": "from-blue-600 via-sky-500 to-cyan-400",
+        "default_models": [
+            {"value": "deepseek/deepseek-v4-flash", "label": "DeepSeek V4 Flash", "badge": "Fast"},
+            {"value": "deepseek/deepseek-v4-pro",   "label": "DeepSeek V4 Pro",   "badge": "Pro"},
+        ],
+    },
+
 }
 
 

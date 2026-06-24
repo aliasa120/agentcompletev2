@@ -552,7 +552,7 @@ function ProviderCategoryPanel({
 
 // ── LLM Provider definitions ─────────────────────────────────────────────────
 
-const LLM_PROVIDERS = [
+export const LLM_PROVIDERS = [
   {
     id: "vercel",
     label: "Vercel AI Gateway",
@@ -698,6 +698,16 @@ const LLM_PROVIDERS = [
       { value: "nemotron-3-ultra-free", label: "Nemotron 3 Ultra Free", badge: "NVIDIA" },
       { value: "deepseek-v4-flash-free", label: "DeepSeek V4 Flash Free", badge: "DeepSeek" },
       { value: "qwen3.6-plus", label: "Qwen3.6 Plus Free", badge: "Qwen" },
+    ],
+  },
+  {
+    id: "deepseek",
+    label: "DeepSeek",
+    envKey: "DEEPSEEK_API_KEY",
+    docsUrl: "https://platform.deepseek.com",
+    defaultModels: [
+      { value: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", badge: "Fast" },
+      { value: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro", badge: "Pro" },
     ],
   },
 ];
@@ -1055,6 +1065,8 @@ function SuperIndexingSettingsPanel({
   );
 }
 
+
+
 export function ProviderOrderingSection({
   globalSettings,
   setGlobalSetting,
@@ -1169,6 +1181,8 @@ export function ProviderOrderingSection({
           saveStatus={saveStatus}
         />
       )}
+
+
 
       {/* Divider */}
       <div className="relative">

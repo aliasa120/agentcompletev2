@@ -430,6 +430,17 @@ def _fetch_active_mcp_connections() -> list[dict]:
 
 async def load_mcp_tool_by_key(tool_key: str) -> list[BaseTool]:
     """Find and load a specific MCP tool by its key from active connections."""
+    # Intercept internal virtual Mem0 MCP tools
+    if tool_key in [
+        "add_memory", "search_memories", "get_memories", "get_memory",
+        "update_memory", "delete_memory", "delete_all_memories",
+        "delete_entities", "list_entities", "list_events", "get_event_status"
+    ]:
+        from research_agent.tools.mem0_tools import get_memory_tool_by_name
+        tool_obj = get_memory_tool_by_name(tool_key)
+        if tool_obj:
+            return [tool_obj]
+
     import os
     connections = run_in_thread(_fetch_active_mcp_connections)
 

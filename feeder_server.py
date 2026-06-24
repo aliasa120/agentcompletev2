@@ -71,6 +71,43 @@ class FeederHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
+            body = json.dumps(response).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path == "/clear_graph_memory":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length) if content_length > 0 else b""
+            workflow_id = None
+            if post_data:
+                try:
+                    payload = json.loads(post_data.decode("utf-8"))
+                    workflow_id = payload.get("workflow_id")
+                except Exception as e:
+                    print(f"Error parsing clear_graph_memory payload: {e}")
+
+            if workflow_id:
+                try:
+                    from research_agent.tools.graph_memory import delete_graph_memories
+                    delete_graph_memories(workflow_id)
+                    status = 200
+                    response = {"success": True, "message": f"Successfully cleared Neo4j memory for workflow {workflow_id}"}
+                except Exception as e:
+                    status = 500
+                    response = {"success": False, "message": f"Failed to delete Neo4j memory: {e}"}
+            else:
+                status = 400
+                response = {"success": False, "message": "workflow_id is required"}
+
+            body = json.dumps(response).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
             self.wfile.write(body)
         elif self.path == "/reload":
             try:

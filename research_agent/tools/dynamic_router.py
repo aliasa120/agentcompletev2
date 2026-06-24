@@ -34,6 +34,19 @@ from research_agent.tools import (
     get_wordpress_categories,
     publish_to_wordpress,
 )
+from research_agent.tools.mem0_tools import (
+    add_memory,
+    search_memories,
+    get_memories,
+    get_memory,
+    update_memory,
+    delete_memory,
+    delete_all_memories,
+    delete_entities,
+    list_entities,
+    list_events,
+    get_event_status,
+)
 
 # Registry mapping tool names to actual tool objects
 TOOL_OBJECTS: Dict[str, BaseTool] = {
@@ -51,6 +64,18 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
     "manage_skill": manage_skill,
     "get_wordpress_categories": get_wordpress_categories,
     "publish_to_wordpress": publish_to_wordpress,
+    # Mem0 memory tools
+    "add_memory": add_memory,
+    "search_memories": search_memories,
+    "get_memories": get_memories,
+    "get_memory": get_memory,
+    "update_memory": update_memory,
+    "delete_memory": delete_memory,
+    "delete_all_memories": delete_all_memories,
+    "delete_entities": delete_entities,
+    "list_entities": list_entities,
+    "list_events": list_events,
+    "get_event_status": get_event_status,
 }
 
 # Rich tool metadata including descriptions, keywords (synonyms), and example triggers
@@ -179,6 +204,97 @@ TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
             "Publish this blog post to WordPress.",
             "Upload the draft post to WP.",
             "Send the article to the WordPress site."
+        ]
+    },
+    "add_memory": {
+        "short_description": "Save text or conversation history to the long-term memory for a user/agent/run.",
+        "keywords": ["remember", "save memory", "add memory", "learn fact", "keep preference"],
+        "example_triggers": [
+            "Remember that the user likes dark mode.",
+            "Add this user preference to long term memory.",
+            "Save my name to memory."
+        ]
+    },
+    "search_memories": {
+        "short_description": "Search for relevant past memories semantically using a query and optional filters.",
+        "keywords": ["search memory", "find fact", "query memories", "recall", "get preference"],
+        "example_triggers": [
+            "Search memories for the user's favorite drink.",
+            "Find past facts about this user.",
+            "Recall user preferences."
+        ]
+    },
+    "get_memories": {
+        "short_description": "List and retrieve memories with structured filters and limit.",
+        "keywords": ["list memories", "get memories", "retrieve memories", "view facts"],
+        "example_triggers": [
+            "List all memories for this agent.",
+            "Retrieve user's memories.",
+            "View all long-term memories."
+        ]
+    },
+    "get_memory": {
+        "short_description": "Retrieve details of a single memory by its unique memory ID.",
+        "keywords": ["get memory", "fetch memory", "view memory detail"],
+        "example_triggers": [
+            "Get details for memory 'uuid-123'.",
+            "Fetch memory details."
+        ]
+    },
+    "update_memory": {
+        "short_description": "Overwrite an existing memory's text and metadata.",
+        "keywords": ["update memory", "edit memory", "overwrite memory", "change fact"],
+        "example_triggers": [
+            "Update the memory 'uuid-123' with new details.",
+            "Change this memory text."
+        ]
+    },
+    "delete_memory": {
+        "short_description": "Delete a single memory by its unique memory ID.",
+        "keywords": ["delete memory", "remove memory", "forget fact"],
+        "example_triggers": [
+            "Delete memory 'uuid-123'.",
+            "Remove this fact from memory."
+        ]
+    },
+    "delete_all_memories": {
+        "short_description": "Bulk delete all memories matching the specified user, agent, or run filters.",
+        "keywords": ["clear memory", "bulk delete memories", "wipe memories"],
+        "example_triggers": [
+            "Delete all memories for this user.",
+            "Clear all memories."
+        ]
+    },
+    "delete_entities": {
+        "short_description": "Delete all memories associated with a specific entity (user, agent, or run).",
+        "keywords": ["delete entity", "remove user memory", "forget agent"],
+        "example_triggers": [
+            "Delete entity 'agent-123' memories.",
+            "Wipe user entity memories."
+        ]
+    },
+    "list_entities": {
+        "short_description": "Enumerate unique user, agent, and run entities stored in the long-term memory.",
+        "keywords": ["list entities", "view users", "list agents", "list runs"],
+        "example_triggers": [
+            "List unique users in memory.",
+            "What agents have memories stored?"
+        ]
+    },
+    "list_events": {
+        "short_description": "List history of memory modifications and operations events.",
+        "keywords": ["memory events", "list events", "modification history", "audit log"],
+        "example_triggers": [
+            "List modification history for this memory.",
+            "Show memory events history."
+        ]
+    },
+    "get_event_status": {
+        "short_description": "Check the status of an asynchronous memory operation by its event ID.",
+        "keywords": ["event status", "check event", "memory operation status"],
+        "example_triggers": [
+            "Check status for event 'evt-123'.",
+            "Is this memory operation done?"
         ]
     }
 }
@@ -834,3 +950,29 @@ def unload_unused_tools(active_schemas: Dict[str, Any], tools_to_keep: List[str]
         updated_schemas = {name: updated_schemas[name] for name in keys_to_keep}
 
     return updated_schemas
+
+
+def _get_pinecone_index():
+    """Helper to initialize and return the Pinecone 'tools' index."""
+    import os
+    from pinecone import Pinecone
+    api_key = os.environ.get("PINECONE_API_KEY")
+    if not api_key:
+        raise ValueError("PINECONE_API_KEY not found in environment.")
+    pc = Pinecone(api_key=api_key)
+    return pc.Index("tools")
+
+
+def get_embedding_sync(text: str, input_type: str = "passage") -> list[float]:
+    """Helper to synchronously embed text using multilingual-e5-large."""
+    import os
+    from langchain_pinecone import PineconeEmbeddings
+    api_key = os.environ.get("PINECONE_API_KEY")
+    if not api_key:
+        raise ValueError("PINECONE_API_KEY not found in environment.")
+    embeddings = PineconeEmbeddings(
+        model="multilingual-e5-large",
+        pinecone_api_key=api_key
+    )
+    return embeddings.embed_query(text)
+

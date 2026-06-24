@@ -15,6 +15,12 @@ services:
     environment:
       - LANGGRAPH_HOST=0.0.0.0
       - LANGGRAPH_PORT=2024
+      # Override for Docker: Neo4j runs as the "neo4j" service, not localhost
+      - NEO4J_URI=bolt://neo4j:7687
+      - GRAPH_MEMORY_ENABLED=true
+    depends_on:
+      neo4j:
+        condition: service_healthy
 
   # ── Feeder HTTP server (port 8080, HTTP-only, no scheduler) ────────────
   feeder_svc:
@@ -45,6 +51,9 @@ services:
       - FEEDER_SERVER_URL=http://feeder_svc:8080
       - LANGGRAPH_URL=http://backend:2024
       - NEXT_PUBLIC_APP_URL=http://frontend:3000
+      # Override for Docker: Neo4j runs as the "neo4j" service, not localhost
+      - NEO4J_URI=bolt://neo4j:7687
+      - GRAPH_MEMORY_ENABLED=true
     depends_on:
       - backend
       - feeder_svc
@@ -61,6 +70,9 @@ services:
       - .env
     environment:
       - LANGGRAPH_API_URL=http://backend:2024
+      # Override for Docker: Neo4j runs as the "neo4j" service, not localhost
+      - NEO4J_URI=bolt://neo4j:7687
+      - GRAPH_MEMORY_ENABLED=true
     depends_on:
       - backend
 
@@ -84,3 +96,29 @@ services:
     depends_on:
       - backend
       - feeder_svc
+
+  # ── Neo4j Graph Database (port 7474 for Web UI, 7687 for Bolt connection) ──────
+  neo4j:
+    image: neo4j:5.12.0
+    container_name: agent-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["apoc"]
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+

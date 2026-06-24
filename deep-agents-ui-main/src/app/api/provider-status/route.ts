@@ -175,6 +175,16 @@ const PROVIDER_REGISTRY: Record<string, {
       { value: "qwen3.6-plus",          label: "Qwen3.6 Plus Free",     badge: "Qwen" },
     ],
   },
+  deepseek: {
+    envKey: "DEEPSEEK_API_KEY",
+    label: "DeepSeek",
+    badgeColor: "from-blue-600 via-sky-500 to-cyan-400",
+    defaultModels: [
+      { value: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", badge: "Fast" },
+      { value: "deepseek/deepseek-v4-pro",   label: "DeepSeek V4 Pro",   badge: "Pro" },
+    ],
+  },
+
 };
 
 export async function GET() {

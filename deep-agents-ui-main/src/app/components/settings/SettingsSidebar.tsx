@@ -3,7 +3,7 @@
 import React from "react";
 import {
   Wrench, Cpu, Bot, Users, LayoutList, BookOpen, Image as ImageIcon,
-  ChevronRight, Database, Settings, Menu
+  ChevronRight, Database, Settings, Menu, Brain
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +20,8 @@ export type SettingsSection =
   | "design-assets"
   | "queue"
   | "configuration"
-  | "feeder";
+  | "feeder"
+  | "memories";
 
 interface NavItem {
   id: SettingsSection;
@@ -90,6 +91,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "Feeder Dashboard",
     description: "Run feeder, manage queue",
     icon: <Database className="h-4 w-4" />,
+  },
+  {
+    id: "memories",
+    label: "Memories",
+    description: "Manage semantic facts & graph",
+    icon: <Brain className="h-4 w-4" />,
   },
 ];
 

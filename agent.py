@@ -1051,18 +1051,295 @@ def route_workflow(state, config):
     raise ValueError(f"No active compiled workflows found. Available workflows: {list(compiled_workflows.keys())}")
 
 
+from langchain_core.runnables import RunnableConfig
+
+
+def load_memories(state, config: RunnableConfig):
+    """Retrieve relevant memories from Mem0 based on the user's latest query and inject them."""
+    configurable = config.get("configurable", {})
+    workflow_id = configurable.get("workflow_id")
+    user_id = configurable.get("user_id")
+    if not workflow_id:
+        return state
+
+    messages = state.get("messages", [])
+    if not messages:
+        return state
+
+    latest_human_msg = None
+    for msg in reversed(messages):
+        if msg.type == "human":
+            latest_human_msg = msg
+            break
+
+    if not latest_human_msg or not latest_human_msg.content:
+        return state
+
+    query = latest_human_msg.content
+    if not isinstance(query, str):
+        parts = []
+        for block in query:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+        query = "".join(parts)
+
+    try:
+        from research_agent.tools.mem0_provider import get_mem0_client
+        mem0 = get_mem0_client()
+        if mem0 is not None:
+            # Sanitize scope_id: Pinecone requires lowercase alphanumeric + hyphens only
+            raw_scope = f"{user_id}_{workflow_id}" if user_id else str(workflow_id)
+            scope_id = raw_scope.lower().replace("_", "-")
+            print(f"[agent] Searching Mem0 memories for scope {scope_id}...")
+            results = mem0.search(query, filters={"user_id": scope_id}, limit=5, rerank=True)
+            # Mem0 may return a dict {"results": [...]} or a plain list
+            if isinstance(results, dict):
+                results = results.get("results", [])
+            memories = []
+            if results:
+                # Deduplicate/exclude memories that have been superseded (linked) by newer ones
+                linked_ids_to_exclude = set()
+                for r in results:
+                    if isinstance(r, dict):
+                        meta = r.get("metadata") or {}
+                        linked_ids = meta.get("linked_memory_ids")
+                        if isinstance(linked_ids, list):
+                            for lid in linked_ids:
+                                if lid:
+                                    linked_ids_to_exclude.add(str(lid).lower())
+                        elif linked_ids:
+                            linked_ids_to_exclude.add(str(linked_ids).lower())
+
+                for r in results:
+                    if isinstance(r, dict) and r.get("memory"):
+                        mem_id = r.get("id")
+                        if mem_id and str(mem_id).lower() in linked_ids_to_exclude:
+                            print(f"[agent] Excluding superseded memory {mem_id}: {r.get('memory')}")
+                            continue
+                        
+                        msg = r.get("memory")
+                        created_at = r.get("created_at")
+                        if created_at:
+                            try:
+                                # Format ISO timestamp, e.g. "2026-06-24T12:35:21.074602+00:00" -> "2026-06-24 12:35:21 UTC"
+                                date_part, time_part = created_at.split("T")
+                                time_only = time_part.split(".")[0].split("+")[0]
+                                memories.append(f"{msg} (Recorded: {date_part} {time_only} UTC)")
+                            except Exception:
+                                memories.append(f"{msg} (Recorded: {created_at})")
+                        else:
+                            memories.append(msg)
+            
+            if memories:
+                memory_text = "\n".join(f"- {m}" for m in memories)
+                print(f"[agent] Found {len(memories)} memories. Injecting into state...")
+                
+                # Create a SystemMessage with retrieved memories
+                from langchain_core.messages import SystemMessage
+                mem_message = SystemMessage(
+                    content=f"=== RETRIEVED LONG-TERM MEMORIES FOR THIS AGENT ===\n{memory_text}\n================================================="
+                )
+                return {"messages": [mem_message]}
+            else:
+                print(f"[agent] No memories found for scope {scope_id}.")
+    except Exception as e:
+        print(f"[agent] Error reading from Mem0: {e}")
+
+    return state
+
+
+def save_chat_history(state, config: RunnableConfig):
+    """Save the chat history (sessions & messages) to Supabase, and write the latest turn to Mem0."""
+    configurable = config.get("configurable", {})
+    workflow_id = configurable.get("workflow_id")
+    thread_id = configurable.get("thread_id")
+    user_id = configurable.get("user_id")
+    
+    if not workflow_id or not thread_id:
+        print(f"[agent] save_chat_history: workflow_id ({workflow_id}) or thread_id ({thread_id}) missing.")
+        return state
+
+    messages = state.get("messages", [])
+    if not messages:
+        return state
+
+    # 1. Sync thread history to Supabase (sessions and messages tables)
+    try:
+        from supabase import create_client
+        url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        if url and key:
+            client = create_client(url, key)
+            
+            # Map thread_id to a stable session UUID
+            import uuid
+            try:
+                session_uuid = str(uuid.UUID(thread_id))
+            except ValueError:
+                session_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, thread_id))
+
+            # Upsert the session
+            # Extract first user message for title
+            title = "New Chat"
+            for msg in messages:
+                if msg.type == "human" and msg.content:
+                    msg_content = msg.content
+                    if not isinstance(msg_content, str):
+                        parts = []
+                        for b in msg_content:
+                            if isinstance(b, str):
+                                parts.append(b)
+                            elif isinstance(b, dict) and b.get("type") == "text":
+                                parts.append(b.get("text", ""))
+                        msg_content = "".join(parts)
+                    title = msg_content[:50] + ("..." if len(msg_content) > 50 else "")
+                    break
+
+            client.table("sessions").upsert({
+                "id": session_uuid,
+                "workflow_id": workflow_id,
+                "title": title
+            }, on_conflict="id").execute()
+
+            # Delete existing messages and write fresh history to maintain order and structure
+            client.table("messages").delete().eq("session_id", session_uuid).execute()
+
+            rows_to_insert = []
+            for msg in messages:
+                role = "user"
+                if msg.type == "ai":
+                    role = "assistant"
+                elif msg.type == "system":
+                    role = "system"
+                elif msg.type == "tool":
+                    role = "tool"
+                
+                content = ""
+                if isinstance(msg.content, str):
+                    content = msg.content
+                elif isinstance(msg.content, list):
+                    parts = []
+                    for block in msg.content:
+                        if isinstance(block, str):
+                            parts.append(block)
+                        elif isinstance(block, dict) and block.get("type") == "text":
+                            parts.append(block.get("text", ""))
+                    content = "".join(parts)
+                
+                tool_calls = []
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    tool_calls = msg.tool_calls
+
+                # Format tool calls to be JSON serializable
+                serializable_tool_calls = []
+                for tc in tool_calls:
+                    serializable_tool_calls.append({
+                        "name": tc.get("name"),
+                        "args": tc.get("args"),
+                        "id": tc.get("id")
+                    })
+
+                rows_to_insert.append({
+                    "session_id": session_uuid,
+                    "role": role,
+                    "content": content,
+                    "tool_calls": serializable_tool_calls
+                })
+
+            if rows_to_insert:
+                client.table("messages").insert(rows_to_insert).execute()
+                print(f"[agent] Synchronized {len(rows_to_insert)} messages to Supabase for session {session_uuid}")
+
+    except Exception as e:
+        print(f"[agent] Error syncing chat history to Supabase: {e}")
+
+    # 2. Write turn to Mem0 memory if enabled
+    try:
+        from research_agent.tools.mem0_provider import get_mem0_client
+        mem0 = get_mem0_client()
+        if mem0 is not None:
+            last_user_msg = None
+            last_ai_msg = None
+            for msg in reversed(messages):
+                if msg.type == "human" and last_user_msg is None:
+                    last_user_msg = msg
+                elif msg.type == "ai" and last_ai_msg is None:
+                    last_ai_msg = msg
+                if last_user_msg is not None and last_ai_msg is not None:
+                    break
+
+            if last_user_msg and last_ai_msg:
+                user_text = last_user_msg.content
+                if not isinstance(user_text, str):
+                    parts = []
+                    for b in user_text:
+                        if isinstance(b, str):
+                            parts.append(b)
+                        elif isinstance(b, dict) and b.get("type") == "text":
+                            parts.append(b.get("text", ""))
+                    user_text = "".join(parts)
+
+                ai_text = last_ai_msg.content
+                if not isinstance(ai_text, str):
+                    parts = []
+                    for b in ai_text:
+                        if isinstance(b, str):
+                            parts.append(b)
+                        elif isinstance(b, dict) and b.get("type") == "text":
+                            parts.append(b.get("text", ""))
+                    ai_text = "".join(parts)
+
+                # Sanitize scope_id: Pinecone requires lowercase alphanumeric + hyphens only
+                raw_scope = f"{user_id}_{workflow_id}" if user_id else str(workflow_id)
+                scope_id = raw_scope.lower().replace("_", "-")
+                
+                mem0_data = [
+                    {"role": "user", "content": user_text},
+                    {"role": "assistant", "content": ai_text}
+                ]
+                print(f"[agent] Adding turn to Mem0 for scope {scope_id}...")
+                mem0.add(mem0_data, user_id=scope_id)
+                print(f"[agent] Successfully added turn to Mem0.")
+                
+                # Graph database Neo4j saving if enabled
+                enabled = os.environ.get("GRAPH_MEMORY_ENABLED", "false").lower() == "true"
+                if enabled:
+                    try:
+                        from research_agent.tools.graph_memory import add_graph_memory
+                        print(f"[agent] Saving relationships to Neo4j for user={user_id}, workflow={workflow_id}...")
+                        add_graph_memory(f"User: {user_text}\nAssistant: {ai_text}", user_id=user_id or "system", workflow_id=str(workflow_id))
+                    except Exception as ge:
+                        print(f"[agent] Error writing to Neo4j Graph DB: {ge}")
+    except Exception as e:
+        print(f"[agent] Error writing to Mem0: {e}")
+
+    return state
+
+
 # Define the master StateGraph
 builder = StateGraph(AgentState)
 
 if compiled_workflows:
+    # Add load_memories and save_chat_history nodes
+    builder.add_node("load_memories", load_memories)
+    builder.add_node("save_chat_history", save_chat_history)
+
     # Add each workflow graph as a node
     for wf_key, wf_agent in compiled_workflows.items():
         builder.add_node(wf_key, wf_agent)
-        builder.add_edge(wf_key, END)
+        builder.add_edge(wf_key, "save_chat_history")
 
-    # Add conditional edge from START
+    # Save chat history edge to END
+    builder.add_edge("save_chat_history", END)
+
+    # Start goes to load_memories
+    builder.add_edge(START, "load_memories")
+
+    # Add conditional edge from load_memories to workflow agents
     builder.add_conditional_edges(
-        START,
+        "load_memories",
         route_workflow,
         {wf_key: wf_key for wf_key in compiled_workflows.keys()}
     )

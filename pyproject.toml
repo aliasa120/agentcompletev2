@@ -30,13 +30,17 @@ dependencies = [
     "python-levenshtein>=0.27.3",
     "spacy>=3.8.11",
     "smartcrop>=0.4.2",
-    "pinecone>=8.1.0",
+    "pinecone>=7.0.0",
     "cerebras-cloud-sdk>=1.67.0",
     "composio-langchain>=0.6.0",
     "langchain-mcp-adapters>=0.1.0",
     "python-telegram-bot>=22.8",
     "langgraph-sdk>=0.1.33",
     "pg8000>=1.30.0",
+    "mem0ai>=0.1.0",
+    "langchain-pinecone>=0.2.0",
+    "neo4j>=5.12.0",
+    "cohere>=7.0.4",
 ]
 
 [tool.uv]

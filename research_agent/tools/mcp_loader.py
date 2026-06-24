@@ -256,6 +256,18 @@ def run_sync(coro):
 
 async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, Any] = None) -> List[BaseTool]:
     """Connect to a manual MCP server via SSE or Stdio and fetch the specified tool."""
+    # Intercept internal virtual Mem0 MCP tools
+    if mcp_url == "mem0-mcp-internal" or tool_key in [
+        "add_memory", "search_memories", "get_memories", "get_memory",
+        "update_memory", "delete_memory", "delete_all_memories",
+        "delete_entities", "list_entities", "list_events", "get_event_status"
+    ]:
+        from research_agent.tools.mem0_tools import get_memory_tool_by_name
+        tool_obj = get_memory_tool_by_name(tool_key)
+        if tool_obj:
+            logger.info(f"Loaded virtual internal Mem0 tool: {tool_key}")
+            return [tool_obj]
+
     try:
         from langchain_mcp_adapters.client import MultiServerMCPClient
         from langchain_mcp_adapters.tools import load_mcp_tools

@@ -22,6 +22,7 @@ import { SkillsSection } from "@/app/components/settings/SkillsSection";
 import { DesignAssetsSection } from "@/app/components/settings/DesignAssetsSection";
 import { ProviderOrderingSection } from "@/app/components/settings/ProviderOrderingSection";
 import { WorkflowsSection } from "@/app/components/settings/WorkflowsSection";
+import { MemoriesSection } from "@/app/components/settings/MemoriesSection";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Article { id: string; title: string; description: string; url: string; source_domain: string; status: string; created_at: string; }
@@ -44,6 +45,7 @@ const AGENT_SETTING_KEYS = [
   "custom_models",
   "vector_indexing_provider", "vector_indexing_model",
   "super_indexing_enabled", "normal_indexing_enabled",
+  "mem0_enabled", "mem0_extraction_provider", "mem0_extraction_model",
 ];
 
 const DEFAULTS: Record<string, string> = {
@@ -63,6 +65,9 @@ const DEFAULTS: Record<string, string> = {
   vector_indexing_model: "google/gemini-2.5-flash",
   super_indexing_enabled: "true",
   normal_indexing_enabled: "true",
+  mem0_enabled: "false",
+  mem0_extraction_provider: "vercel",
+  mem0_extraction_model: "xiaomi/mimo-v2.5-pro",
 };
 
 const SEARCH_PROVIDERS = [
@@ -832,6 +837,14 @@ export default function AgentSettingsPage() {
       case "queue":     return <QueueSection />;
       case "configuration": return <ConfigurationSection />;
       case "feeder": return <FeederDashboardSection />;
+      case "memories": return (
+        <MemoriesSection
+          globalSettings={settings}
+          setGlobalSetting={setSetting}
+          saveGlobalSettings={saveSettings}
+          saveStatus={saveStatus}
+        />
+      );
       default:          return null;
     }
   };

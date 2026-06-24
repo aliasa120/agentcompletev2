@@ -26,3 +26,9 @@ deep-agents-ui-main/*.tsbuildinfo
 # Misc
 output/
 *.ipynb
+
+# Log files
+agent_load.log
+
+# External reference code
+hermes-agent-main/

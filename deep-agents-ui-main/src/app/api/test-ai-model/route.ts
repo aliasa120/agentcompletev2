@@ -21,6 +21,7 @@ export async function GET() {
     mimo:        "MIMO_API_KEY",
     novita:      "NOVITA_API_KEY",
     opencode:    "OPENCODE_API_KEY",
+    deepseek:    "DEEPSEEK_API_KEY",
   };
 
   const env_status: Record<string, boolean> = {};
@@ -97,6 +98,7 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   mimo:       "MIMO_API_KEY",
   novita:     "NOVITA_API_KEY",
   opencode:   "OPENCODE_API_KEY",
+  deepseek:   "DEEPSEEK_API_KEY",
 };
 
 // Provider → base URL (mirrors provider_registry.py)
@@ -113,6 +115,7 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
   mimo:       "https://api.xiaomimimo.com/v1",
   novita:     "https://api.novita.ai/openai/v1",
   opencode:   "https://opencode.ai/zen/v1",
+  deepseek:   "https://api.deepseek.com",
 };
 
 export async function POST(request: NextRequest) {
