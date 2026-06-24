@@ -340,6 +340,129 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.exception("Error selecting workflow")
             await query.edit_message_text(f"❌ Failed to connect workflow: {e}")
 
+# ── Table Formatting Helpers ──────────────────────────────────────────────────
+
+def is_separator_line(line: str) -> bool:
+    """Check if a line looks like a markdown table separator (e.g. |---|---|)."""
+    line_strip = line.strip()
+    if not line_strip:
+        return False
+    # Must contain at least one '|'
+    if "|" not in line_strip:
+        return False
+    # Must contain only hyphens, colons, vertical bars, and whitespace
+    allowed_chars = set("|-: \t")
+    if not set(line_strip).issubset(allowed_chars):
+        return False
+    # Must contain at least one hyphen
+    if "-" not in line_strip:
+        return False
+    return True
+
+def _render_ascii_table(header: str, data_lines: list[str]) -> str:
+    """Formats a markdown table into a aligned ASCII table wrapped in a monospace block."""
+    import re
+    def clean_cell(cell: str) -> str:
+        # Strip bold ** and __
+        c = re.sub(r"\*\*|__", "", cell)
+        # Strip italic * and _
+        c = re.sub(r"\*|_", "", c)
+        # Strip backticks
+        c = re.sub(r"`", "", c)
+        # Strip links like [text](url) -> text
+        c = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", c)
+        return c.strip()
+
+    def parse_row(row_str: str) -> list[str]:
+        cells = row_str.split("|")
+        stripped = row_str.strip()
+        if stripped.startswith("|"):
+            cells = cells[1:]
+        if stripped.endswith("|") and len(cells) > 0:
+            cells = cells[:-1]
+        return [clean_cell(c) for c in cells]
+
+    header_cells = parse_row(header)
+    rows_cells = [parse_row(line) for line in data_lines]
+    
+    all_rows = [header_cells] + rows_cells
+    num_cols = max(len(row) for row in all_rows) if all_rows else 0
+    if num_cols == 0:
+        return ""
+    
+    # Pad all rows to have the same number of columns
+    for row in all_rows:
+        while len(row) < num_cols:
+            row.append("")
+            
+    # Calculate column widths
+    col_widths = [0] * num_cols
+    for row in all_rows:
+        for idx, cell in enumerate(row):
+            col_widths[idx] = max(col_widths[idx], len(cell))
+            
+    # Format rows
+    formatted_lines = []
+    
+    # 1. Header row
+    header_line = " | ".join(cell.ljust(col_widths[idx]) for idx, cell in enumerate(header_cells))
+    formatted_lines.append(header_line)
+    
+    # 2. Separator line
+    sep_line = "-+-".join("-" * col_widths[idx] for idx in range(num_cols))
+    formatted_lines.append(sep_line)
+    
+    # 3. Data rows
+    for row in rows_cells:
+        row_line = " | ".join(cell.ljust(col_widths[idx]) for idx, cell in enumerate(row))
+        formatted_lines.append(row_line)
+        
+    return "```\n" + "\n".join(formatted_lines) + "\n```"
+
+def format_markdown_tables(text: str) -> str:
+    """Detects markdown tables in text and replaces them with aligned ASCII tables in monospace code blocks."""
+    lines = text.split("\n")
+    processed_lines = []
+    i = 0
+    n = len(lines)
+    
+    while i < n:
+        line = lines[i]
+        if is_separator_line(line):
+            if i > 0:
+                # Pop the header line from processed_lines
+                header = processed_lines.pop()
+                
+                # Collect data lines
+                data_lines = []
+                j = i + 1
+                while j < n:
+                    data_line = lines[j]
+                    if "|" in data_line and not is_separator_line(data_line):
+                        data_lines.append(data_line)
+                        j += 1
+                    else:
+                        break
+                
+                # Format the table
+                formatted_table = _render_ascii_table(header, data_lines)
+                processed_lines.append(formatted_table)
+                
+                i = j
+                continue
+                
+        processed_lines.append(line)
+        i += 1
+        
+    return "\n".join(processed_lines)
+
+def format_agent_response(text: str) -> str:
+    """Format the agent's response for Telegram."""
+    if not text:
+        return ""
+    # Process and format markdown tables
+    return format_markdown_tables(text)
+
 # ── Message Handling & Real-time Streaming ─────────────────────────────────────
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -475,11 +598,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Final edit to strip the cursor and present the full output
         if accumulated_text.strip():
-            await context.bot.edit_message_text(
-                text=accumulated_text,
-                chat_id=chat_id,
-                message_id=status_message.message_id
-            )
+            formatted_response = format_agent_response(accumulated_text)
+            try:
+                await context.bot.edit_message_text(
+                    text=formatted_response,
+                    chat_id=chat_id,
+                    message_id=status_message.message_id,
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send response with Markdown formatting, sending as plain text: {e}")
+                # Fall back to plain text but keep the ASCII-formatted table structure
+                await context.bot.edit_message_text(
+                    text=formatted_response,
+                    chat_id=chat_id,
+                    message_id=status_message.message_id
+                )
         else:
             await context.bot.edit_message_text(
                 text="🤖 Done. (No response content was generated.)",
