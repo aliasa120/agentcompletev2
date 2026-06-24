@@ -280,8 +280,10 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     workflow_name = binding["workflow_name"]
 
     try:
-        # Create a fresh thread in LangGraph API
-        thread = await langgraph_client.threads.create()
+        # Create a fresh thread in LangGraph API with metadata
+        thread = await langgraph_client.threads.create(
+            metadata={"workflow_id": workflow_id, "user_id": str(chat_id)}
+        )
         thread_id = thread["thread_id"]
         logger.info(f"Created new LangGraph thread {thread_id} for chat {chat_id} via /clear command")
 
@@ -320,7 +322,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         try:
             # Create a fresh thread in LangGraph API every time a workflow is selected/switched
-            thread = await langgraph_client.threads.create()
+            thread = await langgraph_client.threads.create(
+                metadata={"workflow_id": workflow_id, "user_id": str(chat_id)}
+            )
             thread_id = thread["thread_id"]
             logger.info(f"Created new LangGraph thread {thread_id} for chat {chat_id}")
 
@@ -516,7 +520,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if "not found" in str(te).lower():
             logger.info(f"Thread {thread_id} not found in LangGraph. Recreating a new one...")
             try:
-                thread = await langgraph_client.threads.create()
+                thread = await langgraph_client.threads.create(
+                    metadata={"workflow_id": workflow_id, "user_id": str(chat_id)}
+                )
                 thread_id = thread["thread_id"]
                 # Save the new active thread ID in Supabase
                 await set_active_workflow(chat_id, workflow_id, thread_id)
@@ -528,7 +534,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     input_data = {"messages": [{"role": "user", "content": user_text}]}
     config = {
         "configurable": {
-            "workflow_id": workflow_id
+            "workflow_id": workflow_id,
+            "user_id": str(chat_id)
         }
     }
 
