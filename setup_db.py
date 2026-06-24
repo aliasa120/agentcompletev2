@@ -300,15 +300,18 @@ CREATE TABLE IF NOT EXISTS telegram_chat_bindings (
 );
 
 -- ── telegram_bots ───────────────────────────────────────────
+-- Each bot routes to ALL enabled workflows via /start inline keyboard.
+-- workflow_id was removed: bots are no longer bound to a single workflow.
 CREATE TABLE IF NOT EXISTS telegram_bots (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   bot_token   TEXT NOT NULL UNIQUE,
-  workflow_id UUID REFERENCES workflows(id) ON DELETE SET NULL,
   is_active   BOOLEAN DEFAULT true,
   created_at  TIMESTAMPTZ DEFAULT now(),
   updated_at  TIMESTAMPTZ DEFAULT now()
 );
+-- Migration: drop legacy workflow_id column if it exists
+ALTER TABLE telegram_bots DROP COLUMN IF EXISTS workflow_id;
 
 -- ── Add workflow_id references to feeder/social tables if they exist ──
 ALTER TABLE feeder_sources ADD COLUMN IF NOT EXISTS workflow_id UUID REFERENCES workflows(id) ON DELETE SET NULL;

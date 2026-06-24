@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     // 1. Fetch bots from database
     let { data: bots, error } = await supabase
       .from("telegram_bots")
-      .select("id, bot_token, workflow_id, is_active, created_at, workflows(name)")
+      .select("id, bot_token, is_active, created_at")
       .eq("user_id", user.id);
 
     if (error) {
@@ -44,29 +44,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // 2. Auto-seed if empty and environment variable TELEGRAM_BOT_TOKEN is configured
+    // 2. Auto-seed if empty and TELEGRAM_BOT_TOKEN is set in environment
     const envToken = process.env.TELEGRAM_BOT_TOKEN || "";
     if ((!bots || bots.length === 0) && envToken && !envToken.toLowerCase().includes("your_")) {
       console.log("[api] No bots found in db, but TELEGRAM_BOT_TOKEN is set in .env. Auto-seeding...");
-      
-      // Get the first active workflow to bind by default
-      const { data: workflows } = await supabase
-        .from("workflows")
-        .select("id")
-        .eq("enabled", true)
-        .limit(1);
-
-      const defaultWorkflowId = workflows && workflows.length > 0 ? workflows[0].id : null;
 
       const { data: inserted, error: insertError } = await supabase
         .from("telegram_bots")
         .insert({
           user_id: user.id,
           bot_token: envToken,
-          workflow_id: defaultWorkflowId,
           is_active: true
         })
-        .select("id, bot_token, workflow_id, is_active, created_at, workflows(name)")
+        .select("id, bot_token, is_active, created_at")
         .single();
 
       if (insertError) {
@@ -95,19 +85,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id, bot_token, workflow_id, is_active } = await request.json();
+    const { id, bot_token, is_active } = await request.json();
 
     if (!bot_token) {
       return NextResponse.json({ error: "bot_token is required" }, { status: 400 });
     }
 
     if (id) {
-      // Update existing
+      // Update existing bot
       const { data, error } = await supabase
         .from("telegram_bots")
         .update({
           bot_token,
-          workflow_id: workflow_id || null,
           is_active: is_active ?? true,
           updated_at: new Date().toISOString()
         })
@@ -120,13 +109,12 @@ export async function POST(request: NextRequest) {
       }
       return NextResponse.json({ success: true, bot: data[0] });
     } else {
-      // Create new
+      // Create new bot
       const { data, error } = await supabase
         .from("telegram_bots")
         .insert({
           user_id: user.id,
           bot_token,
-          workflow_id: workflow_id || null,
           is_active: is_active ?? true
         })
         .select();
