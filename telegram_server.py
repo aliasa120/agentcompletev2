@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """
-telegram_server.py — Standalone Telegram bot integration for Deep Agents.
+telegram_server.py — Multi-tenant dynamic Telegram bot manager for Deep Agents.
 
 This script:
-1. Connects to Supabase to fetch workflows and manage chat-to-workflow bindings.
-2. Directs chat requests to the LangGraph API Server (default http://localhost:2024).
-3. Supports real-time token streaming with throttled message edits.
-4. Allows users to switch active workflows interactively via inline buttons.
-
-Usage:
-    python telegram_server.py
+1. Connects to Supabase to fetch bot tokens and bindings.
+2. Dynamically spawns and stops bot polling tasks as bots are added/removed in the UI.
+3. Coordinates message requests to the LangGraph API Server (default http://localhost:2024).
+4. Employs user-specific and workflow-specific thread mapping for memory and state isolation.
 """
 
 import os
@@ -31,12 +28,11 @@ logger = logging.getLogger("telegram_server")
 
 # Check required libraries
 try:
-    from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+    from telegram import Update
     from telegram.ext import (
         Application,
         CommandHandler,
         MessageHandler,
-        CallbackQueryHandler,
         filters,
         ContextTypes
     )
@@ -57,14 +53,9 @@ except ImportError:
     sys.exit(1)
 
 # Env config validation
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "").strip()
 LANGGRAPH_API_URL = os.environ.get("LANGGRAPH_API_URL", "http://localhost:2024").strip()
-
-if not TELEGRAM_BOT_TOKEN:
-    logger.error("TELEGRAM_BOT_TOKEN is missing from .env")
-    sys.exit(1)
 
 if not SUPABASE_URL or not SUPABASE_ANON_KEY:
     logger.error("SUPABASE_URL and SUPABASE_ANON_KEY must be set in .env")
@@ -107,52 +98,14 @@ def is_user_allowed(user) -> bool:
     username = str(user.username).lower() if user.username else ""
     return (user_id in ALLOWED_USERS) or (username in ALLOWED_USERS)
 
+
 # ── Supabase Bindings Helper Functions ──────────────────────────────────────────
 
-async def get_active_workflows() -> list[dict]:
-    """Fetch active workflows from Supabase."""
-    loop = asyncio.get_running_loop()
-    try:
-        # Wrap blocking Supabase sync call in an executor
-        resp = await loop.run_in_executor(
-            None,
-            lambda: supabase.table("workflows").select("id, name, description").execute()
-        )
-        return resp.data or []
-    except Exception as e:
-        logger.error(f"Error fetching workflows: {e}")
-        return []
-
-async def get_active_binding(chat_id: int) -> dict | None:
-    """Get the active workflow binding and thread ID for a chat."""
-    loop = asyncio.get_running_loop()
-    try:
-        resp = await loop.run_in_executor(
-            None,
-            lambda: supabase.table("telegram_chat_bindings")
-            .select("workflow_id, thread_id, workflows(name)")
-            .eq("chat_id", str(chat_id))
-            .eq("is_active", True)
-            .execute()
-        )
-        if resp.data:
-            row = resp.data[0]
-            wf_name = row.get("workflows", {}).get("name", "Unknown Workflow")
-            return {
-                "workflow_id": row["workflow_id"],
-                "thread_id": row["thread_id"],
-                "workflow_name": wf_name
-            }
-        return None
-    except Exception as e:
-        logger.error(f"Error getting active binding: {e}")
-        return None
-
 async def set_active_workflow(chat_id: int, workflow_id: str, thread_id: str):
-    """Set the active workflow and thread ID for a chat."""
+    """Set the active workflow and thread ID for a chat in telegram_chat_bindings."""
     loop = asyncio.get_running_loop()
     try:
-        # 1. Deactivate current active bindings
+        # 1. Deactivate current active bindings for this chat
         await loop.run_in_executor(
             None,
             lambda: supabase.table("telegram_chat_bindings")
@@ -178,6 +131,7 @@ async def set_active_workflow(chat_id: int, workflow_id: str, thread_id: str):
         logger.error(f"Error setting active workflow: {e}")
         raise
 
+
 async def get_thread_for_workflow(chat_id: int, workflow_id: str) -> str | None:
     """Check if a thread ID already exists for this chat and workflow combo."""
     loop = asyncio.get_running_loop()
@@ -197,152 +151,6 @@ async def get_thread_for_workflow(chat_id: int, workflow_id: str) -> str | None:
         logger.error(f"Error getting thread for workflow: {e}")
         return None
 
-# ── Command Handlers ───────────────────────────────────────────────────────────
-
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /start command. Welcomes user and prompts workflow selection."""
-    if not is_user_allowed(update.effective_user):
-        await update.message.reply_text("⛔ Access denied. You are not on the allowlist.")
-        return
-
-    welcome_msg = (
-        "👋 Welcome to the **Deep Agents** Telegram Integration!\n\n"
-        "Here you can talk directly to your custom workflows compiled from Supabase. "
-        "Each workflow maintains its own separate thread context, allowing you to switch "
-        "seamlessly between tasks.\n\n"
-        "Please select a workflow to start chatting:"
-    )
-    await update.message.reply_text(welcome_msg, parse_mode="Markdown")
-    await workflows_command(update, context)
-
-async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /status command. Displays active workflow and thread context."""
-    if not is_user_allowed(update.effective_user):
-        await update.message.reply_text("⛔ Access denied.")
-        return
-
-    chat_id = update.effective_chat.id
-    binding = await get_active_binding(chat_id)
-    if binding:
-        status_msg = (
-            "📌 **Current Status**\n\n"
-            f"👤 **Chat ID:** `{chat_id}`\n"
-            f"🤖 **Active Workflow:** `{binding['workflow_name']}`\n"
-            f"🧵 **LangGraph Thread:** `{binding['thread_id']}`\n\n"
-            "To switch workflows, type `/workflows`."
-        )
-    else:
-        status_msg = (
-            "📌 **Current Status**\n\n"
-            "❌ No workflow is currently connected to this chat.\n"
-            "Please use `/workflows` to select one."
-        )
-    await update.message.reply_text(status_msg, parse_mode="Markdown")
-
-async def workflows_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /workflows command. Fetches and lists active workflows."""
-    if not is_user_allowed(update.effective_user):
-        await update.message.reply_text("⛔ Access denied.")
-        return
-
-    workflows = await get_active_workflows()
-    if not workflows:
-        await update.message.reply_text(
-            "⚠️ No active workflows found in database. Make sure you have created workflows "
-            "and run the database migrations."
-        )
-        return
-
-    keyboard = []
-    for wf in workflows:
-        btn_text = wf["name"]
-        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"select_wf:{wf['id']}:{wf['name']}")])
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Select a workflow to connect to this chat:", reply_markup=reply_markup)
-
-async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /clear or /newthread command. Creates a new thread for the active workflow."""
-    if not is_user_allowed(update.effective_user):
-        await update.message.reply_text("⛔ Access denied.")
-        return
-
-    chat_id = update.effective_chat.id
-    binding = await get_active_binding(chat_id)
-    if not binding:
-        await update.message.reply_text(
-            "❌ No workflow is currently connected to this chat.\n"
-            "Please use `/workflows` to select one."
-        )
-        return
-
-    workflow_id = binding["workflow_id"]
-    workflow_name = binding["workflow_name"]
-
-    try:
-        # Create a fresh thread in LangGraph API with metadata
-        thread = await langgraph_client.threads.create(
-            metadata={"workflow_id": workflow_id, "user_id": str(chat_id)}
-        )
-        thread_id = thread["thread_id"]
-        logger.info(f"Created new LangGraph thread {thread_id} for chat {chat_id} via /clear command")
-
-        # Save the active workflow binding in Supabase
-        await set_active_workflow(chat_id, workflow_id, thread_id)
-
-        await update.message.reply_text(
-            f"🔄 **Conversation Reset!**\n\n"
-            f"🤖 **Workflow:** `{workflow_name}`\n"
-            f"🧵 **New Thread ID:** `{thread_id}`\n\n"
-            f"A new thread has been created. Your previous history for this workflow in this chat is cleared.",
-            parse_mode="Markdown"
-        )
-    except Exception as e:
-        logger.exception("Error clearing conversation")
-        await update.message.reply_text(f"❌ Failed to reset conversation: {e}")
-
-# ── Callback Query Handling (Workflow Selection) ─────────────────────────────
-
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle workflow selection button click."""
-    query = update.callback_query
-    await query.answer()
-
-    if not is_user_allowed(query.from_user):
-        await query.edit_message_text("⛔ Access denied.")
-        return
-
-    data = query.data
-    if data.startswith("select_wf:"):
-        _, workflow_id, workflow_name = data.split(":", 2)
-        chat_id = query.message.chat_id
-
-        # Send alert that we are setting it up
-        await query.edit_message_text(f"⏳ Connecting chat to `{workflow_name}`...")
-
-        try:
-            # Create a fresh thread in LangGraph API every time a workflow is selected/switched
-            thread = await langgraph_client.threads.create(
-                metadata={"workflow_id": workflow_id, "user_id": str(chat_id)}
-            )
-            thread_id = thread["thread_id"]
-            logger.info(f"Created new LangGraph thread {thread_id} for chat {chat_id}")
-
-            # Save the active workflow binding in Supabase
-            await set_active_workflow(chat_id, workflow_id, thread_id)
-
-            confirm_msg = (
-                f"✅ **Connected Successfully!**\n\n"
-                f"🤖 **Workflow:** `{workflow_name}`\n"
-                f"🧵 **Thread ID:** `{thread_id}`\n\n"
-                f"Any message you send now will be handled by **{workflow_name}**. "
-                "Enjoy!"
-            )
-            await query.edit_message_text(confirm_msg, parse_mode="Markdown")
-
-        except Exception as e:
-            logger.exception("Error selecting workflow")
-            await query.edit_message_text(f"❌ Failed to connect workflow: {e}")
 
 # ── Table Formatting Helpers ──────────────────────────────────────────────────
 
@@ -351,29 +159,23 @@ def is_separator_line(line: str) -> bool:
     line_strip = line.strip()
     if not line_strip:
         return False
-    # Must contain at least one '|'
     if "|" not in line_strip:
         return False
-    # Must contain only hyphens, colons, vertical bars, and whitespace
     allowed_chars = set("|-: \t")
     if not set(line_strip).issubset(allowed_chars):
         return False
-    # Must contain at least one hyphen
     if "-" not in line_strip:
         return False
     return True
 
+
 def _render_ascii_table(header: str, data_lines: list[str]) -> str:
-    """Formats a markdown table into a aligned ASCII table wrapped in a monospace block."""
+    """Formats a markdown table into an aligned ASCII table wrapped in a monospace block."""
     import re
     def clean_cell(cell: str) -> str:
-        # Strip bold ** and __
         c = re.sub(r"\*\*|__", "", cell)
-        # Strip italic * and _
         c = re.sub(r"\*|_", "", c)
-        # Strip backticks
         c = re.sub(r"`", "", c)
-        # Strip links like [text](url) -> text
         c = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", c)
         return c.strip()
 
@@ -394,37 +196,32 @@ def _render_ascii_table(header: str, data_lines: list[str]) -> str:
     if num_cols == 0:
         return ""
     
-    # Pad all rows to have the same number of columns
     for row in all_rows:
         while len(row) < num_cols:
             row.append("")
             
-    # Calculate column widths
     col_widths = [0] * num_cols
     for row in all_rows:
         for idx, cell in enumerate(row):
             col_widths[idx] = max(col_widths[idx], len(cell))
             
-    # Format rows
     formatted_lines = []
     
-    # 1. Header row
     header_line = " | ".join(cell.ljust(col_widths[idx]) for idx, cell in enumerate(header_cells))
     formatted_lines.append(header_line)
     
-    # 2. Separator line
     sep_line = "-+-".join("-" * col_widths[idx] for idx in range(num_cols))
     formatted_lines.append(sep_line)
     
-    # 3. Data rows
     for row in rows_cells:
         row_line = " | ".join(cell.ljust(col_widths[idx]) for idx, cell in enumerate(row))
         formatted_lines.append(row_line)
         
     return "```\n" + "\n".join(formatted_lines) + "\n```"
 
+
 def format_markdown_tables(text: str) -> str:
-    """Detects markdown tables in text and replaces them with aligned ASCII tables in monospace code blocks."""
+    """Detects markdown tables in text and replaces them with aligned ASCII tables."""
     lines = text.split("\n")
     processed_lines = []
     i = 0
@@ -434,10 +231,7 @@ def format_markdown_tables(text: str) -> str:
         line = lines[i]
         if is_separator_line(line):
             if i > 0:
-                # Pop the header line from processed_lines
                 header = processed_lines.pop()
-                
-                # Collect data lines
                 data_lines = []
                 j = i + 1
                 while j < n:
@@ -448,10 +242,8 @@ def format_markdown_tables(text: str) -> str:
                     else:
                         break
                 
-                # Format the table
                 formatted_table = _render_ascii_table(header, data_lines)
                 processed_lines.append(formatted_table)
-                
                 i = j
                 continue
                 
@@ -460,226 +252,371 @@ def format_markdown_tables(text: str) -> str:
         
     return "\n".join(processed_lines)
 
+
 def format_agent_response(text: str) -> str:
-    """Format the agent's response for Telegram."""
     if not text:
         return ""
-    # Process and format markdown tables
     return format_markdown_tables(text)
 
-# ── Message Handling & Real-time Streaming ─────────────────────────────────────
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle text messages from the user, route to LangGraph and stream response."""
-    if not is_user_allowed(update.effective_user):
-        await update.message.reply_text("⛔ Access denied.")
-        return
+# ── Telegram Bot Instance Wrapper ─────────────────────────────────────────────
 
-    chat_id = update.effective_chat.id
-    user_text = update.message.text
-
-    # Fetch active binding
-    binding = await get_active_binding(chat_id)
-    if not binding:
-        await update.message.reply_text(
-            "❌ No workflow is connected to this chat.\n"
-            "Please use /workflows to select a workflow first."
-        )
-        return
-
-    workflow_id = binding["workflow_id"]
-    thread_id = binding["thread_id"]
-
-    # Send a thinking placeholder message
-    status_message = await update.message.reply_text("🤖 _Agent is thinking..._", parse_mode="Markdown")
+class TelegramBotInstance:
+    """Manages the life cycle and event handlers of a single Telegram Bot connection."""
     
-    # Send typing status
-    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+    def __init__(self, bot_id: str, token: str, workflow_id: str, user_id: str, workflow_name: str):
+        self.bot_id = bot_id
+        self.token = token
+        self.workflow_id = workflow_id
+        self.user_id = user_id
+        self.workflow_name = workflow_name
+        self.application = None
 
-    global RESOLVED_ASSISTANT_ID
-    if not RESOLVED_ASSISTANT_ID:
+    async def start(self):
+        """Build and asynchronously run the bot polling."""
+        builder = Application.builder().token(self.token)
+        
+        # Configure proxy if configured
+        telegram_proxy = os.environ.get("TELEGRAM_PROXY", "").strip()
+        if telegram_proxy:
+            builder.proxy(telegram_proxy)
+
+        self.application = builder.build()
+        
+        # Add handlers
+        self.application.add_handler(CommandHandler("start", self.start_command))
+        self.application.add_handler(CommandHandler("status", self.status_command))
+        self.application.add_handler(CommandHandler("clear", self.clear_command))
+        self.application.add_handler(CommandHandler("newthread", self.clear_command))
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+
+        await self.application.initialize()
+        await self.application.start()
+        await self.application.updater.start_polling()
+        logger.info(f"Bot {self.bot_id[:8]} successfully started for workflow '{self.workflow_name}'")
+
+    async def stop(self):
+        """Gracefully stop the polling loop and release resources."""
+        if self.application:
+            try:
+                await self.application.updater.stop()
+                await self.application.stop()
+                await self.application.shutdown()
+            except Exception as e:
+                logger.warning(f"Error stopping bot application {self.bot_id[:8]}: {e}")
+            logger.info(f"Bot {self.bot_id[:8]} successfully terminated.")
+
+    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not is_user_allowed(update.effective_user):
+            await update.message.reply_text("⛔ Access denied.")
+            return
+
+        welcome_msg = (
+            f"👋 Welcome! I am your Telegram Bot connected to the **{self.workflow_name}** workflow.\n\n"
+            "Any message you send here will be handled directly by this workflow, maintaining your persistent memory.\n\n"
+            "Commands:\n"
+            "📌 /status - View active thread context\n"
+            "🔄 /clear - Reset the conversation thread"
+        )
+        await update.message.reply_text(welcome_msg, parse_mode="Markdown")
+
+    async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not is_user_allowed(update.effective_user):
+            await update.message.reply_text("⛔ Access denied.")
+            return
+
+        chat_id = update.effective_chat.id
+        thread_id = await get_thread_for_workflow(chat_id, self.workflow_id)
+        
+        if thread_id:
+            status_msg = (
+                "📌 **Current Status**\n\n"
+                f"👤 **Chat ID:** `{chat_id}`\n"
+                f"🤖 **Workflow:** `{self.workflow_name}`\n"
+                f"🧵 **Thread ID:** `{thread_id}`"
+            )
+        else:
+            status_msg = (
+                "📌 **Current Status**\n\n"
+                f"🤖 **Workflow:** `{self.workflow_name}`\n"
+                "❌ No active conversation thread found. Send a message to start one."
+            )
+        await update.message.reply_text(status_msg, parse_mode="Markdown")
+
+    async def clear_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not is_user_allowed(update.effective_user):
+            await update.message.reply_text("⛔ Access denied.")
+            return
+
+        chat_id = update.effective_chat.id
         try:
-            assistants = await langgraph_client.assistants.search()
-            if assistants:
-                for a in assistants:
-                    if a.get("name") == "research" or a.get("assistant_id") == "research":
-                        RESOLVED_ASSISTANT_ID = a["assistant_id"]
-                        break
-                else:
-                    RESOLVED_ASSISTANT_ID = assistants[0]["assistant_id"]
-            else:
-                RESOLVED_ASSISTANT_ID = "research"
-        except Exception as ae:
-            logger.error(f"Error searching assistants: {ae}")
-            RESOLVED_ASSISTANT_ID = "research"
+            thread = await langgraph_client.threads.create(
+                metadata={"workflow_id": self.workflow_id, "user_id": self.user_id, "telegram_chat_id": str(chat_id)}
+            )
+            thread_id = thread["thread_id"]
+            logger.info(f"Created new LangGraph thread {thread_id} for chat {chat_id} via /clear command")
 
-    # Verify if thread exists in LangGraph. Recreate it if missing/expired.
-    try:
-        await langgraph_client.threads.get(thread_id)
-    except Exception as te:
-        if "not found" in str(te).lower():
-            logger.info(f"Thread {thread_id} not found in LangGraph. Recreating a new one...")
+            await set_active_workflow(chat_id, self.workflow_id, thread_id)
+
+            await update.message.reply_text(
+                f"🔄 **Conversation Reset!**\n\n"
+                f"🤖 **Workflow:** `{self.workflow_name}`\n"
+                f"🧵 **New Thread ID:** `{thread_id}`\n\n"
+                "Your previous history in this chat is cleared.",
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.exception("Error clearing conversation")
+            await update.message.reply_text(f"❌ Failed to reset conversation: {e}")
+
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not is_user_allowed(update.effective_user):
+            await update.message.reply_text("⛔ Access denied.")
+            return
+
+        chat_id = update.effective_chat.id
+        user_text = update.message.text
+
+        # 1. Fetch or create thread
+        thread_id = await get_thread_for_workflow(chat_id, self.workflow_id)
+        if not thread_id:
             try:
                 thread = await langgraph_client.threads.create(
-                    metadata={"workflow_id": workflow_id, "user_id": str(chat_id)}
+                    metadata={"workflow_id": self.workflow_id, "user_id": self.user_id, "telegram_chat_id": str(chat_id)}
                 )
                 thread_id = thread["thread_id"]
-                # Save the new active thread ID in Supabase
-                await set_active_workflow(chat_id, workflow_id, thread_id)
-            except Exception as ce:
-                logger.error(f"Failed to recreate missing thread: {ce}")
-        else:
-            logger.warning(f"Unexpected error validating thread existence: {te}")
+                await set_active_workflow(chat_id, self.workflow_id, thread_id)
+            except Exception as e:
+                logger.error(f"Failed to create new thread: {e}")
+                await update.message.reply_text("❌ Failed to initialize conversation thread.")
+                return
 
-    input_data = {"messages": [{"role": "user", "content": user_text}]}
-    config = {
-        "configurable": {
-            "workflow_id": workflow_id,
-            "user_id": str(chat_id)
-        }
-    }
+        # 2. Send placeholder and typing status
+        status_message = await update.message.reply_text("🤖 _Agent is thinking..._", parse_mode="Markdown")
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-    accumulated_text = ""
-    last_edit_text = ""
-    last_edit_time = 0.0
-
-    try:
-        # Stream events from the LangGraph server using the resolved assistant ID
-        async for chunk in langgraph_client.runs.stream(
-            thread_id=thread_id,
-            assistant_id=RESOLVED_ASSISTANT_ID,
-            input=input_data,
-            config=config,
-            stream_mode="messages"
-        ):
-            # Parse token deltas from the stream (handles both dict and StreamPart objects)
-            if isinstance(chunk, dict):
-                event_type = chunk.get("event")
-                data = chunk.get("data", [])
-            else:
-                event_type = getattr(chunk, "event", None)
-                data = getattr(chunk, "data", [])
-            
-            if event_type == "messages/partial":
-                for msg in data:
-                    content = ""
-                    if isinstance(msg, dict):
-                        content = msg.get("content", "")
-                    else:
-                        content = getattr(msg, "content", "")
-                    
-                    if content:
-                        accumulated_text += content
-                        
-                        # Throttle message edits to once every 1.5 seconds to avoid Telegram 429
-                        now = time.time()
-                        if now - last_edit_time > 1.5 and accumulated_text.strip() != last_edit_text.strip():
-                            try:
-                                await context.bot.edit_message_text(
-                                    text=accumulated_text + " ▉",
-                                    chat_id=chat_id,
-                                    message_id=status_message.message_id
-                                )
-                                last_edit_text = accumulated_text
-                                last_edit_time = now
-                            except Exception:
-                                # Safe to ignore transient telegram edit exceptions (e.g. rate limit)
-                                pass
-
-        # Fallback: if accumulated_text is empty, grab the latest assistant message from thread state.
-        # This protects against stream mode inconsistencies.
-        if not accumulated_text.strip():
-            logger.info("Stream yielded no partial tokens. Attempting fallback thread state recovery...")
+        # 3. Resolve assistant ID
+        global RESOLVED_ASSISTANT_ID
+        if not RESOLVED_ASSISTANT_ID:
             try:
-                state = await langgraph_client.threads.get_state(thread_id)
-                values = state.get("values", {})
-                messages = values.get("messages", [])
-                if messages:
-                    for msg in reversed(messages):
-                        role = msg.get("type") or msg.get("role")
-                        if role in ("ai", "assistant"):
-                            accumulated_text = msg.get("content", "")
-                            break
-            except Exception as fe:
-                logger.error(f"Fallback thread state recovery failed: {fe}")
+                assistants = await langgraph_client.assistants.search()
+                if assistants:
+                    for a in assistants:
+                        if a.get("name") == "research" or a.get("assistant_id") == "research":
+                          RESOLVED_ASSISTANT_ID = a["assistant_id"]
+                          break
+                    else:
+                        RESOLVED_ASSISTANT_ID = assistants[0]["assistant_id"]
+                else:
+                    RESOLVED_ASSISTANT_ID = "research"
+            except Exception as ae:
+                logger.error(f"Error searching assistants: {ae}")
+                RESOLVED_ASSISTANT_ID = "research"
 
-        # Final edit to strip the cursor and present the full output
-        if accumulated_text.strip():
-            formatted_response = format_agent_response(accumulated_text)
+        # 4. Verify thread existence
+        try:
+            await langgraph_client.threads.get(thread_id)
+        except Exception as te:
+            if "not found" in str(te).lower():
+                logger.info(f"Thread {thread_id} not found in LangGraph. Recreating a new one...")
+                try:
+                    thread = await langgraph_client.threads.create(
+                        metadata={"workflow_id": self.workflow_id, "user_id": self.user_id, "telegram_chat_id": str(chat_id)}
+                    )
+                    thread_id = thread["thread_id"]
+                    await set_active_workflow(chat_id, self.workflow_id, thread_id)
+                except Exception as ce:
+                    logger.error(f"Failed to recreate missing thread: {ce}")
+
+        input_data = {"messages": [{"role": "user", "content": user_text}]}
+        config = {
+            "configurable": {
+                "workflow_id": self.workflow_id,
+                "user_id": self.user_id
+            }
+        }
+
+        accumulated_text = ""
+        last_edit_text = ""
+        last_edit_time = 0.0
+
+        # 5. Stream from LangGraph
+        try:
+            async for chunk in langgraph_client.runs.stream(
+                thread_id=thread_id,
+                assistant_id=RESOLVED_ASSISTANT_ID,
+                input=input_data,
+                config=config,
+                stream_mode="messages"
+            ):
+                if isinstance(chunk, dict):
+                    event_type = chunk.get("event")
+                    data = chunk.get("data", [])
+                else:
+                    event_type = getattr(chunk, "event", None)
+                    data = getattr(chunk, "data", [])
+                
+                if event_type == "messages/partial":
+                    for msg in data:
+                        content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+                        if content:
+                            accumulated_text += content
+                            now = time.time()
+                            if now - last_edit_time > 1.5 and accumulated_text.strip() != last_edit_text.strip():
+                                try:
+                                    await context.bot.edit_message_text(
+                                        text=accumulated_text + " ▉",
+                                        chat_id=chat_id,
+                                        message_id=status_message.message_id
+                                    )
+                                    last_edit_text = accumulated_text
+                                    last_edit_time = now
+                                except Exception:
+                                    pass
+
+            # Fallback thread state recovery
+            if not accumulated_text.strip():
+                try:
+                    state = await langgraph_client.threads.get_state(thread_id)
+                    values = state.get("values", {})
+                    messages = values.get("messages", [])
+                    if messages:
+                        for msg in reversed(messages):
+                            role = msg.get("type") or msg.get("role")
+                            if role in ("ai", "assistant"):
+                                accumulated_text = msg.get("content", "")
+                                break
+                except Exception as fe:
+                    logger.error(f"Fallback thread state recovery failed: {fe}")
+
+            if accumulated_text.strip():
+                formatted_response = format_agent_response(accumulated_text)
+                try:
+                    await context.bot.edit_message_text(
+                        text=formatted_response,
+                        chat_id=chat_id,
+                        message_id=status_message.message_id,
+                        parse_mode="Markdown"
+                    )
+                except Exception:
+                    await context.bot.edit_message_text(
+                        text=formatted_response,
+                        chat_id=chat_id,
+                        message_id=status_message.message_id
+                    )
+            else:
+                await context.bot.edit_message_text(
+                    text="🤖 Done. (No response content was generated.)",
+                    chat_id=chat_id,
+                    message_id=status_message.message_id
+                )
+
+        except Exception as run_err:
+            logger.exception("Error running agent via LangGraph client")
+            error_msg = str(run_err)
+            if "connect" in error_msg.lower() or "connection" in error_msg.lower():
+                response_text = "❌ **Connection Error**\n\nCould not connect to the LangGraph API server. Please check that your backend is running."
+            else:
+                response_text = f"❌ **Execution Failed**\n\n`{error_msg}`"
             try:
                 await context.bot.edit_message_text(
-                    text=formatted_response,
+                    text=response_text,
                     chat_id=chat_id,
                     message_id=status_message.message_id,
                     parse_mode="Markdown"
                 )
-            except Exception as e:
-                logger.warning(f"Failed to send response with Markdown formatting, sending as plain text: {e}")
-                # Fall back to plain text but keep the ASCII-formatted table structure
-                await context.bot.edit_message_text(
-                    text=formatted_response,
-                    chat_id=chat_id,
-                    message_id=status_message.message_id
-                )
-        else:
-            await context.bot.edit_message_text(
-                text="🤖 Done. (No response content was generated.)",
-                chat_id=chat_id,
-                message_id=status_message.message_id
-            )
+            except Exception:
+                pass
 
-    except Exception as run_err:
-        logger.exception("Error running agent via LangGraph client")
-        
-        # Check if it looks like a connection error (LangGraph server is offline)
-        error_msg = str(run_err)
-        if "connect" in error_msg.lower() or "connection refused" in error_msg.lower() or "unreachable" in error_msg.lower():
-            response_text = (
-                "❌ **Connection Error**\n\n"
-                "Could not connect to the LangGraph API server. Please make sure the backend is active:\n"
-                "`langgraph dev`"
-            )
-        else:
-            response_text = f"❌ **Execution Failed**\n\n`{error_msg}`"
-            
+
+# ── Bot Coordinator Manager ──────────────────────────────────────────────────
+
+running_bots = {}  # token -> TelegramBotInstance
+
+async def bot_coordinator():
+    logger.info("Starting Telegram Bot Coordinator...")
+    
+    # ── Auto-seeding check ───────────────────────────────────────────────────
+    try:
+        service_role_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        env_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        if env_token and not env_token.lower().startswith("your_"):
+            resp = supabase.table("telegram_bots").select("id").eq("bot_token", env_token).execute()
+            if not resp.data:
+                # Token not registered in database. Auto-seed it under the first user
+                if service_role_key:
+                    admin_supabase = create_client(SUPABASE_URL, service_role_key)
+                    users_resp = admin_supabase.auth.admin.list_users()
+                    if users_resp and users_resp.users:
+                        first_user_id = users_resp.users[0].id
+                        
+                        # Get first active workflow
+                        wf_resp = supabase.table("workflows").select("id").eq("enabled", True).limit(1).execute()
+                        default_wf_id = wf_resp.data[0]["id"] if wf_resp.data else None
+                        
+                        # Insert bot
+                        supabase.table("telegram_bots").insert({
+                            "user_id": first_user_id,
+                            "bot_token": env_token,
+                            "workflow_id": default_wf_id,
+                            "is_active": True
+                        }).execute()
+                        logger.info(f"Auto-seeded env TELEGRAM_BOT_TOKEN to database for user {first_user_id}")
+    except Exception as se:
+        logger.warning(f"Failed during bot auto-seeding check: {se}")
+
+    while True:
         try:
-            await context.bot.edit_message_text(
-                text=response_text,
-                chat_id=chat_id,
-                message_id=status_message.message_id,
-                parse_mode="Markdown"
-            )
-        except Exception:
-            pass
+            # Query active bots from database
+            resp = supabase.table("telegram_bots").select("id, bot_token, workflow_id, user_id, is_active, workflows(name)").eq("is_active", True).execute()
+            active_bots = resp.data or []
+            active_tokens = {bot["bot_token"] for bot in active_bots}
+            
+            # 1. Stop bots that are no longer active/present
+            to_stop = [token for token in list(running_bots.keys()) if token not in active_tokens]
+            for token in to_stop:
+                bot_instance = running_bots[token]
+                await bot_instance.stop()
+                del running_bots[token]
+                logger.info(f"Stopped bot instance {bot_instance.bot_id[:8]}.")
+
+            # 2. Start new bots
+            for bot in active_bots:
+                token = bot["bot_token"]
+                if token not in running_bots:
+                    wf_name = bot.get("workflows", {}).get("name", "Default Workflow") if bot.get("workflows") else "Default Workflow"
+                    bot_instance = TelegramBotInstance(
+                        bot_id=bot["id"],
+                        token=token,
+                        workflow_id=bot["workflow_id"],
+                        user_id=bot["user_id"],
+                        workflow_name=wf_name
+                    )
+                    running_bots[token] = bot_instance
+                    asyncio.create_task(bot_instance.start())
+                    logger.info(f"Queued startup task for Telegram bot {bot['id'][:8]}.")
+
+        except Exception as e:
+            logger.error(f"Error in bot coordinator tick: {e}")
+
+        await asyncio.sleep(10)
+
 
 # ── Main Entrypoint ────────────────────────────────────────────────────────────
 
+async def main_async():
+    await bot_coordinator()
+
 def main():
-    logger.info("Starting Deep Agents Telegram Bot...")
-    
-    # Initialize application builder
-    builder = Application.builder().token(TELEGRAM_BOT_TOKEN)
-    
-    # Configure proxy if set in env (useful in regions where Telegram is blocked)
-    telegram_proxy = os.environ.get("TELEGRAM_PROXY", "").strip()
-    if telegram_proxy:
-        logger.info(f"Setting up network proxy: {telegram_proxy}")
-        builder.proxy(telegram_proxy)
-        
-    application = builder.build()
-
-    # Register handlers
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("workflows", workflows_command))
-    application.add_handler(CommandHandler("status", status_command))
-    application.add_handler(CommandHandler("clear", clear_command))
-    application.add_handler(CommandHandler("newthread", clear_command))
-    application.add_handler(CallbackQueryHandler(handle_callback))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Start long polling
-    logger.info("Bot is polling. Press Ctrl+C to stop.")
-    application.run_polling()
+    logger.info("Initializing Deep Agents Telegram Bot Coordinator...")
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(main_async())
+    except KeyboardInterrupt:
+        logger.info("Bot coordinator terminated by KeyboardInterrupt.")
+    except Exception as e:
+        logger.exception(f"Unhandled exception in bot coordinator: {e}")
 
 if __name__ == "__main__":
     main()

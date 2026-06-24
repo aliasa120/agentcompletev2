@@ -23,6 +23,7 @@ import { DesignAssetsSection } from "@/app/components/settings/DesignAssetsSecti
 import { ProviderOrderingSection } from "@/app/components/settings/ProviderOrderingSection";
 import { WorkflowsSection } from "@/app/components/settings/WorkflowsSection";
 import { MemoriesSection } from "@/app/components/settings/MemoriesSection";
+import { TelegramBotsSection } from "@/app/components/settings/TelegramBotsSection";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Article { id: string; title: string; description: string; url: string; source_domain: string; status: string; created_at: string; }
@@ -845,6 +846,7 @@ export default function AgentSettingsPage() {
           saveStatus={saveStatus}
         />
       );
+      case "telegram-bots": return <TelegramBotsSection />;
       default:          return null;
     }
   };

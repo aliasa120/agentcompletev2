@@ -21,7 +21,8 @@ export type SettingsSection =
   | "queue"
   | "configuration"
   | "feeder"
-  | "memories";
+  | "memories"
+  | "telegram-bots";
 
 interface NavItem {
   id: SettingsSection;
@@ -97,6 +98,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "Memories",
     description: "Manage semantic facts & graph",
     icon: <Brain className="h-4 w-4" />,
+  },
+  {
+    id: "telegram-bots",
+    label: "Telegram Bots",
+    description: "Link and manage Telegram bot tokens",
+    icon: <Bot className="h-4 w-4" />,
   },
 ];
 

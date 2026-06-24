@@ -155,7 +155,7 @@ def create_tables():
     # Check which tables already exist
     tables_to_create = []
     for table in ["workflows", "agent_configs", "agent_tool_assignments",
-                  "mcp_connections", "skills_library", "design_assets", "telegram_chat_bindings"]:
+                  "mcp_connections", "skills_library", "design_assets", "telegram_chat_bindings", "telegram_bots"]:
         exists = _table_exists(table)
         status = "✅ exists" if exists else "❌ missing"
         print(f"  {table}: {status}")
@@ -299,6 +299,17 @@ CREATE TABLE IF NOT EXISTS telegram_chat_bindings (
   PRIMARY KEY (chat_id, workflow_id)
 );
 
+-- ── telegram_bots ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS telegram_bots (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  bot_token   TEXT NOT NULL UNIQUE,
+  workflow_id UUID REFERENCES workflows(id) ON DELETE SET NULL,
+  is_active   BOOLEAN DEFAULT true,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
 -- ── Add workflow_id references to feeder/social tables if they exist ──
 ALTER TABLE feeder_sources ADD COLUMN IF NOT EXISTS workflow_id UUID REFERENCES workflows(id) ON DELETE SET NULL;
 ALTER TABLE feeder_articles ADD COLUMN IF NOT EXISTS workflow_id UUID REFERENCES workflows(id) ON DELETE SET NULL;
@@ -312,6 +323,7 @@ ALTER TABLE mcp_connections        DISABLE ROW LEVEL SECURITY;
 ALTER TABLE skills_library         DISABLE ROW LEVEL SECURITY;
 ALTER TABLE design_assets          DISABLE ROW LEVEL SECURITY;
 ALTER TABLE telegram_chat_bindings  DISABLE ROW LEVEL SECURITY;
+ALTER TABLE telegram_bots           DISABLE ROW LEVEL SECURITY;
 
 -- ── Realtime: Enable for instant config reloads ──────────────
 ALTER PUBLICATION supabase_realtime ADD TABLE workflows;
