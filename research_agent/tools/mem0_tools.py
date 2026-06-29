@@ -94,10 +94,26 @@ def search_memories(
         if results:
             for r in results:
                 if isinstance(r, dict) and r.get("memory"):
-                    msg_text = r.get("memory")
                     score = r.get("rerank_score") if r.get("rerank_score") is not None else r.get("score", 1.0)
                     if score < threshold_val:
                         continue
+                    
+                    msg_text = r.get("memory")
+                    
+                    # Extract timestamp metadata
+                    timestamp = r.get("updated_at") or r.get("created_at")
+                    if not timestamp and isinstance(r.get("metadata"), dict):
+                        metadata = r.get("metadata", {})
+                        timestamp = metadata.get("updated_at") or metadata.get("created_at")
+                    
+                    if timestamp:
+                        try:
+                            # Standardize ISO timestamps: '2026-06-29T07:31:54.635551+00:00' -> '2026-06-29 07:31:54'
+                            clean_ts = str(timestamp).replace("T", " ").split(".")[0].split("+")[0].strip()
+                            msg_text = f"{msg_text} (Saved: {clean_ts})"
+                        except Exception:
+                            pass
+                            
                     memories.append(msg_text)
                     
         if memories:
