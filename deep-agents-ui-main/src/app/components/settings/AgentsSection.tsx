@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Plus, Trash2, Save, RotateCcw, Loader2, CheckCircle2,
   XCircle, Bot, Users, ChevronDown, ChevronUp, GripVertical,
-  Sparkles, Code2, BookOpen, Puzzle, Wrench, X, ImageIcon, Images
+  Sparkles, Code2, BookOpen, Puzzle, Wrench, X, ImageIcon, Images, Sliders
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ interface ToolAssignment {
   tool_key: string;
   tool_label: string;
   enabled: boolean;
+  parameter_bindings?: Record<string, { value: any; decide_by_ai: boolean }>;
 }
 
 interface AgentConfig {
@@ -57,6 +58,7 @@ interface MCPConnection {
 const BUILTIN_TOOLS = [
   { tool_key: "unified_search",          tool_label: "Web Search",           category: "Search" },
   { tool_key: "unified_extract",         tool_label: "URL Extractor",        category: "Search" },
+  { tool_key: "youtube_transcript",      tool_label: "YouTube Transcript",    category: "Search" },
   { tool_key: "think_tool",             tool_label: "Think Tool",            category: "Reasoning" },
   { tool_key: "fetch_images_brave",      tool_label: "Brave Image Search",   category: "Images" },
   { tool_key: "view_candidate_images",   tool_label: "View Candidate Images", category: "Images" },
@@ -248,6 +250,57 @@ function ToolAssignmentPanel({
   builtinModes: Record<string, string>;
 }) {
   const [selectedSource, setSelectedSource] = useState<string>("");
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [newToolKeys, setNewToolKeys] = useState<string[]>([]);
+
+  // Expanded tool bindings settings states
+  const [expandedToolKey, setExpandedToolKey] = useState<string | null>(null);
+  const [schemasCache, setSchemasCache] = useState<Record<string, any>>({});
+  const [fetchingSchema, setFetchingSchema] = useState<boolean>(false);
+
+  const handleToggleExpand = async (toolKey: string) => {
+    if (expandedToolKey === toolKey) {
+      setExpandedToolKey(null);
+      return;
+    }
+    
+    setExpandedToolKey(toolKey);
+    
+    if (!schemasCache[toolKey]) {
+      setFetchingSchema(true);
+      try {
+        const res = await fetch("/api/tools/schema", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tool_names: [toolKey] }),
+        });
+        const data = await res.json();
+        if (data.schemas && data.schemas[toolKey]) {
+          setSchemasCache(prev => ({ ...prev, [toolKey]: data.schemas[toolKey] }));
+        }
+      } catch (err) {
+        console.error("Failed to load schema for", toolKey, err);
+      } finally {
+        setFetchingSchema(false);
+      }
+    }
+  };
+
+  const handleBindingChange = (toolKey: string, paramName: string, binding: { value: any; decide_by_ai: boolean } | null) => {
+    const updated = assigned.map(tool => {
+      if (tool.tool_key === toolKey) {
+        const bindings = { ...(tool.parameter_bindings || {}) };
+        if (binding === null) {
+          delete bindings[paramName];
+        } else {
+          bindings[paramName] = binding;
+        }
+        return { ...tool, parameter_bindings: bindings };
+      }
+      return tool;
+    });
+    onChange(updated);
+  };
 
   const getToolLoadingMode = (toolKey: string, toolType: string) => {
     if (toolType === "skill") {
@@ -285,17 +338,17 @@ function ToolAssignmentPanel({
       </span>
     );
   };
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [newToolKeys, setNewToolKeys] = useState<string[]>([]);
 
   const removeTool = (toolKey: string) => {
     onChange(assigned.filter(t => t.tool_key !== toolKey));
     setSelectedKeys(prev => prev.filter(k => k !== toolKey));
+    if (expandedToolKey === toolKey) setExpandedToolKey(null);
   };
 
   const bulkDetach = () => {
     onChange(assigned.filter(t => !selectedKeys.includes(t.tool_key)));
     setSelectedKeys([]);
+    setExpandedToolKey(null);
   };
 
   // Get available tools to add from selected source
@@ -335,6 +388,7 @@ function ToolAssignmentPanel({
         tool_key: t.key,
         tool_label: t.label,
         enabled: true,
+        parameter_bindings: {},
       }));
 
     onChange([...assigned, ...newAssignments]);
@@ -384,57 +438,181 @@ function ToolAssignmentPanel({
           </div>
         ) : (
           <div className="border rounded-lg bg-card/50 overflow-hidden">
-            <div className="max-h-60 overflow-y-auto divide-y">
+            <div className="max-h-[350px] overflow-y-auto divide-y">
               {assigned.map(t => {
                 const isSelected = selectedKeys.includes(t.tool_key);
+                const hasBindings = t.parameter_bindings && Object.keys(t.parameter_bindings).length > 0;
                 return (
-                  <div
-                    key={t.tool_key}
-                    className={`flex items-center justify-between p-2 hover:bg-muted/30 transition-colors ${
-                      isSelected ? "bg-primary/5" : ""
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedKeys(prev => [...prev, t.tool_key]);
-                          } else {
-                            setSelectedKeys(prev => prev.filter(k => k !== t.tool_key));
-                          }
-                        }}
-                        className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-xs text-foreground truncate max-w-[240px]">
-                            {t.tool_label}
-                          </span>
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase shrink-0 ${
-                            t.tool_type === "skill"
-                              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-                              : t.tool_type === "mcp"
-                              ? "bg-violet-500/10 border-violet-500/20 text-violet-600 dark:text-violet-400"
-                              : "bg-primary/10 border-primary/20 text-primary"
-                          }`}>
-                            {t.tool_type}
-                          </span>
-                          {renderLoadingModeBadge(t.tool_key, t.tool_type)}
+                  <div key={t.tool_key} className="flex flex-col">
+                    <div
+                      className={`flex items-center justify-between p-2 hover:bg-muted/30 transition-colors ${
+                        isSelected ? "bg-primary/5" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedKeys(prev => [...prev, t.tool_key]);
+                            } else {
+                              setSelectedKeys(prev => prev.filter(k => k !== t.tool_key));
+                            }
+                          }}
+                          className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-xs text-foreground truncate max-w-[240px]">
+                              {t.tool_label}
+                            </span>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase shrink-0 ${
+                              t.tool_type === "skill"
+                                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                                : t.tool_type === "mcp"
+                                ? "bg-violet-500/10 border-violet-500/20 text-violet-600 dark:text-violet-400"
+                                : "bg-primary/10 border-primary/20 text-primary"
+                            }`}>
+                              {t.tool_type}
+                            </span>
+                            {renderLoadingModeBadge(t.tool_key, t.tool_type)}
+                            {hasBindings && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+                                Customized
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground font-mono truncate">{t.tool_key}</p>
                         </div>
-                        <p className="text-[10px] text-muted-foreground font-mono truncate">{t.tool_key}</p>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleExpand(t.tool_key)}
+                          className={`p-1 rounded-full hover:bg-foreground/10 transition-colors ${
+                            expandedToolKey === t.tool_key ? "text-primary bg-primary/10" : "text-muted-foreground"
+                          }`}
+                          title="Configure parameter bindings"
+                        >
+                          <Sliders className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeTool(t.tool_key)}
+                          className="p-1 rounded-full hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors mr-1"
+                          title="Detach tool"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => removeTool(t.tool_key)}
-                      className="p-1 rounded-full hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors mr-1"
-                      title="Detach tool"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                    {expandedToolKey === t.tool_key && (
+                      <div className="px-10 py-3 bg-muted/20 border-t text-xs space-y-3">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-primary mb-2">
+                          <Sliders className="h-3.5 w-3.5" />
+                          <span>Tool Parameters Config</span>
+                        </div>
+                        {fetchingSchema && !schemasCache[t.tool_key] ? (
+                          <div className="flex items-center gap-2 text-muted-foreground text-xs py-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Loading parameters schema...
+                          </div>
+                        ) : (() => {
+                          const schema = schemasCache[t.tool_key];
+                          const properties = schema?.function?.parameters?.properties;
+                          const required = schema?.function?.parameters?.required || [];
+                          
+                          if (!properties || Object.keys(properties).length === 0) {
+                            return <p className="text-[11px] text-muted-foreground italic">No configurable parameters for this tool.</p>;
+                          }
+                          
+                          return (
+                            <div className="space-y-3 max-w-xl">
+                              {Object.entries(properties).map(([paramName, paramSchema]: [string, any]) => {
+                                const isRequired = required.includes(paramName);
+                                const binding = t.parameter_bindings?.[paramName];
+                                const decideByAi = binding ? binding.decide_by_ai : true;
+                                const val = binding ? binding.value : (paramSchema.default !== undefined ? paramSchema.default : "");
+
+                                return (
+                                  <div key={paramName} className="space-y-1.5 border-t border-muted/50 pt-2.5 first:border-t-0 first:pt-0">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <span className="text-xs font-semibold font-mono text-foreground">{paramName}</span>
+                                        {isRequired && <span className="text-red-500 text-[10px] ml-1 font-bold">*</span>}
+                                        <span className="text-[10px] text-muted-foreground ml-1.5 font-mono">({paramSchema.type || "string"})</span>
+                                      </div>
+                                      <select
+                                        value={decideByAi ? "ai" : "fixed"}
+                                        onChange={(e) => {
+                                          if (e.target.value === "ai") {
+                                            handleBindingChange(t.tool_key, paramName, null);
+                                          } else {
+                                            handleBindingChange(t.tool_key, paramName, { value: val, decide_by_ai: false });
+                                          }
+                                        }}
+                                        className="h-6 rounded border bg-background px-2 text-[10px] focus:outline-none focus:ring-1 focus:ring-primary"
+                                      >
+                                        <option value="ai">Decide by AI</option>
+                                        <option value="fixed">Fixed Value</option>
+                                      </select>
+                                    </div>
+                                    {paramSchema.description && (
+                                      <p className="text-[10px] text-muted-foreground leading-relaxed italic">{paramSchema.description}</p>
+                                    )}
+                                    {!decideByAi && (
+                                      <div className="mt-1">
+                                        {paramSchema.enum ? (
+                                          <select
+                                            value={val}
+                                            onChange={(e) => handleBindingChange(t.tool_key, paramName, { value: e.target.value, decide_by_ai: false })}
+                                            className="w-full h-8 rounded border bg-background px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                          >
+                                            <option value="">-- Select option --</option>
+                                            {paramSchema.enum.map((opt: string) => (
+                                              <option key={opt} value={opt}>{opt}</option>
+                                            ))}
+                                          </select>
+                                        ) : paramSchema.type === "boolean" ? (
+                                          <label className="flex items-center gap-2 cursor-pointer select-none py-1">
+                                            <input
+                                              type="checkbox"
+                                              checked={!!val}
+                                              onChange={(e) => handleBindingChange(t.tool_key, paramName, { value: e.target.checked, decide_by_ai: false })}
+                                              className="rounded border-input text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                                            />
+                                            <span className="text-xs font-medium">True</span>
+                                          </label>
+                                        ) : paramSchema.type === "integer" || paramSchema.type === "number" ? (
+                                          <Input
+                                            type="number"
+                                            value={val}
+                                            onChange={(e) => handleBindingChange(t.tool_key, paramName, { value: Number(e.target.value), decide_by_ai: false })}
+                                            className="h-8 text-xs bg-background"
+                                            placeholder={`Enter ${paramName} value...`}
+                                          />
+                                        ) : (
+                                          <Input
+                                            type="text"
+                                            value={val}
+                                            onChange={(e) => handleBindingChange(t.tool_key, paramName, { value: e.target.value, decide_by_ai: false })}
+                                            className="h-8 text-xs bg-background"
+                                            placeholder={`Enter ${paramName} value...`}
+                                          />
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 );
               })}

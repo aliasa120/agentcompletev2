@@ -8,6 +8,7 @@ search, load, and execute tools under three distinct delivery modes:
 """
 
 import os
+import tempfile
 import json
 import logging
 from typing import List, Dict, Any, Optional
@@ -22,6 +23,7 @@ from research_agent.tools import (
     unified_search,
     unified_extract,
     create_post_image,
+    youtube_transcript,
     think_tool,
     fetch_images_brave,
     view_candidate_images,
@@ -35,17 +37,7 @@ from research_agent.tools import (
     publish_to_wordpress,
 )
 from research_agent.tools.mem0_tools import (
-    add_memory,
     search_memories,
-    get_memories,
-    get_memory,
-    update_memory,
-    delete_memory,
-    delete_all_memories,
-    delete_entities,
-    list_entities,
-    list_events,
-    get_event_status,
 )
 
 # Registry mapping tool names to actual tool objects
@@ -53,6 +45,7 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
     "unified_search": unified_search,
     "unified_extract": unified_extract,
     "create_post_image": create_post_image,
+    "youtube_transcript": youtube_transcript,
     "think_tool": think_tool,
     "fetch_images_brave": fetch_images_brave,
     "view_candidate_images": view_candidate_images,
@@ -64,22 +57,21 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
     "manage_skill": manage_skill,
     "get_wordpress_categories": get_wordpress_categories,
     "publish_to_wordpress": publish_to_wordpress,
-    # Mem0 memory tools
-    "add_memory": add_memory,
+    # Mem0 memory tools (only search_memories is exposed to agent)
     "search_memories": search_memories,
-    "get_memories": get_memories,
-    "get_memory": get_memory,
-    "update_memory": update_memory,
-    "delete_memory": delete_memory,
-    "delete_all_memories": delete_all_memories,
-    "delete_entities": delete_entities,
-    "list_entities": list_entities,
-    "list_events": list_events,
-    "get_event_status": get_event_status,
 }
 
 # Rich tool metadata including descriptions, keywords (synonyms), and example triggers
 TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
+    "youtube_transcript": {
+        "short_description": "Extract full transcript from public YouTube videos as structured Markdown.",
+        "keywords": ["youtube", "transcript", "youtube transcript", "video transcript", "video subtitles", "video text", "extract subtitles"],
+        "example_triggers": [
+            "Get the transcript of this YouTube video.",
+            "Extract subtitles from this YouTube link.",
+            "Read what is said in this video ID dQw4w9WgXcQ."
+        ]
+    },
     "unified_search": {
         "short_description": "Search the web for news, facts, and general information about a topic.",
         "keywords": ["search", "web search", "google", "brave", "tavily", "linkup", "find facts", "lookup"],
@@ -206,95 +198,13 @@ TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
             "Send the article to the WordPress site."
         ]
     },
-    "add_memory": {
-        "short_description": "Save text or conversation history to the long-term memory for a user/agent/run.",
-        "keywords": ["remember", "save memory", "add memory", "learn fact", "keep preference"],
-        "example_triggers": [
-            "Remember that the user likes dark mode.",
-            "Add this user preference to long term memory.",
-            "Save my name to memory."
-        ]
-    },
     "search_memories": {
-        "short_description": "Search for relevant past memories semantically using a query and optional filters.",
-        "keywords": ["search memory", "find fact", "query memories", "recall", "get preference"],
+        "short_description": "Search for relevant past memories (such as user preferences, past choices, or installed tools) semantically.",
+        "keywords": ["search memory", "find fact", "query memories", "recall", "get preference", "who am i", "my settings"],
         "example_triggers": [
             "Search memories for the user's favorite drink.",
             "Find past facts about this user.",
             "Recall user preferences."
-        ]
-    },
-    "get_memories": {
-        "short_description": "List and retrieve memories with structured filters and limit.",
-        "keywords": ["list memories", "get memories", "retrieve memories", "view facts"],
-        "example_triggers": [
-            "List all memories for this agent.",
-            "Retrieve user's memories.",
-            "View all long-term memories."
-        ]
-    },
-    "get_memory": {
-        "short_description": "Retrieve details of a single memory by its unique memory ID.",
-        "keywords": ["get memory", "fetch memory", "view memory detail"],
-        "example_triggers": [
-            "Get details for memory 'uuid-123'.",
-            "Fetch memory details."
-        ]
-    },
-    "update_memory": {
-        "short_description": "Overwrite an existing memory's text and metadata.",
-        "keywords": ["update memory", "edit memory", "overwrite memory", "change fact"],
-        "example_triggers": [
-            "Update the memory 'uuid-123' with new details.",
-            "Change this memory text."
-        ]
-    },
-    "delete_memory": {
-        "short_description": "Delete a single memory by its unique memory ID.",
-        "keywords": ["delete memory", "remove memory", "forget fact"],
-        "example_triggers": [
-            "Delete memory 'uuid-123'.",
-            "Remove this fact from memory."
-        ]
-    },
-    "delete_all_memories": {
-        "short_description": "Bulk delete all memories matching the specified user, agent, or run filters.",
-        "keywords": ["clear memory", "bulk delete memories", "wipe memories"],
-        "example_triggers": [
-            "Delete all memories for this user.",
-            "Clear all memories."
-        ]
-    },
-    "delete_entities": {
-        "short_description": "Delete all memories associated with a specific entity (user, agent, or run).",
-        "keywords": ["delete entity", "remove user memory", "forget agent"],
-        "example_triggers": [
-            "Delete entity 'agent-123' memories.",
-            "Wipe user entity memories."
-        ]
-    },
-    "list_entities": {
-        "short_description": "Enumerate unique user, agent, and run entities stored in the long-term memory.",
-        "keywords": ["list entities", "view users", "list agents", "list runs"],
-        "example_triggers": [
-            "List unique users in memory.",
-            "What agents have memories stored?"
-        ]
-    },
-    "list_events": {
-        "short_description": "List history of memory modifications and operations events.",
-        "keywords": ["memory events", "list events", "modification history", "audit log"],
-        "example_triggers": [
-            "List modification history for this memory.",
-            "Show memory events history."
-        ]
-    },
-    "get_event_status": {
-        "short_description": "Check the status of an asynchronous memory operation by its event ID.",
-        "keywords": ["event status", "check event", "memory operation status"],
-        "example_triggers": [
-            "Check status for event 'evt-123'.",
-            "Is this memory operation done?"
         ]
     }
 }
@@ -302,7 +212,7 @@ TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
 # Fallback tools grouped by category if semantic search yields no results
 FALLBACK_CATEGORIES: Dict[str, List[str]] = {
     "search": ["unified_search", "fetch_images_brave"],
-    "extract": ["unified_extract"],
+    "extract": ["unified_extract", "youtube_transcript"],
     "content": ["create_post_image", "analyze_images_gemini", "view_candidate_images", "get_design_guide"],
     "skills": ["read_skill", "list_skills", "manage_skill"],
     "publishing": ["get_wordpress_categories", "publish_to_wordpress", "save_posts_to_supabase"],
@@ -843,8 +753,20 @@ def load_tools(tool_names: List[str], agent_id: Optional[str] = None) -> str:
                     tool_obj = mcp_tools[0]
             except Exception as e:
                 logger.warning(f"Failed to load dynamic MCP tool '{name}': {e}")
+                try:
+                    log_path = os.path.join(tempfile.gettempdir(), "agent_load.log")
+                    with open(log_path, "a", encoding="utf-8") as f:
+                        import traceback
+                        f.write(f"\n--- Failed to load dynamic MCP tool '{name}' ---\n")
+                        f.write(traceback.format_exc())
+                        f.write("-" * 40 + "\n")
+                except Exception:
+                    pass
 
         if tool_obj:
+            if agent_id:
+                bindings = get_tool_bindings(agent_id, name)
+                tool_obj = bind_tool_parameters(tool_obj, bindings)
             try:
                 schema_dict = convert_to_openai_tool(tool_obj)
                 schemas[name] = schema_dict
@@ -896,6 +818,17 @@ def call_tool(tool_name: str, arguments: Dict[str, Any], agent_id: Optional[str]
         if tool_name not in allowed_tools:
             return f"Error: Tool '{tool_name}' is not assigned to this agent or is disabled."
 
+    # Fetch bindings and merge arguments
+    if agent_id:
+        bindings = get_tool_bindings(agent_id, tool_name)
+        if bindings:
+            bound_params = {}
+            for param_name, param_cfg in bindings.items():
+                if isinstance(param_cfg, dict) and not param_cfg.get("decide_by_ai", True):
+                    bound_params[param_name] = param_cfg.get("value")
+            if bound_params:
+                arguments = {**arguments, **bound_params}
+
     logger.info(f"Executing dynamic tool '{tool_name}' with arguments: {arguments}")
     
     # 1. Built-in lookup
@@ -912,13 +845,47 @@ def call_tool(tool_name: str, arguments: Dict[str, Any], agent_id: Optional[str]
     try:
         from research_agent.tools.provider_engine import load_mcp_tool_by_key
         from research_agent.tools.mcp_loader import run_sync
-        
+
         mcp_tools = run_sync(load_mcp_tool_by_key(tool_name))
         if mcp_tools:
             mcp_tool_obj = mcp_tools[0]
-            # Invoke the tool
-            res = mcp_tool_obj.invoke(arguments)
-            return str(res)
+            # MCP StructuredTools from langchain_mcp_adapters are async-only.
+            # Each invocation re-opens the stdio subprocess (shutil.which → os.access),
+            # so we must bypass blockbuster by setting blockbuster_skip=True in the
+            # worker thread before running the event loop.
+            def _invoke_mcp_tool():
+                try:
+                    from blockbuster.blockbuster import blockbuster_skip
+                    skip_token = blockbuster_skip.set(True)
+                except Exception:
+                    skip_token = None
+
+                import asyncio
+                new_loop = asyncio.new_event_loop()
+                try:
+                    return new_loop.run_until_complete(mcp_tool_obj.ainvoke(arguments))
+                finally:
+                    new_loop.close()
+                    if skip_token is not None:
+                        try:
+                            blockbuster_skip.reset(skip_token)
+                        except Exception:
+                            pass
+
+            import threading as _threading
+            result_holder = []
+            err_holder = []
+            def _run():
+                try:
+                    result_holder.append(_invoke_mcp_tool())
+                except Exception as exc:
+                    err_holder.append(exc)
+            t = _threading.Thread(target=_run)
+            t.start()
+            t.join()
+            if err_holder:
+                raise err_holder[0]
+            return str(result_holder[0])
         else:
             return f"Error: Tool '{tool_name}' is not loaded or could not be found."
     except Exception as e:
@@ -975,4 +942,107 @@ def get_embedding_sync(text: str, input_type: str = "passage") -> list[float]:
         pinecone_api_key=api_key
     )
     return embeddings.embed_query(text)
+
+
+def bind_tool_parameters(tool: Any, bindings: Dict[str, Any]) -> Any:
+    """Wrap a tool with custom parameter bindings, modifying its schema and injecting fixed values."""
+    if not bindings:
+        return tool
+
+    # Extract parameters configured by the user to NOT be decided by AI
+    # bindings format: {"param_name": {"value": val, "decide_by_ai": False}}
+    bound_params = {}
+    for param_name, param_cfg in bindings.items():
+        if isinstance(param_cfg, dict) and not param_cfg.get("decide_by_ai", True):
+            bound_params[param_name] = param_cfg.get("value")
+
+    if not bound_params:
+        return tool
+
+    logger.info(f"Wrapping tool '{tool.name}' with bound parameters: {list(bound_params.keys())}")
+
+    # Define wrapped execution functions
+    def _run(*args, **kwargs):
+        merged = {**kwargs, **bound_params}
+        return tool.invoke(merged)
+
+    async def _arun(*args, **kwargs):
+        merged = {**kwargs, **bound_params}
+        return await tool.ainvoke(merged)
+
+    # Build new args_schema
+    from pydantic import create_model
+    from pydantic.fields import FieldInfo
+    
+    new_args_schema = None
+    if getattr(tool, "args_schema", None) is not None:
+        fields = {}
+        for field_name, field_info in tool.args_schema.model_fields.items():
+            if field_name not in bound_params:
+                fields[field_name] = (field_info.annotation, field_info)
+        new_args_schema = create_model(
+            tool.args_schema.__name__,
+            **fields
+        )
+    else:
+        # Build schema from tool.args properties if no args_schema is present
+        type_mapping = {
+            "string": str,
+            "integer": int,
+            "number": float,
+            "boolean": bool,
+            "array": list,
+            "object": dict
+        }
+        fields = {}
+        for param_name, param_schema in tool.args.items():
+            if param_name not in bound_params:
+                js_type = param_schema.get("type", "string")
+                py_type = type_mapping.get(js_type, Any)
+                desc = param_schema.get("description", "")
+                
+                if "default" in param_schema:
+                    field_info = FieldInfo(default=param_schema["default"], description=desc)
+                else:
+                    field_info = FieldInfo(default=None, description=desc)
+                    
+                fields[param_name] = (py_type, field_info)
+        new_args_schema = create_model(
+            f"{tool.name}Args",
+            **fields
+        )
+
+    # Create the wrapped StructuredTool
+    from langchain_core.tools import StructuredTool
+    wrapped = StructuredTool(
+        name=tool.name,
+        description=tool.description,
+        func=_run,
+        coroutine=_arun,
+        args_schema=new_args_schema
+    )
+    return wrapped
+
+
+def get_tool_bindings(agent_id: str, tool_name: str) -> Dict[str, Any]:
+    """Fetch tool parameter bindings from Supabase."""
+    try:
+        from supabase import create_client
+        url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        if not url or not key:
+            return {}
+        client = create_client(url, key)
+        resp = client.table("agent_tool_assignments") \
+            .select("parameter_bindings") \
+            .eq("agent_id", agent_id) \
+            .eq("tool_key", tool_name) \
+            .eq("enabled", True) \
+            .execute()
+        rows = resp.data or []
+        if rows:
+            return rows[0].get("parameter_bindings") or {}
+    except Exception as e:
+        logger.warning(f"Error fetching tool bindings: {e}")
+    return {}
 

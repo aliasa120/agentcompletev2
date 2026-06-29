@@ -3,6 +3,7 @@ import os
 import logging
 from typing import Dict, Any, Optional, List
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
 from research_agent.tools.mem0_provider import get_mem0_client
 
 logger = logging.getLogger(__name__)
@@ -47,32 +48,64 @@ def add_memory(
 @tool(parse_docstring=True)
 def search_memories(
     query: str,
-    user_id: Optional[str] = None,
-    agent_id: Optional[str] = None,
-    run_id: Optional[str] = None,
-    limit: int = 5
+    config: RunnableConfig,
+    limit: int = 10
 ) -> str:
-    """Search for relevant past memories semantically using a query and optional filters.
+    """Search for relevant past memories (such as user preferences, past choices, or installed tools) semantically.
+    
+    This tool should be used when the user asks questions about their identity, preferences, or the current system setup (e.g. 'who am i', 'what are my preferences', 'what tools do I have').
 
     Args:
         query: The semantic search query (e.g. 'What is the user's favorite drink?')
-        user_id: Optional identifier to filter memories by user
-        agent_id: Optional identifier to filter memories by agent/workflow
-        run_id: Optional identifier to filter memories by run
-        limit: Maximum number of memories to return (defaults to 5)
+        config: LangChain runnable configuration (automatically injected).
+        limit: Maximum number of memories to return (defaults to 10).
     """
     try:
         client = _get_mem_client()
-        filters = {}
-        if user_id:
-            filters["user_id"] = user_id
-        if agent_id:
-            filters["agent_id"] = agent_id
-        if run_id:
-            filters["run_id"] = run_id
+        configurable = config.get("configurable", {})
+        workflow_id = configurable.get("workflow_id")
+        user_id = configurable.get("user_id")
+        
+        # Construct the scope ID matching the agent's scope (strict tenant isolation)
+        raw_scope = f"{user_id}_{workflow_id}" if user_id else str(workflow_id)
+        scope_id = raw_scope.lower().replace("_", "-")
+        
+        # Get threshold setting
+        from research_agent.tools.provider_engine import get_settings
+        settings = get_settings()
+        try:
+            threshold_val = float(settings.get("mem0_rerank_threshold", "0.50"))
+        except ValueError:
+            threshold_val = 0.50
 
-        res = client.search(query, filters=filters if filters else None, top_k=limit)
-        return f"Found memories: {res}"
+        print(f"[mem0_tools] Searching Mem0 memories for query '{query}' in scope {scope_id}...")
+        results = client.search(
+            query,
+            filters={"user_id": scope_id},
+            top_k=20, # Fetch broad set for reranking
+            threshold=0.1,
+            rerank=True
+        )
+        
+        if isinstance(results, dict):
+            results = results.get("results", [])
+            
+        memories = []
+        if results:
+            for r in results:
+                if isinstance(r, dict) and r.get("memory"):
+                    msg_text = r.get("memory")
+                    score = r.get("rerank_score") if r.get("rerank_score") is not None else r.get("score", 1.0)
+                    if score < threshold_val:
+                        continue
+                    memories.append(msg_text)
+                    
+        if memories:
+            memories = memories[:limit]
+            formatted_memories = "\n".join(f"- {m}" for m in memories)
+            return f"Found relevant memories:\n{formatted_memories}"
+        else:
+            return "No relevant memories found."
     except Exception as e:
         logger.error(f"Error in search_memories: {e}")
         return f"Error searching memories: {e}"

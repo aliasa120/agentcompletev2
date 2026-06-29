@@ -429,7 +429,14 @@ def _fetch_active_mcp_connections() -> list[dict]:
     return []
 
 async def load_mcp_tool_by_key(tool_key: str) -> list[BaseTool]:
-    """Find and load a specific MCP tool by its key from active connections."""
+    """Find and load a specific MCP tool by its key from active connections.
+
+    Strategy:
+    1. Check the DB cache (available_tools column) for each active connection.
+    2. If not found in cache, fall back to live discovery: probe every active
+       manual HTTP connection directly, find the tool, then backfill the DB cache.
+    This makes the system self-healing — tools work even if available_tools is empty.
+    """
     # Intercept internal virtual Mem0 MCP tools
     if tool_key in [
         "add_memory", "search_memories", "get_memories", "get_memory",
@@ -441,9 +448,9 @@ async def load_mcp_tool_by_key(tool_key: str) -> list[BaseTool]:
         if tool_obj:
             return [tool_obj]
 
-    import os
     connections = run_in_thread(_fetch_active_mcp_connections)
 
+    # ── Stage 1: DB-cache lookup (fast path) ──────────────────────────────────
     for conn in connections:
         available = conn.get("available_tools") or []
         for t in available:
@@ -473,13 +480,124 @@ async def load_mcp_tool_by_key(tool_key: str) -> list[BaseTool]:
                                     f.write(f"\n--- Composio Load Error for '{tool_key}' ---\n{traceback.format_exc()}\n")
                             except Exception:
                                 pass
-                            pass
                     else:
                         try:
                             with open("agent_load.log", "a", encoding="utf-8") as f:
-                                f.write(f"\n[load_mcp_tool_by_key] WARNING: COMPOSIO_API_KEY is missing or empty! Env keys: {[k for k in os.environ.keys() if 'COMPOSIO' in k]}\n")
+                                f.write(
+                                    f"\n[load_mcp_tool_by_key] WARNING: COMPOSIO_API_KEY missing! "
+                                    f"Env keys: {[k for k in os.environ.keys() if 'COMPOSIO' in k]}\n"
+                                )
                         except Exception:
                             pass
+
+    # ── Stage 2: Live-discovery fallback (self-healing) ───────────────────────
+    # No cached entry matched. Probe every active manual HTTP connection live.
+    logger.info(
+        f"[load_mcp_tool_by_key] '{tool_key}' not in DB cache. "
+        "Attempting live discovery across manual HTTP connections..."
+    )
+    for conn in connections:
+        if conn.get("connection_type") != "manual":
+            continue
+        mcp_url_raw = conn.get("mcp_url", "")
+
+        # Resolve the URL to probe
+        url_to_probe = ""
+        custom_headers: dict = {}
+        if mcp_url_raw.strip().startswith("{"):
+            try:
+                import json as _json
+                parsed = _json.loads(mcp_url_raw)
+                url_to_probe = parsed.get("url", "")
+                custom_headers = parsed.get("headers") or {}
+            except Exception:
+                pass
+        elif mcp_url_raw.startswith("http://") or mcp_url_raw.startswith("https://"):
+            url_to_probe = mcp_url_raw
+
+        if not (url_to_probe.startswith("http://") or url_to_probe.startswith("https://")):
+            continue  # skip stdio / unknown connections
+
+        try:
+            from research_agent.tools.mcp_loader import load_manual_mcp_tool
+            result = await load_manual_mcp_tool(mcp_url_raw, tool_key)
+            if result:
+                logger.info(
+                    f"[load_mcp_tool_by_key] Live discovery SUCCESS: found '{tool_key}' "
+                    f"on '{conn.get('label', conn.get('id', '?'))}'. Backfilling DB cache..."
+                )
+                # Backfill available_tools in DB so the next call is instant
+                try:
+                    import httpx
+                    import json as _json
+                    base_url = url_to_probe.split("#")[0]
+                    post_headers = {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/event-stream",
+                        **custom_headers,
+                    }
+                    async with httpx.AsyncClient(timeout=8.0) as hx:
+                        probe = await hx.post(
+                            base_url,
+                            headers=post_headers,
+                            json={"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1},
+                        )
+                        if probe.status_code == 200:
+                            raw_tools = []
+                            text = probe.text
+                            # Try plain JSON first
+                            try:
+                                probe_data = _json.loads(text)
+                                raw_tools = probe_data.get("result", {}).get("tools", [])
+                            except Exception:
+                                pass
+                            # Fall back to SSE-encoded JSON
+                            if not raw_tools:
+                                for line in text.split("\n"):
+                                    if line.startswith("data:"):
+                                        payload = line[5:].strip()
+                                        if not payload:
+                                            continue
+                                        try:
+                                            probe_data = _json.loads(payload)
+                                            raw_tools = probe_data.get("result", {}).get("tools", [])
+                                            if raw_tools:
+                                                break
+                                        except Exception:
+                                            pass
+                            backfill = [
+                                {
+                                    "tool_key": t.get("name"),
+                                    "tool_name": t.get("title") or t.get("name"),
+                                    "description": t.get("description", ""),
+                                }
+                                for t in raw_tools
+                                if t.get("name")
+                            ]
+                            if backfill:
+                                sb_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+                                sb_key = os.environ.get("SUPABASE_ANON_KEY", "")
+                                if sb_url and sb_key:
+                                    from supabase import create_client as _sc
+                                    db = _sc(sb_url, sb_key)
+                                    db.table("mcp_connections").update(
+                                        {"available_tools": backfill}
+                                    ).eq("id", conn.get("id")).execute()
+                                    logger.info(
+                                        f"[load_mcp_tool_by_key] Backfilled {len(backfill)} tools "
+                                        f"for '{conn.get('label', '?')}'"
+                                    )
+                except Exception as backfill_err:
+                    logger.warning(
+                        f"[load_mcp_tool_by_key] Backfill failed (non-critical): {backfill_err}"
+                    )
+                return result
+        except Exception as live_err:
+            logger.debug(
+                f"[load_mcp_tool_by_key] Live probe failed for "
+                f"'{conn.get('label', '?')}': {live_err}"
+            )
+
     return []
 
 

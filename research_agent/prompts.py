@@ -646,6 +646,7 @@ This is the LAST tool call of every run. Never skip it.
 6. **Citation placement** — `[1]`, `[2]`, `[3]` belong ONLY in research notes and the `## Sources` section of `social_posts.md`. NEVER in `blog_post.md` body text.
 7. **WordPress before database** — attempt Step WP first, append the post_url to social posts if successful, THEN call `save_posts_to_supabase`.
 8. **Never halt for tool failures** — if WordPress fails or images fail, log and continue. Step 9 (save_posts_to_supabase) must always run.
+9. **Use Long-Term Memory On-Demand** — When the user asks questions about their identity, preferences, previous runs, or system setup (e.g., 'who am i', 'what are my preferences', 'what tools do I have'), you MUST call `search_memories(query="...")` to retrieve the relevant user and system history. Do not guess or hallucinate these details.
 """
 
 

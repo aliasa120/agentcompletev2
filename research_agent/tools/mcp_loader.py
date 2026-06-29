@@ -6,6 +6,7 @@ Supports:
 """
 
 import os
+import tempfile
 import json
 import asyncio
 import logging
@@ -90,6 +91,27 @@ def sanitize_credentials(text: str) -> str:
         return text
     return _CREDENTIAL_PATTERN.sub("[REDACTED]", text)
 
+def _safe_reraise(exc: Exception) -> Exception:
+    """Re-raise an exception with a sanitized message, safely handling exceptions
+    whose constructors require multiple positional arguments (e.g. json.JSONDecodeError
+    requires msg, doc, pos — calling JSONDecodeError(msg) alone raises TypeError).
+    
+    Strategy: try to reconstruct via type(e)(msg); if that fails, fall back to
+    wrapping in a plain RuntimeError so the sanitized message is always preserved.
+    """
+    sanitized_msg = sanitize_credentials(str(exc))
+    try:
+        new_exc = type(exc)(sanitized_msg)
+        new_exc.__traceback__ = exc.__traceback__
+        return new_exc
+    except TypeError:
+        # Constructor needs more args than just the message string
+        wrapper = RuntimeError(sanitized_msg)
+        wrapper.__cause__ = None
+        wrapper.__traceback__ = exc.__traceback__
+        return wrapper
+
+
 def wrap_tool_with_redaction(tool: BaseTool) -> BaseTool:
     """Wraps a LangChain tool's execution to redact credentials from outputs and error messages."""
     import functools
@@ -102,7 +124,7 @@ def wrap_tool_with_redaction(tool: BaseTool) -> BaseTool:
             res = orig_run(*args, **kwargs)
             return sanitize_credentials(str(res)) if isinstance(res, str) else res
         except Exception as e:
-            raise type(e)(sanitize_credentials(str(e)))
+            raise _safe_reraise(e) from None
 
     @functools.wraps(orig_arun)
     async def redacted_arun(*args, **kwargs):
@@ -110,7 +132,7 @@ def wrap_tool_with_redaction(tool: BaseTool) -> BaseTool:
             res = await orig_arun(*args, **kwargs)
             return sanitize_credentials(str(res)) if isinstance(res, str) else res
         except Exception as e:
-            raise type(e)(sanitize_credentials(str(e)))
+            raise _safe_reraise(e) from None
 
     tool._arun = redacted_arun
     tool._run = redacted_run
@@ -226,7 +248,7 @@ class ZapierActionTool(BaseTool):
             return sanitize_credentials(f"Error executing Zapier action: {e}")
 
 def run_sync(coro):
-    """Run an async coroutine synchronously, safe for running event loops."""
+    """Run an async coroutine synchronously, safe for nested event loops."""
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -254,6 +276,7 @@ def run_sync(coro):
         return asyncio.run(coro)
 
 
+
 async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, Any] = None) -> List[BaseTool]:
     """Connect to a manual MCP server via SSE or Stdio and fetch the specified tool."""
     # Intercept internal virtual Mem0 MCP tools
@@ -274,11 +297,48 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
     except ImportError:
         logger.warning("langchain-mcp-adapters not installed. Skipping manual tool loading.")
         return []
-    # Try parsing mcp_url as JSON for custom stdio/sse configs
+    # Try parsing mcp_url as JSON for custom stdio/sse/http configs
     config_data = None
     if mcp_url.strip().startswith("{"):
         try:
-            config_data = json.loads(mcp_url)
+            parsed = json.loads(mcp_url)
+            # Support Claude Desktop format
+            if isinstance(parsed, dict):
+                if "mcpServers" in parsed and isinstance(parsed["mcpServers"], dict):
+                    server_names = list(parsed["mcpServers"].keys())
+                    if server_names:
+                        server_name = server_names[0]
+                        server_config = parsed["mcpServers"][server_name]
+                        config_data = {
+                            "transport": "stdio",
+                            "command": server_config.get("command"),
+                            "args": server_config.get("args", []),
+                            "env": server_config.get("env", {})
+                        }
+                else:
+                    # Look for a nested config under a single server name key
+                    nested_config = None
+                    metadata_keys = {"description", "mcp_version", "transport", "url", "headers"}
+                    for k, v in parsed.items():
+                        if k not in metadata_keys and isinstance(v, dict):
+                            if "command" in v or "url" in v:
+                                nested_config = v
+                                break
+                    
+                    if nested_config:
+                        config_data = {
+                            "transport": parsed.get("transport") or nested_config.get("transport") or ("stdio" if "command" in nested_config else "sse"),
+                            "command": nested_config.get("command"),
+                            "args": nested_config.get("args", []),
+                            "env": nested_config.get("env", {})
+                        }
+                        if "url" in nested_config:
+                            config_data["url"] = nested_config["url"]
+                        if "headers" in nested_config:
+                            config_data["headers"] = nested_config["headers"]
+                    else:
+                        # Flat format
+                        config_data = parsed
         except Exception as je:
             logger.warning(f"Failed to parse mcp_url as JSON: {je}")
 
@@ -286,7 +346,7 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
     headers = {}
     mcp_url_str = mcp_url
     if config_data and isinstance(config_data, dict):
-        mcp_url_str = config_data.get("url", mcp_url)
+        mcp_url_str = config_data.get("url") or mcp_url or ""
 
     # Strip hash fragment from URL to get the base endpoint
     base_url = mcp_url_str.split("#")[0]
@@ -296,6 +356,196 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
         zapier_secret = os.environ.get("ZAPIER_MCP_SECRET", "")
         if zapier_secret:
             headers["Authorization"] = f"Bearer {zapier_secret}"
+
+    # Merge custom headers from JSON configuration (e.g. for remote authenticated MCPs like Apify)
+    if config_data and isinstance(config_data, dict):
+        custom_headers = config_data.get("headers")
+        if isinstance(custom_headers, dict):
+            for k, v in custom_headers.items():
+                headers[str(k)] = str(v)
+
+    # --- Stateless POST Interceptor ---
+    if base_url.startswith("http://") or base_url.startswith("https://"):
+        try:
+            import httpx
+            logger.info(f"Checking if URL is stateless/POST endpoint: {base_url}")
+            
+            post_headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+                **headers
+            }
+            
+            async def _check_stateless():
+                async with httpx.AsyncClient(timeout=8.0) as client:
+                    resp = await client.post(
+                        base_url,
+                        headers=post_headers,
+                        json={
+                            "jsonrpc": "2.0",
+                            "method": "tools/list",
+                            "params": {},
+                            "id": 1
+                        }
+                    )
+                    if resp.status_code != 200:
+                        return None
+                    text = resp.text
+                    # Try 1: plain JSON (stateless HTTP mode)
+                    try:
+                        data = json.loads(text)
+                        if "result" in data and "tools" in data["result"]:
+                            return data
+                    except Exception:
+                        pass
+                    # Try 2: SSE-encoded JSON (Smithery Remote returns SSE even for stateless POST)
+                    # Format: "event: message\ndata: {"jsonrpc":"2.0","result":{"tools":[...]},"id":1}"
+                    for line in text.split("\n"):
+                        if line.startswith("data:"):
+                            payload = line[5:].strip()
+                            if not payload:
+                                continue
+                            try:
+                                data = json.loads(payload)
+                                if "result" in data and "tools" in data["result"]:
+                                    return data
+                            except Exception:
+                                pass
+                    return None
+            
+            list_res = await _check_stateless()
+            if list_res and "result" in list_res and "tools" in list_res["result"]:
+                logger.info(f"Target {base_url} verified as stateless. Loading tool '{tool_key}' via stateless adapter.")
+                raw_tools = list_res["result"]["tools"]
+                tool_data = next((t for t in raw_tools if t.get("name") == tool_key), None)
+                if tool_data:
+                    from pydantic import create_model, Field
+                    from typing import Optional, Union
+                    
+                    tool_name = tool_data.get("name")
+                    description = tool_data.get("description", "")
+                    
+                    input_schema = tool_data.get("inputSchema", {})
+                    properties = input_schema.get("properties", {})
+                    required = input_schema.get("required", [])
+                    
+                    type_mapping = {
+                        "string": str,
+                        "integer": int,
+                        "number": float,
+                        "boolean": bool,
+                        "array": list,
+                        "object": dict
+                    }
+                    
+                    fields = {}
+                    for param_name, param_schema in properties.items():
+                        js_type = param_schema.get("type", "string")
+                        py_type = Any
+                        is_optional = False
+                        
+                        if isinstance(js_type, list):
+                            if "null" in js_type:
+                                is_optional = True
+                            actual_types = [t for t in js_type if t != "null"]
+                            if actual_types:
+                                py_type = type_mapping.get(actual_types[0], Any)
+                        else:
+                            py_type = type_mapping.get(js_type, Any)
+                            
+                        param_desc = param_schema.get("description", "")
+                        default_val = param_schema.get("default")
+                        
+                        if param_name in required:
+                            if is_optional:
+                                fields[param_name] = (Optional[py_type], Field(description=param_desc))
+                            else:
+                                fields[param_name] = (py_type, Field(description=param_desc))
+                        else:
+                            fields[param_name] = (Optional[py_type], Field(default=default_val, description=param_desc))
+                            
+                    args_schema = create_model(f"{tool_name}Input", **fields)
+                    
+                    async def _execute(**kwargs):
+                        args_payload = {k: v for k, v in kwargs.items() if v is not None}
+                        exec_headers = {
+                            "Content-Type": "application/json",
+                            "Accept": "application/json, text/event-stream",
+                            **headers
+                        }
+                        async with httpx.AsyncClient(timeout=60.0) as exec_client:
+                            exec_resp = await exec_client.post(
+                                base_url,
+                                headers=exec_headers,
+                                json={
+                                    "jsonrpc": "2.0",
+                                    "method": "tools/call",
+                                    "params": {
+                                        "name": tool_name,
+                                        "arguments": args_payload
+                                    },
+                                    "id": 1
+                                }
+                            )
+                            exec_resp.raise_for_status()
+                            text = exec_resp.text
+                            exec_data = None
+                            
+                            # Try 1: direct JSON response
+                            try:
+                                exec_data = json.loads(text)
+                            except Exception:
+                                pass
+                                
+                            # Try 2: SSE-encoded response (starts with event/data lines)
+                            if exec_data is None:
+                                for line in text.split("\n"):
+                                    if line.startswith("data:"):
+                                        payload = line[5:].strip()
+                                        if not payload:
+                                            continue
+                                        try:
+                                            parsed = json.loads(payload)
+                                            if "result" in parsed or "error" in parsed:
+                                                exec_data = parsed
+                                                break
+                                        except Exception:
+                                            pass
+                                            
+                            if exec_data is None:
+                                # Fallback: raise the original decode error
+                                exec_data = exec_resp.json()
+                                
+                            if "error" in exec_data:
+                                return f"Error executing tool: {exec_data['error']}"
+                                
+                            result = exec_data.get("result", {})
+                            content = result.get("content", [])
+                            text_parts = []
+                            for item in content:
+                                if isinstance(item, dict):
+                                    if item.get("type") == "text":
+                                        text_parts.append(item.get("text", ""))
+                                    else:
+                                        text_parts.append(json.dumps(item))
+                                else:
+                                    text_parts.append(str(item))
+                            return "\n".join(text_parts)
+                            
+                    from langchain_core.tools import StructuredTool
+                    stateless_tool = StructuredTool(
+                        name=tool_name,
+                        description=description,
+                        args_schema=args_schema,
+                        func=None,
+                        coroutine=_execute
+                    )
+                    return [wrap_tool_with_redaction(stateless_tool)]
+                else:
+                    logger.warning(f"Tool '{tool_key}' not found in stateless server's tool listing.")
+                    return []
+        except Exception as stateless_err:
+            logger.info(f"Stateless verification failed for {base_url}: {stateless_err}. Falling back to stateful adapter...")
 
     # Setup safe environment for Stdio subprocess sandboxing
     safe_env = None
@@ -352,21 +602,108 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
         return [wrapper_tool]
 
     client = MultiServerMCPClient(server_config)
-    try:
+
+    # Determine if this is a stdio transport — if so, we need to bypass blockbuster's
+    # os.access patch which fires when the MCP SDK calls shutil.which() to locate the
+    # subprocess command (e.g. "npx"). We do this by running the entire session in a
+    # dedicated thread that uses the real os.access.
+    _server_cfg = server_config.get("manual_server", {})
+    _is_stdio = _server_cfg.get("transport") == "stdio"
+
+    async def _run_session() -> List[BaseTool]:
+        """List tools via a temporary session, then create connection-aware tool objects.
+
+        Using connection= (not session=) is critical: tools created with session= hold
+        a reference to the session that is already closed once the async context exits,
+        so every subsequent ainvoke raises an empty exception. With connection=, each
+        ainvoke opens a fresh session on demand.
+        """
+        from langchain_mcp_adapters.tools import convert_mcp_tool_to_langchain_tool
+        from langchain_mcp_adapters.tools import _list_all_tools
+
+        # Step 1: use a temporary session ONLY to list available tool definitions
         async with client.session("manual_server") as session:
-            all_tools = await load_mcp_tools(session)
-            # Find the tool with name matching tool_key
-            matched = [t for t in all_tools if t.name == tool_key]
-            if matched:
-                logger.info(f"Loaded manual MCP tool: {tool_key} from server")
-                # Wrap each tool with credential redaction
-                matched = [wrap_tool_with_redaction(t) for t in matched]
-            else:
-                logger.warning(f"Manual MCP tool '{tool_key}' not found on server. Available: {[t.name for t in all_tools]}")
-            return matched
-    except Exception as e:
-        logger.error(f"Error loading manual MCP tool {tool_key} from {server_config}: {e}")
-        return []
+            raw_tools = await _list_all_tools(session)
+
+        # Step 2: find the requested tool in the listing
+        matched_defs = [t for t in raw_tools if t.name == tool_key]
+        if not matched_defs:
+            logger.warning(
+                f"Manual MCP tool '{tool_key}' not found on server. "
+                f"Available: {[t.name for t in raw_tools]}"
+            )
+            return []
+
+        # Step 3: build tool objects bound to the connection config (not the session)
+        # so each ainvoke creates a fresh subprocess/session independently.
+        matched = [
+            convert_mcp_tool_to_langchain_tool(
+                None,           # session=None → use connection on each call
+                t,
+                connection=_server_cfg,  # the "manual_server" inner config dict
+            )
+            for t in matched_defs
+        ]
+
+        logger.info(f"Loaded manual MCP tool: {tool_key} from server")
+        matched = [wrap_tool_with_redaction(t) for t in matched]
+        return matched
+
+    if _is_stdio:
+        # For stdio transport the MCP SDK calls shutil.which() → os.access() which
+        # blockbuster has monkey-patched globally.  blockbuster's wrapper checks the
+        # ContextVar `blockbuster_skip`; when it is True the real function is called
+        # immediately.  We set it in the worker thread so every os.access / stat call
+        # inside the MCP session is allowed.
+        def _run_in_isolated_thread() -> List[BaseTool]:
+            # Import blockbuster's skip ContextVar and set it for this thread's context
+            try:
+                from blockbuster.blockbuster import blockbuster_skip
+                skip_token = blockbuster_skip.set(True)
+            except Exception:
+                skip_token = None
+
+            new_loop = asyncio.new_event_loop()
+            try:
+                return new_loop.run_until_complete(_run_session())
+            finally:
+                new_loop.close()
+                # Reset the ContextVar after we are done
+                if skip_token is not None:
+                    try:
+                        blockbuster_skip.reset(skip_token)
+                    except Exception:
+                        pass
+
+        try:
+            tools = await asyncio.to_thread(_run_in_isolated_thread)
+            return tools
+        except Exception as e:
+            logger.error(f"Error loading manual MCP tool {tool_key} from {server_config}: {e}")
+            try:
+                with open("agent_load.log", "a", encoding="utf-8") as f:
+                    import traceback
+                    f.write(f"\n--- Error loading manual MCP tool '{tool_key}' ---\n")
+                    f.write(traceback.format_exc())
+                    f.write("-" * 40 + "\n")
+            except Exception:
+                pass
+            return []
+    else:
+        # For SSE/streamable-http: no shutil.which call, proceed normally
+        try:
+            return await _run_session()
+        except Exception as e:
+            logger.error(f"Error loading manual MCP tool {tool_key} from {server_config}: {e}")
+            try:
+                with open("agent_load.log", "a", encoding="utf-8") as f:
+                    import traceback
+                    f.write(f"\n--- Error loading manual MCP tool '{tool_key}' ---\n")
+                    f.write(traceback.format_exc())
+                    f.write("-" * 40 + "\n")
+            except Exception:
+                pass
+            return []
 
 
 def load_mcp_tools_for_agent(agent_id: str) -> List[BaseTool]:
@@ -490,14 +827,16 @@ def load_mcp_tools_for_agent(agent_id: str) -> List[BaseTool]:
                 loaded_tools.extend(comp_tools)
                 logger.info(f"Loaded {len(comp_tools)} Composio tools")
                 try:
-                    with open("agent_load.log", "a", encoding="utf-8") as f:
+                    log_path = os.path.join(tempfile.gettempdir(), "agent_load.log")
+                    with open(log_path, "a", encoding="utf-8") as f:
                         f.write(f"[mcp_loader] Loaded {len(comp_tools)} Composio tools for agent {agent_id}: {[t.name for t in comp_tools]}\n")
                 except Exception:
                     pass
             except Exception as e:
                 logger.warning(f"Failed to load Composio tools: {e}")
                 try:
-                    with open("agent_load.log", "a", encoding="utf-8") as f:
+                    log_path = os.path.join(tempfile.gettempdir(), "agent_load.log")
+                    with open(log_path, "a", encoding="utf-8") as f:
                         import traceback
                         f.write(f"[mcp_loader] Failed to load Composio tools for agent {agent_id}: {e}\n{traceback.format_exc()}\n")
                 except Exception:
@@ -505,7 +844,8 @@ def load_mcp_tools_for_agent(agent_id: str) -> List[BaseTool]:
         else:
             logger.warning("COMPOSIO_API_KEY not set. Skipping Composio tools.")
             try:
-                with open("agent_load.log", "a", encoding="utf-8") as f:
+                log_path = os.path.join(tempfile.gettempdir(), "agent_load.log")
+                with open(log_path, "a", encoding="utf-8") as f:
                     f.write(f"[mcp_loader] COMPOSIO_API_KEY not set in environ for agent {agent_id}. Keys: {[k for k in os.environ.keys() if 'COMPOSIO' in k]}\n")
             except Exception:
                 pass

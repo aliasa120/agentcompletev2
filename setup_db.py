@@ -497,11 +497,13 @@ def seed_tool_assignments():
             ("builtin", "manage_skill",            "Manage Skill"),
             ("builtin", "get_wordpress_categories", "WP Categories"),
             ("builtin", "publish_to_wordpress",   "Publish to WordPress"),
+            ("builtin", "youtube_transcript",     "YouTube Transcript"),
         ],
         "Research Subagent": [
             ("builtin", "unified_search",   "Web Search"),
             ("builtin", "unified_extract",  "URL Extractor"),
             ("builtin", "think_tool",       "Think Tool"),
+            ("builtin", "youtube_transcript", "YouTube Transcript"),
         ],
         "Content Subagent": [
             ("builtin", "read_skill",            "Read Skill"),

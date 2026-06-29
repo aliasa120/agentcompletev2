@@ -37,6 +37,7 @@ from research_agent.tools import (
     unified_search,
     unified_extract,
     create_post_image,
+    youtube_transcript,
     # ── Support tools ────────────────────────────────────────────────────────
     think_tool,
     fetch_images_brave,
@@ -706,6 +707,7 @@ def load_dynamic_agents_by_workflow():
             "list_tools": list_tools,
             "load_tools": load_tools,
             "call_tool": call_tool,
+            "youtube_transcript": youtube_transcript,
         }
 
         tool_assignments_by_agent = {}
@@ -816,6 +818,9 @@ def load_dynamic_agents_by_workflow():
             )
 
             main_tools = []
+            bindings_by_tool = {a.get("tool_key"): a.get("parameter_bindings") or {} for a in tool_assignments_by_agent.get(main_id, [])}
+            from research_agent.tools.dynamic_router import bind_tool_parameters
+
             for a in tool_assignments_by_agent.get(main_id, []):
                 t_type = a.get("tool_type")
                 t_key = a.get("tool_key")
@@ -855,13 +860,30 @@ def load_dynamic_agents_by_workflow():
                             tool_func = _bind_agent_id_to_load_tools(load_tools, main_id)
                         elif t_key == "call_tool":
                             tool_func = _bind_agent_id_to_call_tool(call_tool, main_id)
+                        
+                        # Apply bindings
+                        bindings = bindings_by_tool.get(t_key) or {}
+                        if bindings:
+                            tool_func = bind_tool_parameters(tool_func, bindings)
                         main_tools.append(tool_func)
                     elif t_key.startswith("unified_"):
-                        main_tools.append(make_dynamic_unified_tool(t_key))
+                        tool_func = make_dynamic_unified_tool(t_key)
+                        # Apply bindings
+                        bindings = bindings_by_tool.get(t_key) or {}
+                        if bindings:
+                            tool_func = bind_tool_parameters(tool_func, bindings)
+                        main_tools.append(tool_func)
 
             # Load MCP tools
             main_mcp = load_mcp_tools_for_agent(main_id)
-            main_tools.extend(main_mcp)
+            wrapped_main_mcp = []
+            for t in main_mcp:
+                bindings = bindings_by_tool.get(t.name) or {}
+                if bindings:
+                    wrapped_main_mcp.append(bind_tool_parameters(t, bindings))
+                else:
+                    wrapped_main_mcp.append(t)
+            main_tools.extend(wrapped_main_mcp)
 
             # Build Subagents
             subagents = []
@@ -909,6 +931,9 @@ def load_dynamic_agents_by_workflow():
                 )
 
                 sub_tools = []
+                sub_bindings_by_tool = {a.get("tool_key"): a.get("parameter_bindings") or {} for a in tool_assignments_by_agent.get(sub_id, [])}
+                from research_agent.tools.dynamic_router import bind_tool_parameters
+
                 for a in tool_assignments_by_agent.get(sub_id, []):
                     t_type = a.get("tool_type")
                     t_key = a.get("tool_key")
@@ -948,13 +973,30 @@ def load_dynamic_agents_by_workflow():
                                 tool_func = _bind_agent_id_to_load_tools(load_tools, sub_id)
                             elif t_key == "call_tool":
                                 tool_func = _bind_agent_id_to_call_tool(call_tool, sub_id)
+                            
+                            # Apply bindings
+                            bindings = sub_bindings_by_tool.get(t_key) or {}
+                            if bindings:
+                                tool_func = bind_tool_parameters(tool_func, bindings)
                             sub_tools.append(tool_func)
                         elif t_key.startswith("unified_"):
-                            sub_tools.append(make_dynamic_unified_tool(t_key))
+                            tool_func = make_dynamic_unified_tool(t_key)
+                            # Apply bindings
+                            bindings = sub_bindings_by_tool.get(t_key) or {}
+                            if bindings:
+                                tool_func = bind_tool_parameters(tool_func, bindings)
+                            sub_tools.append(tool_func)
 
                 # Load MCP tools
                 sub_mcp = load_mcp_tools_for_agent(sub_id)
-                sub_tools.extend(sub_mcp)
+                wrapped_sub_mcp = []
+                for t in sub_mcp:
+                    bindings = sub_bindings_by_tool.get(t.name) or {}
+                    if bindings:
+                        wrapped_sub_mcp.append(bind_tool_parameters(t, bindings))
+                    else:
+                        wrapped_sub_mcp.append(t)
+                sub_tools.extend(wrapped_sub_mcp)
 
                 subagents.append({
                     "name": sub["name"],
@@ -1005,148 +1047,66 @@ def run_in_thread(func, *args, **kwargs):
 
 # Load the configuration
 import traceback
+import tempfile
+import os as _os
+
+_LOG_PATH = _os.path.join(tempfile.gettempdir(), "agent_load.log")
+
 try:
     compiled_workflows = run_in_thread(load_dynamic_agents_by_workflow)
-    with open("agent_load.log", "a", encoding="utf-8") as f:
-        f.write(f"\n--- Load at {datetime.now().isoformat()} ---\n")
-        f.write(f"Compiled workflows keys: {list(compiled_workflows.keys())}\n")
-        if compiled_workflows:
-            for k, v in compiled_workflows.items():
-                try:
-                    tools_list = list(v.nodes['tools'].bound.tools_by_name.keys())
-                except Exception:
-                    tools_list = "no tools"
-                f.write(f"Workflow '{k}' tools: {tools_list}\n")
-        else:
-            f.write("compiled_workflows is empty!\n")
+    _log_lines = [
+        f"\n--- Load at {datetime.now().isoformat()} ---\n",
+        f"Compiled workflows keys: {list(compiled_workflows.keys())}\n",
+    ]
+    for k, v in compiled_workflows.items():
+        try:
+            tools_list = list(v.nodes['tools'].bound.tools_by_name.keys())
+        except Exception:
+            tools_list = "no tools"
+        _log_lines.append(f"Workflow '{k}' tools: {tools_list}\n")
+    if not compiled_workflows:
+        _log_lines.append("compiled_workflows is empty!\n")
+    with open(_LOG_PATH, "a", encoding="utf-8") as f:
+        f.writelines(_log_lines)
+    print(f"[agent] Loaded {len(compiled_workflows)} workflow(s). Log: {_LOG_PATH}")
 except Exception as e:
-    with open("agent_load.log", "a", encoding="utf-8") as f:
+    with open(_LOG_PATH, "a", encoding="utf-8") as f:
         f.write(f"\n--- Load Error at {datetime.now().isoformat()} ---\n")
         f.write(traceback.format_exc())
+    print(f"[agent] ERROR loading workflows: {e}")
     compiled_workflows = {}
+
 
 def route_workflow(state, config):
     workflow_id = config.get("configurable", {}).get("workflow_id")
     node_key = str(workflow_id) if workflow_id else None
-    
+
     # 1. Check if the requested workflow_id is directly compiled
     if node_key and node_key in compiled_workflows:
         return node_key
-        
-    # 2. Fallback: Find the first compiled workflow UUID (contains hyphens) to route to.
-    # This prevents the run from crashing if the requested workflow is disabled/empty/missing a main agent.
+
+    # 2. Fallback: Find the first compiled workflow UUID (contains hyphens)
     active_uuids = [k for k in compiled_workflows.keys() if "-" in k]
     if active_uuids:
         fallback_key = active_uuids[0]
-        print(f"[agent] [WARNING] Requested workflow '{workflow_id}' is not compiled or active. Falling back to active workflow: '{fallback_key}'")
+        print(f"[agent] [WARNING] Requested workflow '{workflow_id}' is not compiled. Falling back to: '{fallback_key}'")
         return fallback_key
-        
-    # 3. Ultimate fallback: if no UUID keys exist, try any compiled workflow key
+
+    # 3. Ultimate fallback
     active_keys = list(compiled_workflows.keys())
     if active_keys:
         fallback_key = active_keys[0]
         print(f"[agent] [WARNING] Requested workflow '{workflow_id}' is not compiled. Falling back to: '{fallback_key}'")
         return fallback_key
-        
-    raise ValueError(f"No active compiled workflows found. Available workflows: {list(compiled_workflows.keys())}")
+
+    raise ValueError(f"No active compiled workflows found. Available: {list(compiled_workflows.keys())}")
 
 
 from langchain_core.runnables import RunnableConfig
 
 
 def load_memories(state, config: RunnableConfig):
-    """Retrieve relevant memories from Mem0 based on the user's latest query and inject them."""
-    configurable = config.get("configurable", {})
-    workflow_id = configurable.get("workflow_id")
-    user_id = configurable.get("user_id")
-    if not workflow_id:
-        return state
-
-    messages = state.get("messages", [])
-    if not messages:
-        return state
-
-    latest_human_msg = None
-    for msg in reversed(messages):
-        if msg.type == "human":
-            latest_human_msg = msg
-            break
-
-    if not latest_human_msg or not latest_human_msg.content:
-        return state
-
-    query = latest_human_msg.content
-    if not isinstance(query, str):
-        parts = []
-        for block in query:
-            if isinstance(block, str):
-                parts.append(block)
-            elif isinstance(block, dict) and block.get("type") == "text":
-                parts.append(block.get("text", ""))
-        query = "".join(parts)
-
-    try:
-        from research_agent.tools.mem0_provider import get_mem0_client
-        mem0 = get_mem0_client()
-        if mem0 is not None:
-            # Sanitize scope_id: Pinecone requires lowercase alphanumeric + hyphens only
-            raw_scope = f"{user_id}_{workflow_id}" if user_id else str(workflow_id)
-            scope_id = raw_scope.lower().replace("_", "-")
-            print(f"[agent] Searching Mem0 memories for scope {scope_id}...")
-            results = mem0.search(query, filters={"user_id": scope_id}, limit=5, rerank=True)
-            # Mem0 may return a dict {"results": [...]} or a plain list
-            if isinstance(results, dict):
-                results = results.get("results", [])
-            memories = []
-            if results:
-                # Deduplicate/exclude memories that have been superseded (linked) by newer ones
-                linked_ids_to_exclude = set()
-                for r in results:
-                    if isinstance(r, dict):
-                        meta = r.get("metadata") or {}
-                        linked_ids = meta.get("linked_memory_ids")
-                        if isinstance(linked_ids, list):
-                            for lid in linked_ids:
-                                if lid:
-                                    linked_ids_to_exclude.add(str(lid).lower())
-                        elif linked_ids:
-                            linked_ids_to_exclude.add(str(linked_ids).lower())
-
-                for r in results:
-                    if isinstance(r, dict) and r.get("memory"):
-                        mem_id = r.get("id")
-                        if mem_id and str(mem_id).lower() in linked_ids_to_exclude:
-                            print(f"[agent] Excluding superseded memory {mem_id}: {r.get('memory')}")
-                            continue
-                        
-                        msg = r.get("memory")
-                        created_at = r.get("created_at")
-                        if created_at:
-                            try:
-                                # Format ISO timestamp, e.g. "2026-06-24T12:35:21.074602+00:00" -> "2026-06-24 12:35:21 UTC"
-                                date_part, time_part = created_at.split("T")
-                                time_only = time_part.split(".")[0].split("+")[0]
-                                memories.append(f"{msg} (Recorded: {date_part} {time_only} UTC)")
-                            except Exception:
-                                memories.append(f"{msg} (Recorded: {created_at})")
-                        else:
-                            memories.append(msg)
-            
-            if memories:
-                memory_text = "\n".join(f"- {m}" for m in memories)
-                print(f"[agent] Found {len(memories)} memories. Injecting into state...")
-                
-                # Create a SystemMessage with retrieved memories
-                from langchain_core.messages import SystemMessage
-                mem_message = SystemMessage(
-                    content=f"=== RETRIEVED LONG-TERM MEMORIES FOR THIS AGENT ===\n{memory_text}\n================================================="
-                )
-                return {"messages": [mem_message]}
-            else:
-                print(f"[agent] No memories found for scope {scope_id}.")
-    except Exception as e:
-        print(f"[agent] Error reading from Mem0: {e}")
-
+    """Disable automatic memory loading; the agent retrieves memories on-demand via search_memories tool."""
     return state
 
 
@@ -1384,6 +1344,7 @@ else:
             manage_skill,
             get_wordpress_categories,
             publish_to_wordpress,
+            youtube_transcript,
         ],
         subagents=[research_subagent, content_subagent],
         system_prompt=INSTRUCTIONS,

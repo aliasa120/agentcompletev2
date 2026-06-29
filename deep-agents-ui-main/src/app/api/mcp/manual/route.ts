@@ -1,5 +1,159 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { testStdioMcp, testSseMcp, testHttpMcp } from "./test/route";
+
+export async function resolveNpmPackage(qualifiedName: string): Promise<string> {
+  const lowercaseQualifiedName = qualifiedName.toLowerCase();
+  const mappings: Record<string, string> = {
+    "tavily": "tavily-mcp",
+    "outlook": "outlook-mcp",
+    "jina": "jina-mcp-tools",
+    "linkupplatform/linkup-mcp-server": "linkup-mcp-server",
+    "node2flow/wordpress": "@node2flow/wordpress-mcp",
+    "node2flow/gmail": "@node2flow/gmail-mcp",
+    "youtube": "@modelcontextprotocol/server-youtube",
+    "brave": "@modelcontextprotocol/server-brave",
+    "slack": "@modelcontextprotocol/server-slack",
+    "googledocs": "@modelcontextprotocol/server-google-docs",
+    "gmail": "@modelcontextprotocol/server-gmail",
+    "exa": "exa-mcp-server",
+    "postgres": "@modelcontextprotocol/server-postgres",
+    "sqlite": "@modelcontextprotocol/server-sqlite",
+    "github": "@modelcontextprotocol/server-github",
+    "gcal": "@modelcontextprotocol/server-gcal"
+  };
+
+  if (mappings[lowercaseQualifiedName]) {
+    return mappings[lowercaseQualifiedName];
+  }
+
+  try {
+    const parts = qualifiedName.split("/");
+    const shortName = parts[parts.length - 1].toLowerCase();
+    
+    // First check if <shortName>-mcp exists directly on npm
+    try {
+      const directRes = await fetch(`https://registry.npmjs.org/${shortName}-mcp`, {
+        method: "HEAD",
+        signal: AbortSignal.timeout(3000)
+      });
+      if (directRes.ok) {
+        return `${shortName}-mcp`;
+      }
+    } catch (_) {}
+
+    // Search NPM preferring MCP packages
+    const res = await fetch(`https://registry.npmjs.org/-/v1/search?text=${shortName}+mcp&size=8`, {
+      signal: AbortSignal.timeout(4000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.objects && data.objects.length > 0) {
+        // Look for package that contains -mcp or mcp- in its name
+        for (const obj of data.objects) {
+          const pkgName = obj.package.name.toLowerCase();
+          if (pkgName.includes("-mcp") || pkgName.includes("mcp-") || pkgName.includes("/mcp")) {
+            return obj.package.name;
+          }
+        }
+        return data.objects[0].package.name;
+      }
+    }
+  } catch (e) {
+    console.warn("[Smithery Resolve] NPM search failed, falling back to name:", e);
+  }
+
+  return qualifiedName.split("/").pop() || qualifiedName;
+}
+
+export function mapCommonEnvVariables(env: Record<string, string>, packageName: string): Record<string, string> {
+  const mapped = { ...env };
+  
+  const apiKeyValue = mapped.apiKey || mapped.apikey || mapped.api_key || mapped.API_KEY;
+  if (apiKeyValue) {
+    const cleanPkgName = packageName.replace(/^@/, "").split("/").pop() || "";
+    const baseName = cleanPkgName.replace(/-mcp-server$/, "").replace(/-mcp$/, "").replace(/-server$/, "");
+    const envKey = `${baseName.replace(/-/g, "_").toUpperCase()}_API_KEY`;
+    
+    if (!mapped[envKey]) {
+      mapped[envKey] = apiKeyValue;
+    }
+  }
+
+  return mapped;
+}
+
+function parseAndNormalizeMcpConfig(mcpUrlStr: string): {
+  transport: "stdio" | "sse" | "http";
+  url: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  headers?: Record<string, string>;
+} | null {
+  const trimmed = mcpUrlStr.trim();
+  if (!trimmed.startsWith("{")) {
+    return null;
+  }
+  try {
+    let parsed = JSON.parse(trimmed);
+    
+    // Check if it's Claude Desktop format: {"mcpServers": {"serverName": {...}}}
+    if (parsed.mcpServers && typeof parsed.mcpServers === "object") {
+      const serverNames = Object.keys(parsed.mcpServers);
+      if (serverNames.length > 0) {
+        const serverName = serverNames[0];
+        const serverConfig = parsed.mcpServers[serverName];
+        return {
+          transport: "stdio",
+          url: "",
+          command: serverConfig.command || "",
+          args: serverConfig.args || [],
+          env: serverConfig.env || {},
+          headers: {}
+        };
+      }
+    }
+
+    // Check for direct server-name-as-key format: {"supadata": {"command": "npx", ...}}
+    const metadataKeys = new Set(["description", "mcp_version", "transport", "url", "headers"]);
+    let firstVal: any = null;
+    for (const key of Object.keys(parsed)) {
+      if (!metadataKeys.has(key) && typeof parsed[key] === "object" && parsed[key] !== null) {
+        if (parsed[key].command || parsed[key].url) {
+          firstVal = parsed[key];
+          break;
+        }
+      }
+    }
+    if (firstVal) {
+      const transport = firstVal.url ? (firstVal.transport === "sse" || parsed.transport === "sse" ? "sse" : "http") : "stdio";
+      return {
+        transport,
+        url: firstVal.url || "",
+        command: firstVal.command || "",
+        args: firstVal.args || [],
+        env: firstVal.env || {},
+        headers: firstVal.headers || {}
+      };
+    }
+
+    // Standard flat transport config: {"transport": "stdio", "command": "npx", ...}
+    const transport = parsed.transport || "sse";
+    return {
+      transport: transport === "streamable-http" ? "http" : transport,
+      url: parsed.url || parsed.mcp_url || "",
+      command: parsed.command || "",
+      args: parsed.args || [],
+      env: parsed.env || {},
+      headers: parsed.headers || {}
+    };
+
+  } catch (err) {
+    console.warn("Failed to parse mcp_url as JSON config:", err);
+    return null;
+  }
+}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -222,21 +376,98 @@ async function fetchZapierEnabledActions(mcpUrl: string, secret?: string): Promi
 }
 
 // Helper to fetch tools from an SSE connection (standard MCP SSE protocol)
-async function fetchMcpSseTools(mcpUrl: string, secret?: string): Promise<{ tool_key: string; tool_name: string }[]> {
-  return new Promise(async (resolve, reject) => {
-    let sseResponse: Response;
-    try {
-      const headers: Record<string, string> = { "Accept": "text/event-stream" };
-      if (secret) {
-        headers["Authorization"] = `Bearer ${secret}`;
+async function fetchMcpSseTools(mcpUrl: string, secret?: string): Promise<{ tool_key: string; tool_name: string; description?: string }[]> {
+  let targetUrl = mcpUrl;
+  const headers: Record<string, string> = { 
+    "Accept": "application/json, text/event-stream",
+    "Content-Type": "application/json" 
+  };
+
+  if (secret) {
+    headers["Authorization"] = `Bearer ${secret}`;
+  }
+
+  if (mcpUrl.trim().startsWith("{")) {
+      try {
+        const config = JSON.parse(mcpUrl);
+        targetUrl = config.url || targetUrl;
+        if (config.headers && typeof config.headers === "object") {
+          Object.assign(headers, config.headers);
+        }
+      } catch (je) {
+        console.warn("Failed to parse mcpUrl as JSON in fetchMcpSseTools:", je);
       }
-      sseResponse = await fetch(mcpUrl, { headers });
-      if (!sseResponse.ok) {
-        return reject(new Error(`SSE connection failed with status: ${sseResponse.status}`));
-      }
-    } catch (err) {
-      return reject(err);
     }
+
+    // Ensure Accept includes application/json and text/event-stream
+    if (!headers["Accept"]?.includes("application/json")) {
+      headers["Accept"] = "application/json, text/event-stream";
+    }
+
+    // 1. Try stateless direct POST first (very fast, works for stateless servers like Smithery Remote)
+    try {
+      const postRes = await fetch(targetUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "tools/list",
+          params: {},
+          id: 1
+        }),
+        signal: AbortSignal.timeout(8000)
+      });
+
+      if (postRes.ok) {
+        const text = await postRes.text();
+
+        // Try 1: direct JSON response
+        try {
+          const data = JSON.parse(text);
+          if (data?.result?.tools) {
+            return data.result.tools.map((t: any) => ({
+              tool_key: t.name,
+              tool_name: t.title || t.name,
+              description: t.description || ""
+            }));
+          }
+        } catch { /* fall through to SSE parse */ }
+
+        // Try 2: SSE-encoded response (Smithery returns SSE even for stateless POST)
+        for (const line of text.split("\n")) {
+          if (line.startsWith("data:")) {
+            const payload = line.slice(5).trim();
+            if (!payload) continue;
+            try {
+              const parsed = JSON.parse(payload);
+              if (parsed?.result?.tools) {
+                return parsed.result.tools.map((t: any) => ({
+                  tool_key: t.name,
+                  tool_name: t.title || t.name,
+                  description: t.description || ""
+                }));
+              }
+            } catch { /* continue */ }
+          }
+        }
+      }
+    } catch (postErr) {
+      console.warn("[fetchMcpSseTools] Direct POST fallback trigger:", postErr);
+    }
+
+    // 2. Fallback to standard SSE GET streaming (stateful mode)
+    return new Promise(async (resolve, reject) => {
+      let sseResponse: Response;
+      const getHeaders = { ...headers, "Accept": "text/event-stream" };
+      try {
+        sseResponse = await fetch(targetUrl, { headers: getHeaders });
+
+        if (!sseResponse.ok) {
+          return reject(new Error(`SSE connection failed with status: ${sseResponse.status}`));
+        }
+      } catch (err) {
+        return reject(err);
+      }
 
     const reader = sseResponse.body?.getReader();
     if (!reader) {
@@ -285,14 +516,17 @@ async function fetchMcpSseTools(mcpUrl: string, secret?: string): Promise<{ tool
           // Case 1: We received the POST message endpoint URL
           if (currentEvent === "endpoint" && currentData) {
             if (currentData.startsWith("/")) {
-              const origin = new URL(mcpUrl).origin;
+              const origin = new URL(targetUrl).origin;
               endpointUrl = `${origin}${currentData}`;
             } else {
               endpointUrl = currentData;
             }
 
             // Send the tools/list request via POST
-            const postHeaders: Record<string, string> = { "Content-Type": "application/json" };
+            const postHeaders: Record<string, string> = { 
+              "Content-Type": "application/json",
+              ...headers // Keep all connection headers (including Smithery Bearer tokens)
+            };
             if (secret) {
               postHeaders["Authorization"] = `Bearer ${secret}`;
             }
@@ -351,6 +585,95 @@ export async function GET(req: Request) {
     let connections = data ?? [];
 
     if (sync) {
+      // Sync all active manual HTTP connections (SSE, streamable-http, Smithery Remote, Tavily, YouTube, etc.)
+      for (const conn of connections) {
+        if (conn.status === "active" && !conn.mcp_url?.startsWith("https://mcp.zapier.com/")) {
+          try {
+            // Resolve URL and headers from config or raw URL
+            let urlToSync = "";
+            let headersToSync: Record<string, string> = {};
+            
+            if (conn.mcp_url?.trim().startsWith("{")) {
+              let config = JSON.parse(conn.mcp_url);
+              if (config.transport === "stdio") {
+                // Auto-heal/rewrite mcp-remote connections
+                const isMcpRemote = config.args?.some((arg: string) => arg.includes("mcp-remote"));
+                if (isMcpRemote && conn.toolkit_slug) {
+                  try {
+                    const npmPackageName = await resolveNpmPackage(conn.toolkit_slug);
+                    const baseEnv = config.env || {};
+                    const env = mapCommonEnvVariables(baseEnv, npmPackageName);
+                    
+                    config = {
+                      ...config,
+                      command: "npx",
+                      args: ["-y", npmPackageName],
+                      env
+                    };
+                    
+                    // Save healed config back to DB
+                    await supabase
+                      .from("mcp_connections")
+                      .update({ mcp_url: JSON.stringify(config), updated_at: new Date().toISOString() })
+                      .eq("id", conn.id);
+                      
+                    console.log(`[Manual MCP Sync] Auto-healed mcp-remote connection ${conn.label} to local npm package: ${npmPackageName}`);
+                  } catch (healErr) {
+                    console.warn(`[Manual MCP Sync] Failed to auto-heal ${conn.label}:`, healErr);
+                  }
+                }
+
+                // Execute the stdio child process to retrieve available tools
+                try {
+                  const testRes = await testStdioMcp(config.command, config.args || [], config.env || {});
+                  const tools = (testRes.tools || []).map((t: any) => ({
+                    tool_key: t.name,
+                    tool_name: t.title || t.name,
+                    description: t.description || ""
+                  }));
+                  if (tools.length > 0) {
+                    await supabase
+                      .from("mcp_connections")
+                      .update({ 
+                        available_tools: tools,
+                        updated_at: new Date().toISOString()
+                      })
+                      .eq("id", conn.id);
+                  }
+                } catch (stdioErr) {
+                  console.warn(`[Manual MCP Sync] Stdio sync failed for ${conn.label}:`, stdioErr);
+                }
+                continue;
+              }
+              urlToSync = config.url || "";
+              headersToSync = config.headers || {};
+            } else if (conn.mcp_url?.startsWith("http://") || conn.mcp_url?.startsWith("https://")) {
+              urlToSync = conn.mcp_url;
+            }
+            
+            if (!urlToSync) continue;
+            
+            const testRes = await testSseMcp(urlToSync, headersToSync);
+            const tools = (testRes.tools || []).map((t: any) => ({
+              tool_key: t.name,
+              tool_name: t.title || t.name,
+              description: t.description || ""
+            }));
+            if (tools.length > 0) {
+              await supabase
+                .from("mcp_connections")
+                .update({ 
+                  available_tools: tools,
+                  updated_at: new Date().toISOString()
+                })
+                .eq("id", conn.id);
+            }
+          } catch (err) {
+            console.warn(`[Manual MCP Sync] Failed to sync tools for manual connection ${conn.label}:`, err);
+          }
+        }
+      }
+
       const secret = process.env.ZAPIER_MCP_SECRET;
       // Find all unique base server URLs from Zapier connections
       const baseUrls = new Set<string>();
@@ -548,7 +871,7 @@ export async function POST(req: Request) {
         if (appExisting) {
           const { data } = await supabase
             .from("mcp_connections")
-            .update({ available_tools: appTools, updated_at: new Date().toISOString() })
+            .update({ available_tools: appTools, status: "active", updated_at: new Date().toISOString() })
             .eq("id", appExisting.id)
             .select()
             .single();
@@ -600,37 +923,60 @@ export async function POST(req: Request) {
       return NextResponse.json({ connection: existing });
     }
 
-    // Use user-provided manual tools list if available, otherwise attempt SSE/HTTP introspection
+    // Use user-provided manual tools list if available, otherwise attempt Stdio/SSE/HTTP introspection
     let available_tools: any[] = [];
     if (manual_tools && Array.isArray(manual_tools)) {
       available_tools = manual_tools;
     } else {
-      const secret = process.env.ZAPIER_MCP_SECRET;
-      try {
-        available_tools = await fetchMcpSseTools(mcp_url, secret);
-      } catch (sseErr) {
-        console.warn("[Manual MCP] SSE fallback introspection failed:", sseErr instanceof Error ? sseErr.message : sseErr);
-      }
-
-      // Fall back to standard HTTP POST /tools/list if SSE failed
-      if (available_tools.length === 0) {
+      const config = parseAndNormalizeMcpConfig(mcp_url);
+      if (config) {
         try {
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
-          const introspectRes = await fetch(`${mcp_url}/tools/list`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({}),
-            signal: AbortSignal.timeout(5000),
-          });
-          if (introspectRes.ok) {
-            const data = await introspectRes.json();
-            available_tools = (data.tools ?? []).map((t: Record<string, string>) => ({
+          if (config.transport === "stdio") {
+            const res = await testStdioMcp(config.command || "", config.args || [], config.env || {});
+            available_tools = (res.tools || []).map((t: any) => ({
               tool_key: t.name,
-              tool_name: t.title ?? t.name,
+              tool_name: t.title || t.name,
+              description: t.description || ""
+            }));
+          } else if (config.transport === "sse") {
+            const res = await testSseMcp(config.url, config.headers || {});
+            available_tools = (res.tools || []).map((t: any) => ({
+              tool_key: t.name,
+              tool_name: t.title || t.name,
+              description: t.description || ""
+            }));
+          } else if (config.transport === "http") {
+            const res = await testHttpMcp(config.url, config.headers || {});
+            available_tools = (res.tools || []).map((t: any) => ({
+              tool_key: t.name,
+              tool_name: t.title || t.name,
+              description: t.description || ""
             }));
           }
-        } catch (httpErr) {
-          console.warn("[Manual MCP] HTTP fallback introspection failed:", httpErr);
+        } catch (err: any) {
+          console.warn(`[Manual MCP] Introspection of config failed: ${err.message}`);
+        }
+      } else {
+        // Fallback for raw URL (default to SSE first, then HTTP)
+        try {
+          const res = await testSseMcp(mcp_url, {});
+          available_tools = (res.tools || []).map((t: any) => ({
+            tool_key: t.name,
+            tool_name: t.title || t.name,
+            description: t.description || ""
+          }));
+        } catch (sseErr) {
+          console.warn("[Manual MCP] SSE fallback introspection failed:", sseErr instanceof Error ? sseErr.message : sseErr);
+          try {
+            const res = await testHttpMcp(mcp_url, {});
+            available_tools = (res.tools || []).map((t: any) => ({
+              tool_key: t.name,
+              tool_name: t.title || t.name,
+              description: t.description || ""
+            }));
+          } catch (httpErr) {
+            console.warn("[Manual MCP] HTTP fallback introspection failed:", httpErr);
+          }
         }
       }
     }
@@ -675,7 +1021,44 @@ export async function DELETE(req: Request) {
   try {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-    await supabase.from("mcp_connections").delete().eq("id", id);
+
+    // Fetch the connection first to determine its type and URL
+    const { data: conn } = await supabase
+      .from("mcp_connections")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (conn) {
+      if (conn.mcp_url?.startsWith("https://mcp.zapier.com/")) {
+        if (conn.mcp_url.endsWith("#Base")) {
+          // Deleting entire Zapier integration -> delete the base and all associated apps
+          const baseServerUrl = conn.mcp_url.split("#")[0];
+          const { data: allConns } = await supabase
+            .from("mcp_connections")
+            .select("id, mcp_url")
+            .eq("connection_type", "manual");
+          
+          for (const c of (allConns || [])) {
+            if (c.mcp_url?.startsWith(baseServerUrl)) {
+              await supabase.from("mcp_connections").delete().eq("id", c.id);
+            }
+          }
+        } else {
+          // Deleting a specific Zapier app connection -> set status to "inactive"
+          // so that the background/manual sync loop respects the user's deletion
+          // and does not re-insert the connection.
+          await supabase
+            .from("mcp_connections")
+            .update({ status: "inactive", updated_at: new Date().toISOString() })
+            .eq("id", id);
+        }
+      } else {
+        // Standard manual connection -> delete the row from DB
+        await supabase.from("mcp_connections").delete().eq("id", id);
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown" }, { status: 500 });

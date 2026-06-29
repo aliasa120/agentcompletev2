@@ -76,13 +76,14 @@ export async function PATCH(req: Request, { params }: RouteParams) {
       await supabase.from("agent_tool_assignments").delete().eq("agent_id", id);
       // Insert new
       if (tool_keys.length > 0) {
-        const rows = tool_keys.map((t: { tool_type: string; tool_key: string; tool_label: string; loading_mode?: string }) => ({
+        const rows = tool_keys.map((t: { tool_type: string; tool_key: string; tool_label: string; loading_mode?: string; parameter_bindings?: any }) => ({
           agent_id: id,
           tool_type: t.tool_type,
           tool_key: t.tool_key,
           tool_label: t.tool_label ?? t.tool_key,
           enabled: true,
           loading_mode: t.loading_mode || "primary",
+          parameter_bindings: t.parameter_bindings || {},
         }));
         await supabase.from("agent_tool_assignments").insert(rows);
       }

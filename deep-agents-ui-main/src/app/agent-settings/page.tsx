@@ -823,6 +823,7 @@ export default function AgentSettingsPage() {
       case "tools-composio": return <ToolsSection initialTab="composio" />;
       case "tools-manual": return <ToolsSection initialTab="manual" />;
       case "tools-zapier": return <ToolsSection initialTab="zapier" />;
+      case "tools-smithery": return <ToolsSection initialTab="smithery" />;
       case "providers": return (
         <ProviderOrderingSection
           globalSettings={settings}

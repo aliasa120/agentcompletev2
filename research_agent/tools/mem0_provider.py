@@ -95,10 +95,7 @@ def get_mem0_client() -> Optional[Any]:
                 "temperature": 0.0,
             }
         },
-        "custom_instructions": "Ignore all casual greetings, formatting instructions, small talk, and meta-dialogue. Only extract hard facts, user preferences, configuration parameters, or concrete constraints. Extract them as short, atomic, single-fact sentences (e.g., separate name, location, and job into individual sentences) to prevent compound facts.",
-        "graph_store": {
-            "provider": "none"
-        }
+        "custom_instructions": "Ignore all casual greetings, formatting instructions, small talk, and meta-dialogue. Only extract hard facts, user preferences, configuration parameters, or concrete constraints. Extract them as short, atomic, single-fact sentences (e.g., separate name, location, and job into individual sentences) to prevent compound facts."
     }
 
     # Setup Cohere reranker if key is available
@@ -109,7 +106,7 @@ def get_mem0_client() -> Optional[Any]:
             "config": {
                 "model": "rerank-v4.0-pro",
                 "api_key": cohere_api_key,
-                "top_k": 5
+                "top_k": 10
             }
         }
 
