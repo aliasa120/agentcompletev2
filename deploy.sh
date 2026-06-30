@@ -9,7 +9,8 @@ cd "$(dirname "$0")"
 
 # ── Pull latest code ─────────────────────────────────────────────────────────
 echo "📥 Pulling latest code..."
-git pull origin main
+git fetch origin main
+git reset --hard origin/main
 
 # ── Check backend .env ────────────────────────────────────────────────────────
 if [ ! -f .env ]; then
