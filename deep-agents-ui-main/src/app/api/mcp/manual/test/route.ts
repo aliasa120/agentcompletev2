@@ -39,6 +39,21 @@ export async function testStdioMcp(command: string, args: string[], env: Record<
       }
     }
 
+    // Wrap node executions with mcp-wrapper.js to filter out plain text stdout banners
+    if (runCommand === "node" && runArgs[0] && runArgs[0].endsWith(".js") && !runArgs[0].includes("mcp-wrapper.js")) {
+      const fs = require("fs");
+      const path = require("path");
+      let wrapperPath = "mcp-wrapper.js";
+      if (!fs.existsSync(path.resolve(process.cwd(), wrapperPath))) {
+        // If running in Next.js development server, cwd might be root
+        const altPath = path.join("deep-agents-ui-main", "mcp-wrapper.js");
+        if (fs.existsSync(path.resolve(process.cwd(), altPath))) {
+          wrapperPath = altPath;
+        }
+      }
+      runArgs = [wrapperPath, ...runArgs];
+    }
+
     logs.push({ direction: "info", message: `Spawning stdio child process: "${runCommand}" with args: ${JSON.stringify(runArgs)}` });
     
     const child: any = spawn(runCommand, runArgs, {
