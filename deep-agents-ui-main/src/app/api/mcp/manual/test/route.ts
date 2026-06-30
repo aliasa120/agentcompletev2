@@ -18,6 +18,16 @@ export async function testStdioMcp(command: string, args: string[], env: Record<
     // Mix in custom variables
     Object.assign(processEnv, env);
 
+    // Shebang-proofing: Remove .JS and .JSE from PATHEXT on Windows to avoid Windows Script Host hijacking
+    if (process.platform === "win32" && processEnv.PATHEXT) {
+      processEnv.PATHEXT = processEnv.PATHEXT.split(";")
+        .filter(ext => {
+          const upper = ext.trim().toUpperCase();
+          return upper !== ".JS" && upper !== ".JSE";
+        })
+        .join(";");
+    }
+
     logs.push({ direction: "info", message: `Spawning stdio child process: "${command}" with args: ${JSON.stringify(args)}` });
     
     const child: any = spawn(command, args, {

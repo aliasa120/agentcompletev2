@@ -208,6 +208,19 @@ export async function POST(req: Request) {
     // Not fatal — return success anyway
   }
 
+  // Install the package locally in node_modules to enable direct 'node' execution (bypassing WScript/npx cache permission issues)
+  try {
+    const { resolveNpmPackage } = await import("../../manual/route");
+    const npmPackageName = await resolveNpmPackage(qualifiedName);
+    console.log(`[Smithery Install] Running local npm install for ${npmPackageName}...`);
+    await execAsync(`npm install --no-save ${npmPackageName}`, {
+      timeout: 60000,
+      env: process.env,
+    });
+  } catch (err) {
+    console.warn("[Smithery Install] Failed to install package locally:", err);
+  }
+
   // Fetch the configuration schema from Smithery's API to extract required environment variables
   const schema = await getEnhancedConfigSchema(qualifiedName);
 

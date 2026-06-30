@@ -68,6 +68,13 @@ def _build_safe_env(user_env: Optional[Dict[str, str]]) -> Dict[str, str]:
         for k, v in user_env.items():
             if v is not None:
                 env[k] = str(v)
+
+    # Shebang-proofing: Remove .JS and .JSE from PATHEXT on Windows to avoid Windows Script Host execution
+    if os.name == 'nt' and 'PATHEXT' in env:
+        pathext_list = env['PATHEXT'].split(';')
+        filtered_pathext = [ext for ext in pathext_list if ext.strip().upper() not in ('.JS', '.JSE')]
+        env['PATHEXT'] = ';'.join(filtered_pathext)
+
     return env
 
 # --- Credential Redaction Definitions ---

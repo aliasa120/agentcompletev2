@@ -95,8 +95,49 @@ async function handleLocalConnect(body: {
   if (isMcpRemote) {
     try {
       const npmPackageName = await resolveNpmPackage(qualifiedName);
-      runCommand = "npx";
-      runArgs = ["-y", npmPackageName];
+      
+      // Ensure the package is installed locally in the project's node_modules
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      const localPkgPath = path.join(process.cwd(), "node_modules", npmPackageName);
+      
+      try {
+        await fs.access(localPkgPath);
+      } catch {
+        console.log(`[Smithery Connect] Package ${npmPackageName} not found in node_modules, installing on the fly...`);
+        const { exec } = await import("child_process");
+        const { promisify } = await import("util");
+        const execAsync = promisify(exec);
+        await execAsync(`npm install --no-save ${npmPackageName}`, {
+          timeout: 60000,
+          env: process.env,
+        });
+      }
+
+      // Read bin path from package.json
+      let binPath = "";
+      try {
+        const pjPath = path.join(localPkgPath, "package.json");
+        const pjContent = await fs.readFile(pjPath, "utf-8");
+        const pj = JSON.parse(pjContent);
+        if (typeof pj.bin === "string") {
+          binPath = pj.bin;
+        } else if (pj.bin && typeof pj.bin === "object") {
+          const keys = Object.keys(pj.bin);
+          binPath = pj.bin[keys[0]];
+        }
+      } catch (pjErr) {
+        console.warn(`[Smithery Connect] Failed to read package.json for ${npmPackageName}:`, pjErr);
+      }
+
+      if (binPath) {
+        runCommand = "node";
+        runArgs = [path.join("node_modules", npmPackageName, binPath)];
+      } else {
+        runCommand = "npx";
+        runArgs = ["-y", npmPackageName];
+      }
+      
       baseEnv = mapCommonEnvVariables(baseEnv, npmPackageName);
     } catch (e) {
       console.warn("[Smithery Connect] Failed to rewrite mcp-remote config, using original:", e);
