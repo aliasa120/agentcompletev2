@@ -224,18 +224,42 @@ def wrap_tool_with_redaction(tool: BaseTool) -> BaseTool:
     @functools.wraps(orig_run)
     def redacted_run(*args, **kwargs):
         try:
+            from blockbuster.blockbuster import blockbuster_skip
+            skip_token = blockbuster_skip.set(True)
+        except Exception:
+            skip_token = None
+
+        try:
             res = orig_run(*args, **kwargs)
             return sanitize_credentials(str(res)) if isinstance(res, str) else res
         except Exception as e:
             raise _safe_reraise(e) from None
+        finally:
+            if skip_token is not None:
+                try:
+                    blockbuster_skip.reset(skip_token)
+                except Exception:
+                    pass
 
     @functools.wraps(orig_arun)
     async def redacted_arun(*args, **kwargs):
+        try:
+            from blockbuster.blockbuster import blockbuster_skip
+            skip_token = blockbuster_skip.set(True)
+        except Exception:
+            skip_token = None
+
         try:
             res = await orig_arun(*args, **kwargs)
             return sanitize_credentials(str(res)) if isinstance(res, str) else res
         except Exception as e:
             raise _safe_reraise(e) from None
+        finally:
+            if skip_token is not None:
+                try:
+                    blockbuster_skip.reset(skip_token)
+                except Exception:
+                    pass
 
     tool._arun = redacted_arun
     tool._run = redacted_run
