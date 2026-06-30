@@ -349,6 +349,15 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
         except Exception as je:
             logger.warning(f"Failed to parse mcp_url as JSON: {je}")
 
+    # Translate Windows-specific shell wrappers (cmd /c) to direct commands on non-Windows platforms
+    if config_data and isinstance(config_data, dict) and config_data.get("transport") == "stdio" and os.name != "nt":
+        cmd_val = config_data.get("command")
+        args_val = config_data.get("args") or []
+        if cmd_val == "cmd" and len(args_val) > 0 and args_val[0] == "/c":
+            if len(args_val) > 1:
+                config_data["command"] = args_val[1]
+                config_data["args"] = args_val[2:]
+
     # Inject authorization headers if connecting to Zapier MCP
     headers = {}
     mcp_url_str = mcp_url

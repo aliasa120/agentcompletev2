@@ -28,9 +28,20 @@ export async function testStdioMcp(command: string, args: string[], env: Record<
         .join(";");
     }
 
-    logs.push({ direction: "info", message: `Spawning stdio child process: "${command}" with args: ${JSON.stringify(args)}` });
+    let runCommand = command;
+    let runArgs = [...args];
+
+    // Translate Windows-specific shell wrappers (cmd /c) to direct commands on non-Windows platforms
+    if (process.platform !== "win32" && runCommand === "cmd" && runArgs[0] === "/c") {
+      if (runArgs.length > 1) {
+        runCommand = runArgs[1];
+        runArgs = runArgs.slice(2);
+      }
+    }
+
+    logs.push({ direction: "info", message: `Spawning stdio child process: "${runCommand}" with args: ${JSON.stringify(runArgs)}` });
     
-    const child: any = spawn(command, args, {
+    const child: any = spawn(runCommand, runArgs, {
       env: processEnv,
       stdio: ["pipe", "pipe", "pipe"],
       shell: process.platform === "win32",
