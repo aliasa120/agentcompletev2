@@ -10,6 +10,9 @@ const nextConfig: any = {
     // Skip linting during production builds to speed up deployment builds
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    webpackMemoryOptimizations: true,
+  },
 };
 
 export default nextConfig;
