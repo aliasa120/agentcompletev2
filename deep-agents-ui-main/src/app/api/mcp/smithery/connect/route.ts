@@ -108,7 +108,7 @@ async function handleLocalConnect(body: {
         const { exec } = await import("child_process");
         const { promisify } = await import("util");
         const execAsync = promisify(exec);
-        await execAsync(`npm install --no-save ${npmPackageName}`, {
+        await execAsync(`npm install --no-save --legacy-peer-deps ${npmPackageName}`, {
           timeout: 60000,
           env: process.env,
         });
@@ -125,6 +125,19 @@ async function handleLocalConnect(body: {
         } else if (pj.bin && typeof pj.bin === "object") {
           const keys = Object.keys(pj.bin);
           binPath = pj.bin[keys[0]];
+        }
+        
+        if (!binPath) {
+          if (typeof pj.main === "string") {
+            binPath = pj.main;
+          } else if (pj.exports && typeof pj.exports === "object") {
+            const exp = pj.exports["."] || pj.exports;
+            if (typeof exp === "string") {
+              binPath = exp;
+            } else if (exp && typeof exp === "object") {
+              binPath = exp.default || exp.import || exp.require || "";
+            }
+          }
         }
       } catch (pjErr) {
         console.warn(`[Smithery Connect] Failed to read package.json for ${npmPackageName}:`, pjErr);

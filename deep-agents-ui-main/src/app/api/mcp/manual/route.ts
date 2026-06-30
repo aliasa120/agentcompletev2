@@ -596,75 +596,101 @@ export async function GET(req: Request) {
             if (conn.mcp_url?.trim().startsWith("{")) {
               const config = parseAndNormalizeMcpConfig(conn.mcp_url);
               if (config && config.transport === "stdio") {
-                // Auto-heal/rewrite mcp-remote connections
+                // Auto-heal/rewrite mcp-remote connection
                 const isMcpRemote = config.args?.some((arg: string) => arg.includes("mcp-remote"));
-                if (isMcpRemote && conn.toolkit_slug) {
+                const isNpxY = config.command === "npx" && config.args?.includes("-y");
+                
+                if ((isMcpRemote || isNpxY) && (conn.toolkit_slug || config.args)) {
                   try {
-                    const npmPackageName = await resolveNpmPackage(conn.toolkit_slug);
-                    const baseEnv = config.env || {};
-                    const env = mapCommonEnvVariables(baseEnv, npmPackageName);
-                    
-                    // Ensure the package is installed locally in the project's node_modules
-                    const fs = await import("fs/promises");
-                    const path = await import("path");
-                    const localPkgPath = path.join(process.cwd(), "node_modules", npmPackageName);
-                    
-                    try {
-                      await fs.access(localPkgPath);
-                    } catch {
-                      console.log(`[Manual MCP Sync] Package ${npmPackageName} not found in node_modules, installing on the fly...`);
-                      const { exec } = await import("child_process");
-                      const { promisify } = await import("util");
-                      const execAsync = promisify(exec);
-                      await execAsync(`npm install --no-save ${npmPackageName}`, {
-                        timeout: 60000,
-                        env: process.env,
-                      });
-                    }
-
-                    // Read bin path from package.json
-                    let binPath = "";
-                    try {
-                      const pjPath = path.join(localPkgPath, "package.json");
-                      const pjContent = await fs.readFile(pjPath, "utf-8");
-                      const pj = JSON.parse(pjContent);
-                      if (typeof pj.bin === "string") {
-                        binPath = pj.bin;
-                      } else if (pj.bin && typeof pj.bin === "object") {
-                        const keys = Object.keys(pj.bin);
-                        binPath = pj.bin[keys[0]];
+                    let npmPackageName = "";
+                    if (conn.toolkit_slug) {
+                      npmPackageName = await resolveNpmPackage(conn.toolkit_slug);
+                    } else if (config.args) {
+                      const yIdx = config.args.indexOf("-y");
+                      if (yIdx !== -1 && yIdx + 1 < config.args.length) {
+                        npmPackageName = config.args[yIdx + 1];
                       }
-                    } catch (pjErr) {
-                      console.warn(`[Manual MCP Sync] Failed to read package.json for ${npmPackageName}:`, pjErr);
                     }
 
-                    let healedConfig;
-                    if (binPath) {
-                      healedConfig = {
-                        transport: "stdio",
-                        command: "node",
-                        args: [path.join("node_modules", npmPackageName, binPath)],
-                        env
-                      };
-                    } else {
-                      healedConfig = {
-                        transport: "stdio",
-                        command: "npx",
-                        args: ["-y", npmPackageName],
-                        env
-                      };
-                    }
-                    
-                    // Save healed config back to DB
-                    await supabase
-                      .from("mcp_connections")
-                      .update({ mcp_url: JSON.stringify(healedConfig), updated_at: new Date().toISOString() })
-                      .eq("id", conn.id);
+                    if (npmPackageName) {
+                      const baseEnv = config.env || {};
+                      const env = mapCommonEnvVariables(baseEnv, npmPackageName);
                       
-                    console.log(`[Manual MCP Sync] Auto-healed mcp-remote connection ${conn.label} to local node package: ${npmPackageName}`);
-                    config.command = healedConfig.command;
-                    config.args = healedConfig.args;
-                    config.env = env;
+                      // Ensure the package is installed locally in the project's node_modules
+                      const fs = await import("fs/promises");
+                      const path = await import("path");
+                      const localPkgPath = path.join(process.cwd(), "node_modules", npmPackageName);
+                      
+                      try {
+                        await fs.access(localPkgPath);
+                      } catch {
+                        console.log(`[Manual MCP Sync] Package ${npmPackageName} not found in node_modules, installing on the fly...`);
+                        const { exec } = await import("child_process");
+                        const { promisify } = await import("util");
+                        const execAsync = promisify(exec);
+                        await execAsync(`npm install --no-save --legacy-peer-deps ${npmPackageName}`, {
+                          timeout: 60000,
+                          env: process.env,
+                        });
+                      }
+
+                      // Read bin path from package.json (or fallback to main/exports)
+                      let binPath = "";
+                      try {
+                        const pjPath = path.join(localPkgPath, "package.json");
+                        const pjContent = await fs.readFile(pjPath, "utf-8");
+                        const pj = JSON.parse(pjContent);
+                        if (typeof pj.bin === "string") {
+                          binPath = pj.bin;
+                        } else if (pj.bin && typeof pj.bin === "object") {
+                          const keys = Object.keys(pj.bin);
+                          binPath = pj.bin[keys[0]];
+                        }
+                        
+                        if (!binPath) {
+                          if (typeof pj.main === "string") {
+                            binPath = pj.main;
+                          } else if (pj.exports && typeof pj.exports === "object") {
+                            const exp = pj.exports["."] || pj.exports;
+                            if (typeof exp === "string") {
+                              binPath = exp;
+                            } else if (exp && typeof exp === "object") {
+                              binPath = exp.default || exp.import || exp.require || "";
+                            }
+                          }
+                        }
+                      } catch (pjErr) {
+                        console.warn(`[Manual MCP Sync] Failed to read package.json for ${npmPackageName}:`, pjErr);
+                      }
+
+                      let healedConfig;
+                      if (binPath) {
+                        healedConfig = {
+                          transport: "stdio",
+                          command: "node",
+                          args: [path.join("node_modules", npmPackageName, binPath)],
+                          env
+                        };
+                      } else {
+                        healedConfig = {
+                          transport: "stdio",
+                          command: "npx",
+                          args: ["-y", npmPackageName],
+                          env
+                        };
+                      }
+                      
+                      // Save healed config back to DB
+                      await supabase
+                        .from("mcp_connections")
+                        .update({ mcp_url: JSON.stringify(healedConfig), updated_at: new Date().toISOString() })
+                        .eq("id", conn.id);
+                        
+                      console.log(`[Manual MCP Sync] Auto-healed connection ${conn.label} to local node package: ${npmPackageName}`);
+                      config.command = healedConfig.command;
+                      config.args = healedConfig.args;
+                      config.env = env;
+                    }
                   } catch (healErr) {
                     console.warn(`[Manual MCP Sync] Failed to auto-heal ${conn.label}:`, healErr);
                   }

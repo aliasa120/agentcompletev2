@@ -213,7 +213,7 @@ export async function POST(req: Request) {
     const { resolveNpmPackage } = await import("../../manual/route");
     const npmPackageName = await resolveNpmPackage(qualifiedName);
     console.log(`[Smithery Install] Running local npm install for ${npmPackageName}...`);
-    await execAsync(`npm install --no-save ${npmPackageName}`, {
+    await execAsync(`npm install --no-save --legacy-peer-deps ${npmPackageName}`, {
       timeout: 60000,
       env: process.env,
     });
