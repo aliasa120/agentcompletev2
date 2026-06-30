@@ -1,5 +1,6 @@
 # ── Stage 1: Install dependencies ─────────────────────────────────────────────
 FROM node:20-alpine AS deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Install yarn dependencies
@@ -8,6 +9,7 @@ RUN yarn install --frozen-lockfile
 
 # ── Stage 2: Build the Next.js app ────────────────────────────────────────────
 FROM node:20-alpine AS builder
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
