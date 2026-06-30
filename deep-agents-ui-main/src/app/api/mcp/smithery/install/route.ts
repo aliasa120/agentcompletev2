@@ -212,13 +212,29 @@ export async function POST(req: Request) {
   try {
     const { resolveNpmPackage } = await import("../../manual/route");
     const npmPackageName = await resolveNpmPackage(qualifiedName);
+    
+    // Validate if the resolved package is a match or a false positive (meaning the server has no local NPM package)
+    const parts = qualifiedName.split("/");
+    const shortName = parts[parts.length - 1].toLowerCase();
+    const cleanPkgName = npmPackageName.replace(/^@/, "").split("/").pop() || "";
+    
+    if (!cleanPkgName.toLowerCase().includes(shortName)) {
+      throw new Error(`This server is remote-only and does not have a local NPM package. Please click "Remote" to connect instead.`);
+    }
+
     console.log(`[Smithery Install] Running local npm install for ${npmPackageName}...`);
     await execAsync(`npm install --no-save --legacy-peer-deps ${npmPackageName}`, {
       timeout: 60000,
       env: process.env,
     });
-  } catch (err) {
+  } catch (err: any) {
     console.warn("[Smithery Install] Failed to install package locally:", err);
+    if (err.message && err.message.includes("remote-only")) {
+      return NextResponse.json({
+        success: false,
+        error: err.message
+      });
+    }
   }
 
   // Fetch the configuration schema from Smithery's API to extract required environment variables

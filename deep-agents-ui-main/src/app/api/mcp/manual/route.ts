@@ -49,14 +49,24 @@ export async function resolveNpmPackage(qualifiedName: string): Promise<string> 
     if (res.ok) {
       const data = await res.json();
       if (data.objects && data.objects.length > 0) {
-        // Look for package that contains -mcp or mcp- in its name
+        // Look for package that contains the shortName AND (-mcp or mcp- or /mcp) in its name
         for (const obj of data.objects) {
           const pkgName = obj.package.name.toLowerCase();
-          if (pkgName.includes("-mcp") || pkgName.includes("mcp-") || pkgName.includes("/mcp")) {
-            return obj.package.name;
+          const cleanPkgName = pkgName.replace(/^@/, "").split("/").pop() || "";
+          
+          if (cleanPkgName.includes(shortName)) {
+            if (pkgName.includes("-mcp") || pkgName.includes("mcp-") || pkgName.includes("/mcp")) {
+              return obj.package.name;
+            }
           }
         }
-        return data.objects[0].package.name;
+        
+        // Fallback to first result ONLY if it contains the shortName to prevent false positives
+        const firstPkgName = data.objects[0].package.name.toLowerCase();
+        const cleanFirstPkgName = firstPkgName.replace(/^@/, "").split("/").pop() || "";
+        if (cleanFirstPkgName.includes(shortName)) {
+          return data.objects[0].package.name;
+        }
       }
     }
   } catch (e) {

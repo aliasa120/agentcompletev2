@@ -96,6 +96,14 @@ async function handleLocalConnect(body: {
     try {
       const npmPackageName = await resolveNpmPackage(qualifiedName);
       
+      // Validate if the resolved package is a match or a false positive
+      const parts = qualifiedName.split("/");
+      const shortName = parts[parts.length - 1].toLowerCase();
+      const cleanPkgName = npmPackageName.replace(/^@/, "").split("/").pop() || "";
+      if (!cleanPkgName.toLowerCase().includes(shortName)) {
+        throw new Error(`Package name mismatch: resolved ${npmPackageName} for ${qualifiedName}`);
+      }
+      
       // Ensure the package is installed locally in the project's node_modules
       const fs = await import("fs/promises");
       const path = await import("path");
