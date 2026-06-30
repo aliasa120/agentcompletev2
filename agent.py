@@ -1,6 +1,6 @@
 """Research Agent - Standalone script for LangGraph deployment.
 
-# Forced reload trigger
+# Forced reload trigger - 2026-06-30 22:03:00
 This module creates a single self-researching agent with a unified tool set.
 Provider selection (Linkup vs Parallel AI, Tavily vs Exa, KIE vs Gemini Flash)
 is managed automatically by the unified tools based on settings in Supabase.
