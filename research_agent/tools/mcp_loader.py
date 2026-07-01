@@ -22,6 +22,31 @@ from contextlib import asynccontextmanager
 
 logger = logging.getLogger("mcp_loader")
 
+# --- McpError Safety Monkeypatch ---
+try:
+    from mcp.shared.exceptions import McpError
+    from mcp.types import ErrorData
+
+    _original_mcp_error_init = McpError.__init__
+
+    def _patched_mcp_error_init(self, error):
+        if isinstance(error, str):
+            error = ErrorData(code=-32000, message=error)
+        elif not hasattr(error, "message") and isinstance(error, dict):
+            error = ErrorData(
+                code=error.get("code", -32000),
+                message=error.get("message", str(error)),
+                data=error.get("data")
+            )
+        elif error is None:
+            error = ErrorData(code=-32000, message="Unknown MCP error")
+        _original_mcp_error_init(self, error)
+
+    McpError.__init__ = _patched_mcp_error_init
+    logger.info("Successfully monkeypatched McpError.__init__ for payload safety.")
+except Exception as patch_err:
+    logger.warning(f"Failed to monkeypatch McpError.__init__: {patch_err}")
+
 # --- Stdio Subprocess Stderr Log Redirection ---
 _mcp_stderr_log_fh = None
 _mcp_stderr_log_lock = threading.Lock()
@@ -458,7 +483,21 @@ def run_sync(coro):
                 new_loop.close()
         t = threading.Thread(target=target)
         t.start()
-        t.join()
+        try:
+            from blockbuster.blockbuster import blockbuster_skip
+            skip_token = blockbuster_skip.set(True)
+        except Exception:
+            skip_token = None
+
+        try:
+            t.join()
+        finally:
+            if skip_token is not None:
+                try:
+                    blockbuster_skip.reset(skip_token)
+                except Exception:
+                    pass
+
         if err:
             raise err[0]
         return result[0]

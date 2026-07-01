@@ -882,7 +882,21 @@ def call_tool(tool_name: str, arguments: Dict[str, Any], agent_id: Optional[str]
                     err_holder.append(exc)
             t = _threading.Thread(target=_run)
             t.start()
-            t.join()
+            try:
+                from blockbuster.blockbuster import blockbuster_skip
+                skip_token = blockbuster_skip.set(True)
+            except Exception:
+                skip_token = None
+
+            try:
+                t.join()
+            finally:
+                if skip_token is not None:
+                    try:
+                        blockbuster_skip.reset(skip_token)
+                    except Exception:
+                        pass
+
             if err_holder:
                 raise err_holder[0]
             return str(result_holder[0])
