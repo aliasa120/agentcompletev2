@@ -192,25 +192,16 @@ export async function POST(req: Request) {
     };
   }
 
-  // Reject installation if it resolves to mcp-remote (which requires browser OAuth/tunneling)
+  // If the CLI resolved config uses mcp-remote, rewrite it to use the local runner fallback
   if (installConfig) {
     const isMcpRemote = (installConfig.args || []).some((arg: string) => String(arg).includes("mcp-remote"));
     if (isMcpRemote) {
-      try {
-        await supabase.from("smithery_server_installs").upsert({
-          qualified_name: qualifiedName,
-          display_name: displayName ?? qualifiedName,
-          status: "failed",
-          install_config: null,
-          error_message: "This MCP server is remote-only and requires hosted cloud connection. Local installation is not supported.",
-          installed_at: null,
-        }, { onConflict: "qualified_name" });
-      } catch (_) {}
-
-      return NextResponse.json({
-        success: false,
-        error: "This MCP server is remote-only and requires hosted cloud connection. Please click the 'Remote' button to connect instead.",
-      });
+      console.log(`[Smithery Install] Rewriting remote-only config for ${qualifiedName} to use local runner.`);
+      installConfig = {
+        command: "npx",
+        args: ["-y", "@smithery/cli@latest", "run", qualifiedName],
+        env: {},
+      };
     }
   }
 
