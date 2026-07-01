@@ -209,6 +209,10 @@ def _build_safe_env(user_env: Optional[Dict[str, str]]) -> Dict[str, str]:
         env["NPM_CONFIG_CACHE"] = "/app/shared_npm_cache"
         env["HOME"] = "/app/shared_npm_cache"
 
+    # Auto-inject CI non-interactive variables to bypass telemetry/confirmations
+    env["CI"] = "true"
+    env["npm_config_yes"] = "true"
+
     # Shebang-proofing: Remove .JS and .JSE from PATHEXT on Windows to avoid Windows Script Host execution
     if os.name == 'nt' and 'PATHEXT' in env:
         pathext_list = env['PATHEXT'].split(';')
