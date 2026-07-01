@@ -663,7 +663,7 @@ export async function GET(req: Request) {
                         const { promisify } = await import("util");
                         const execAsync = promisify(exec);
                         await execAsync(`npm install --no-save --legacy-peer-deps ${npmPackageName}`, {
-                          timeout: 60000,
+                          timeout: 300000,
                           env: process.env,
                         });
                       }
