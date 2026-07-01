@@ -156,6 +156,7 @@ def _resolve_stdio_command(command: str, env: dict) -> tuple[str, dict]:
 # --- Environment Sandboxing Definitions ---
 _SAFE_ENV_KEYS = frozenset({
     "PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM", "SHELL", "TMPDIR",
+    "NPM_CONFIG_CACHE",
 })
 
 _SAFE_ENV_KEYS_CASE_INSENSITIVE = frozenset({
@@ -202,6 +203,11 @@ def _build_safe_env(user_env: Optional[Dict[str, str]]) -> Dict[str, str]:
         for k, v in user_env.items():
             if v is not None:
                 env[k] = str(v)
+
+    # Auto-inject shared caching for Docker containers
+    if os.path.exists("/app/shared_npm_cache"):
+        env["NPM_CONFIG_CACHE"] = "/app/shared_npm_cache"
+        env["HOME"] = "/app/shared_npm_cache"
 
     # Shebang-proofing: Remove .JS and .JSE from PATHEXT on Windows to avoid Windows Script Host execution
     if os.name == 'nt' and 'PATHEXT' in env:

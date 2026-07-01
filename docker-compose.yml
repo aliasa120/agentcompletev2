@@ -18,6 +18,7 @@ services:
 
     volumes:
       - shared-node-modules:/app/deep-agents-ui-main/node_modules
+      - shared-npm-cache:/app/shared_npm_cache
 
   # ── Feeder HTTP server (port 8080, HTTP-only, no scheduler) ────────────
   feeder_svc:
@@ -86,9 +87,11 @@ services:
       - NEXT_PUBLIC_API_URL=http://backend:2024
     volumes:
       - shared-node-modules:/app/node_modules
+      - shared-npm-cache:/app/shared_npm_cache
     depends_on:
       - backend
       - feeder_svc
 
 volumes:
   shared-node-modules:
+  shared-npm-cache:
