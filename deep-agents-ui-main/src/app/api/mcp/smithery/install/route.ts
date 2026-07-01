@@ -224,7 +224,7 @@ export async function POST(req: Request) {
 
     console.log(`[Smithery Install] Running local npm install for ${npmPackageName}...`);
     await execAsync(`npm install --no-save --legacy-peer-deps ${npmPackageName}`, {
-      timeout: 60000,
+      timeout: 300000,
       env: process.env,
     });
   } catch (err: any) {

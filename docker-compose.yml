@@ -16,6 +16,9 @@ services:
       - LANGGRAPH_HOST=0.0.0.0
       - LANGGRAPH_PORT=2024
 
+    volumes:
+      - shared-node-modules:/app/deep-agents-ui-main/node_modules
+
   # ── Feeder HTTP server (port 8080, HTTP-only, no scheduler) ────────────
   feeder_svc:
     build:
@@ -81,6 +84,11 @@ services:
     environment:
       - FEEDER_SERVER_URL=http://feeder_svc:8080
       - NEXT_PUBLIC_API_URL=http://backend:2024
+    volumes:
+      - shared-node-modules:/app/node_modules
     depends_on:
       - backend
       - feeder_svc
+
+volumes:
+  shared-node-modules:
