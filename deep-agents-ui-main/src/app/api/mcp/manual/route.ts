@@ -107,6 +107,14 @@ function parseAndNormalizeMcpConfig(mcpUrlStr: string): {
   }
   try {
     let parsed = JSON.parse(trimmed);
+    let result: {
+      transport: "stdio" | "sse" | "http";
+      url: string;
+      command?: string;
+      args?: string[];
+      env?: Record<string, string>;
+      headers?: Record<string, string>;
+    } | null = null;
     
     // Check if it's Claude Desktop format: {"mcpServers": {"serverName": {...}}}
     if (parsed.mcpServers && typeof parsed.mcpServers === "object") {
@@ -114,7 +122,7 @@ function parseAndNormalizeMcpConfig(mcpUrlStr: string): {
       if (serverNames.length > 0) {
         const serverName = serverNames[0];
         const serverConfig = parsed.mcpServers[serverName];
-        return {
+        result = {
           transport: "stdio",
           url: "",
           command: serverConfig.command || "",
@@ -126,38 +134,54 @@ function parseAndNormalizeMcpConfig(mcpUrlStr: string): {
     }
 
     // Check for direct server-name-as-key format: {"supadata": {"command": "npx", ...}}
-    const metadataKeys = new Set(["description", "mcp_version", "transport", "url", "headers"]);
-    let firstVal: any = null;
-    for (const key of Object.keys(parsed)) {
-      if (!metadataKeys.has(key) && typeof parsed[key] === "object" && parsed[key] !== null) {
-        if (parsed[key].command || parsed[key].url) {
-          firstVal = parsed[key];
-          break;
+    if (!result) {
+      const metadataKeys = new Set(["description", "mcp_version", "transport", "url", "headers"]);
+      let firstVal: any = null;
+      for (const key of Object.keys(parsed)) {
+        if (!metadataKeys.has(key) && typeof parsed[key] === "object" && parsed[key] !== null) {
+          if (parsed[key].command || parsed[key].url) {
+            firstVal = parsed[key];
+            break;
+          }
         }
       }
-    }
-    if (firstVal) {
-      const transport = firstVal.url ? (firstVal.transport === "sse" || parsed.transport === "sse" ? "sse" : "http") : "stdio";
-      return {
-        transport,
-        url: firstVal.url || "",
-        command: firstVal.command || "",
-        args: firstVal.args || [],
-        env: firstVal.env || {},
-        headers: firstVal.headers || {}
-      };
+      if (firstVal) {
+        const transport = firstVal.url ? (firstVal.transport === "sse" || parsed.transport === "sse" ? "sse" : "http") : "stdio";
+        result = {
+          transport,
+          url: firstVal.url || "",
+          command: firstVal.command || "",
+          args: firstVal.args || [],
+          env: firstVal.env || {},
+          headers: firstVal.headers || {}
+        };
+      }
     }
 
     // Standard flat transport config: {"transport": "stdio", "command": "npx", ...}
-    const transport = parsed.transport || "sse";
-    return {
-      transport: transport === "streamable-http" ? "http" : transport,
-      url: parsed.url || parsed.mcp_url || "",
-      command: parsed.command || "",
-      args: parsed.args || [],
-      env: parsed.env || {},
-      headers: parsed.headers || {}
-    };
+    if (!result) {
+      const transport = parsed.transport || "sse";
+      result = {
+        transport: transport === "streamable-http" ? "http" : transport,
+        url: parsed.url || parsed.mcp_url || "",
+        command: parsed.command || "",
+        args: parsed.args || [],
+        env: parsed.env || {},
+        headers: parsed.headers || {}
+      };
+    }
+
+    // Translate Windows-specific shell wrappers (cmd /c) to direct commands on non-Windows platforms
+    if (result && result.transport === "stdio" && process.platform !== "win32") {
+      if (result.command === "cmd" && result.args?.[0] === "/c") {
+        if (result.args.length > 1) {
+          result.command = result.args[1];
+          result.args = result.args.slice(2);
+        }
+      }
+    }
+
+    return result;
 
   } catch (err) {
     console.warn("Failed to parse mcp_url as JSON config:", err);

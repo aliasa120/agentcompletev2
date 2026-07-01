@@ -16,8 +16,104 @@ from typing import List, Dict, Any, Optional, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 import mcp.types
+import shutil
+import sys
+from contextlib import asynccontextmanager
 
 logger = logging.getLogger("mcp_loader")
+
+# --- Stdio Subprocess Stderr Log Redirection ---
+_mcp_stderr_log_fh = None
+_mcp_stderr_log_lock = threading.Lock()
+
+def _get_mcp_stderr_log() -> Any:
+    """Return a shared append-mode file handle for MCP subprocess stderr."""
+    global _mcp_stderr_log_fh
+    with _mcp_stderr_log_lock:
+        if _mcp_stderr_log_fh is not None:
+            return _mcp_stderr_log_fh
+        try:
+            log_dir = "logs"
+            os.makedirs(log_dir, exist_ok=True)
+            log_path = os.path.join(log_dir, "mcp-stderr.log")
+            fh = open(log_path, "a", encoding="utf-8", errors="replace", buffering=1)
+            fh.fileno() # Confirm real fd is available
+            _mcp_stderr_log_fh = fh
+        except Exception as exc:
+            logger.debug(f"Failed to open MCP stderr log: {exc}")
+            try:
+                _mcp_stderr_log_fh = open(os.devnull, "w", encoding="utf-8")
+            except Exception:
+                _mcp_stderr_log_fh = sys.stderr
+        return _mcp_stderr_log_fh
+
+def _write_stderr_log_header(server_name: str) -> None:
+    """Write a human-readable session marker before launching a server."""
+    fh = _get_mcp_stderr_log()
+    try:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        fh.write(f"\n===== [{ts}] starting MCP server '{server_name}' =====\n")
+        fh.flush()
+    except Exception:
+        pass
+
+# Globally monkeypatch mcp.client.stdio.stdio_client to redirect stderr to file
+try:
+    import mcp.client.stdio
+    _original_stdio_client = mcp.client.stdio.stdio_client
+
+    @asynccontextmanager
+    async def _patched_stdio_client(server_parameters, *args, **kwargs):
+        errlog_fh = _get_mcp_stderr_log()
+        _write_stderr_log_header(server_parameters.command)
+        kwargs["errlog"] = errlog_fh
+        async with _original_stdio_client(server_parameters, *args, **kwargs) as streams:
+            yield streams
+
+    mcp.client.stdio.stdio_client = _patched_stdio_client
+    logger.info("Successfully monkeypatched mcp.client.stdio.stdio_client for stderr redirection.")
+except Exception as patch_err:
+    logger.warning(f"Failed to monkeypatch stdio_client: {patch_err}")
+
+# --- Command Path Resolution Helpers ---
+def _prepend_path(env: dict, directory: str) -> dict:
+    updated = dict(env or {})
+    if not directory:
+        return updated
+    existing = updated.get("PATH", "")
+    parts = [part for part in existing.split(os.pathsep) if part]
+    if directory not in parts:
+        parts = [directory, *parts]
+    updated["PATH"] = os.pathsep.join(parts) if parts else directory
+    return updated
+
+def _resolve_stdio_command(command: str, env: dict) -> tuple[str, dict]:
+    """Resolve a stdio MCP command and dynamically inject directory to PATH."""
+    resolved_command = os.path.expanduser(str(command).strip())
+    resolved_env = dict(env or {})
+
+    if os.sep not in resolved_command:
+        path_arg = resolved_env.get("PATH")
+        which_hit = shutil.which(resolved_command, path=path_arg)
+        if which_hit:
+            resolved_command = which_hit
+        elif resolved_command in {"npx", "npm", "node"}:
+            home = os.path.expanduser("~")
+            candidates = [
+                os.path.join(home, ".local", "bin", resolved_command),
+                os.path.join(os.sep, "usr", "local", "bin", resolved_command),
+            ]
+            for candidate in candidates:
+                if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                    resolved_command = candidate
+                    break
+
+    command_dir = os.path.dirname(resolved_command)
+    if command_dir:
+        resolved_env = _prepend_path(resolved_env, command_dir)
+
+    return resolved_command, resolved_env
 
 # --- Environment Sandboxing Definitions ---
 _SAFE_ENV_KEYS = frozenset({
@@ -128,31 +224,105 @@ def wrap_tool_with_redaction(tool: BaseTool) -> BaseTool:
     @functools.wraps(orig_run)
     def redacted_run(*args, **kwargs):
         try:
+            from blockbuster.blockbuster import blockbuster_skip
+            skip_token = blockbuster_skip.set(True)
+        except Exception:
+            skip_token = None
+
+        try:
             res = orig_run(*args, **kwargs)
             return sanitize_credentials(str(res)) if isinstance(res, str) else res
         except Exception as e:
             raise _safe_reraise(e) from None
+        finally:
+            if skip_token is not None:
+                try:
+                    blockbuster_skip.reset(skip_token)
+                except Exception:
+                    pass
 
     @functools.wraps(orig_arun)
     async def redacted_arun(*args, **kwargs):
+        try:
+            from blockbuster.blockbuster import blockbuster_skip
+            skip_token = blockbuster_skip.set(True)
+        except Exception:
+            skip_token = None
+
         try:
             res = await orig_arun(*args, **kwargs)
             return sanitize_credentials(str(res)) if isinstance(res, str) else res
         except Exception as e:
             raise _safe_reraise(e) from None
+        finally:
+            if skip_token is not None:
+                try:
+                    blockbuster_skip.reset(skip_token)
+                except Exception:
+                    pass
 
     tool._arun = redacted_arun
     tool._run = redacted_run
     return tool
 
 # --- MCP Sampling Callback Handler ---
-async def handle_sampling_request(ctx, params) -> Any:
-    """Handle a sampling/createMessage request from an MCP server by querying our LLM."""
+_sampling_states = {}
+_sampling_lock = threading.Lock()
+
+class SamplingState:
+    def __init__(self):
+        self.timestamps = []
+        self.tool_loop_count = 0
+
+async def handle_sampling_request(ctx, params, server_name: str = "unknown") -> Any:
+    """Handle a sampling/createMessage request from an MCP server by querying our LLM,
+    guarded by a rate-limiter and loop recursion check.
+    """
+    import time
+    from mcp.types import CreateMessageResult, TextContent
+
+    now = time.time()
+    window = now - 60
+
+    # Rate limiting & Loop Guard
+    with _sampling_lock:
+        if server_name not in _sampling_states:
+            _sampling_states[server_name] = SamplingState()
+        state = _sampling_states[server_name]
+
+        # Filter sliding window timestamps
+        state.timestamps = [t for t in state.timestamps if t > window]
+        if len(state.timestamps) >= 10:
+            logger.warning(f"MCP server '{server_name}' rate-limited: exceeded 10 sampling requests/min.")
+            raise RuntimeError(f"Rate limit exceeded for sampling requests on server '{server_name}'")
+        state.timestamps.append(now)
+
+        # Count tool usage loops to prevent runaway recursive calls
+        has_tool_calls = False
+        messages = getattr(params, "messages", [])
+        for msg in messages:
+            content_obj = getattr(msg, "content", None)
+            if content_obj:
+                if hasattr(content_obj, "type") and getattr(content_obj, "type") == "tool_use":
+                    has_tool_calls = True
+                    break
+                elif isinstance(content_obj, dict) and content_obj.get("type") == "tool_use":
+                    has_tool_calls = True
+                    break
+
+        if has_tool_calls:
+            state.tool_loop_count += 1
+            if state.tool_loop_count > 5:
+                state.tool_loop_count = 0 # reset
+                logger.warning(f"MCP server '{server_name}' loop-guard triggered: exceeded 5 tool rounds.")
+                raise RuntimeError(f"Tool loop limit (5 rounds) exceeded on server '{server_name}'")
+        else:
+            state.tool_loop_count = 0 # reset on normal text response
+
     try:
         from langchain_openai import ChatOpenAI
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
         from research_agent.tools.provider_engine import get_llm_config
-        from mcp.types import CreateMessageResult, TextContent
 
         langchain_messages = []
         if getattr(params, "systemPrompt", None):
@@ -348,6 +518,15 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
                         config_data = parsed
         except Exception as je:
             logger.warning(f"Failed to parse mcp_url as JSON: {je}")
+
+    # Translate Windows-specific shell wrappers (cmd /c) to direct commands on non-Windows platforms
+    if config_data and isinstance(config_data, dict) and config_data.get("transport") == "stdio" and os.name != "nt":
+        cmd_val = config_data.get("command")
+        args_val = config_data.get("args") or []
+        if cmd_val == "cmd" and len(args_val) > 0 and args_val[0] == "/c":
+            if len(args_val) > 1:
+                config_data["command"] = args_val[1]
+                config_data["args"] = args_val[2:]
 
     # Inject authorization headers if connecting to Zapier MCP
     headers = {}
@@ -559,7 +738,7 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
 
     # Setup session_kwargs to enable sampling capability callback
     session_kwargs = {
-        "sampling_callback": handle_sampling_request,
+        "sampling_callback": lambda ctx, params: handle_sampling_request(ctx, params, server_name=tool_key),
         "sampling_capabilities": mcp.types.SamplingCapability()
     }
 
@@ -567,11 +746,26 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
         transport = config_data.get("transport", "sse")
         if transport == "stdio":
             safe_env = _build_safe_env(config_data.get("env", {}))
+            cmd_val = config_data.get("command")
+            args_val = config_data.get("args") or []
+            
+            # Wrap node stdio servers with mcp-wrapper.js to filter out non-JSON stdout banners
+            if cmd_val == "node" and len(args_val) > 0 and args_val[0].endswith(".js") and not any("mcp-wrapper.js" in str(a) for a in args_val):
+                wrapper_path = "mcp-wrapper.js"
+                if not os.path.exists(wrapper_path):
+                    alt_path = os.path.join("deep-agents-ui-main", "mcp-wrapper.js")
+                    if os.path.exists(alt_path):
+                        wrapper_path = alt_path
+                args_val = [wrapper_path] + args_val
+            
+            # Resolve bare commands under restricted PATH and inject binary directory
+            cmd_val, safe_env = _resolve_stdio_command(cmd_val, safe_env)
+                
             server_config = {
                 "manual_server": {
                     "transport": "stdio",
-                    "command": config_data.get("command"),
-                    "args": config_data.get("args", []),
+                    "command": cmd_val,
+                    "args": args_val,
                     "env": safe_env,
                     "session_kwargs": session_kwargs,
                 }

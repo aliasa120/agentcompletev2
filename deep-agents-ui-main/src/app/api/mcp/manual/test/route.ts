@@ -28,9 +28,35 @@ export async function testStdioMcp(command: string, args: string[], env: Record<
         .join(";");
     }
 
-    logs.push({ direction: "info", message: `Spawning stdio child process: "${command}" with args: ${JSON.stringify(args)}` });
+    let runCommand = command;
+    let runArgs = [...args];
+
+    // Translate Windows-specific shell wrappers (cmd /c) to direct commands on non-Windows platforms
+    if (process.platform !== "win32" && runCommand === "cmd" && runArgs[0] === "/c") {
+      if (runArgs.length > 1) {
+        runCommand = runArgs[1];
+        runArgs = runArgs.slice(2);
+      }
+    }
+
+    // Wrap node executions with mcp-wrapper.js to filter out plain text stdout banners
+    if (runCommand === "node" && runArgs[0] && runArgs[0].endsWith(".js") && !runArgs[0].includes("mcp-wrapper.js")) {
+      const fs = require("fs");
+      const path = require("path");
+      let wrapperPath = "mcp-wrapper.js";
+      if (!fs.existsSync(path.resolve(process.cwd(), wrapperPath))) {
+        // If running in Next.js development server, cwd might be root
+        const altPath = path.join("deep-agents-ui-main", "mcp-wrapper.js");
+        if (fs.existsSync(path.resolve(process.cwd(), altPath))) {
+          wrapperPath = altPath;
+        }
+      }
+      runArgs = [wrapperPath, ...runArgs];
+    }
+
+    logs.push({ direction: "info", message: `Spawning stdio child process: "${runCommand}" with args: ${JSON.stringify(runArgs)}` });
     
-    const child: any = spawn(command, args, {
+    const child: any = spawn(runCommand, runArgs, {
       env: processEnv,
       stdio: ["pipe", "pipe", "pipe"],
       shell: process.platform === "win32",
