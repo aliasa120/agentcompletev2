@@ -20,7 +20,8 @@ export async function resolveNpmPackage(qualifiedName: string): Promise<string> 
     "postgres": "@modelcontextprotocol/server-postgres",
     "sqlite": "@modelcontextprotocol/server-sqlite",
     "github": "@modelcontextprotocol/server-github",
-    "gcal": "@modelcontextprotocol/server-gcal"
+    "gcal": "@modelcontextprotocol/server-gcal",
+    "parallel/search": "@parallel-web/mcp-server"
   };
 
   if (mappings[lowercaseQualifiedName]) {
