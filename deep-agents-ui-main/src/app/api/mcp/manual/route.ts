@@ -1126,6 +1126,32 @@ export async function POST(req: Request) {
 
 // DELETE /api/mcp/manual
 export async function DELETE(req: Request) {
+  async function cleanupToolAssignments(conn: any) {
+    if (conn && conn.available_tools && Array.isArray(conn.available_tools)) {
+      const toolKeys = conn.available_tools.map((t: any) => t.tool_key).filter(Boolean);
+      if (toolKeys.length > 0) {
+        await supabase
+          .from("agent_tool_assignments")
+          .delete()
+          .in("tool_key", toolKeys);
+      }
+    }
+  }
+
+  async function cleanupSmitheryInstall(conn: any) {
+    if (conn && conn.mcp_url) {
+      try {
+        const parsed = JSON.parse(conn.mcp_url);
+        if (parsed.smithery_qualified_name) {
+          await supabase
+            .from("smithery_server_installs")
+            .delete()
+            .eq("qualified_name", parsed.smithery_qualified_name);
+        }
+      } catch (_) {}
+    }
+  }
+
   try {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -1144,11 +1170,13 @@ export async function DELETE(req: Request) {
           const baseServerUrl = conn.mcp_url.split("#")[0];
           const { data: allConns } = await supabase
             .from("mcp_connections")
-            .select("id, mcp_url")
+            .select("*")
             .eq("connection_type", "manual");
           
           for (const c of (allConns || [])) {
             if (c.mcp_url?.startsWith(baseServerUrl)) {
+              await cleanupToolAssignments(c);
+              await cleanupSmitheryInstall(c);
               await supabase.from("mcp_connections").delete().eq("id", c.id);
             }
           }
@@ -1156,6 +1184,7 @@ export async function DELETE(req: Request) {
           // Deleting a specific Zapier app connection -> set status to "inactive"
           // so that the background/manual sync loop respects the user's deletion
           // and does not re-insert the connection.
+          await cleanupToolAssignments(conn);
           await supabase
             .from("mcp_connections")
             .update({ status: "inactive", updated_at: new Date().toISOString() })
@@ -1163,6 +1192,8 @@ export async function DELETE(req: Request) {
         }
       } else {
         // Standard manual connection -> delete the row from DB
+        await cleanupToolAssignments(conn);
+        await cleanupSmitheryInstall(conn);
         await supabase.from("mcp_connections").delete().eq("id", id);
       }
     }

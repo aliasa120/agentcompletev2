@@ -377,6 +377,23 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "connection_id required" }, { status: 400 });
     }
 
+    // Fetch connection first to retrieve available tools
+    const { data: conn } = await supabase
+      .from("mcp_connections")
+      .select("*")
+      .eq("composio_conn_id", connection_id)
+      .maybeSingle();
+
+    if (conn && conn.available_tools && Array.isArray(conn.available_tools)) {
+      const toolKeys = conn.available_tools.map((t: any) => t.tool_key).filter(Boolean);
+      if (toolKeys.length > 0) {
+        await supabase
+          .from("agent_tool_assignments")
+          .delete()
+          .in("tool_key", toolKeys);
+      }
+    }
+
     // Delete from Supabase
     await supabase
       .from("mcp_connections")
