@@ -176,7 +176,6 @@ export async function POST(req: Request) {
   // The Smithery CLI writes to ~/.config/Claude/claude_desktop_config.json
   // We need to extract the config for this specific server
   let installConfig: { command: string; args: string[]; env: Record<string, string> } | null = null;
-
   try {
     installConfig = await extractInstalledConfig(qualifiedName, stdout);
   } catch (e) {
@@ -185,12 +184,34 @@ export async function POST(req: Request) {
 
   // If we couldn't parse from file, build a fallback from qualifiedName
   if (!installConfig) {
-    // Most Smithery MCPs install as: npx @smithery/sdk@latest run <qualifiedName>
+    // Most Smithery MCPs run as: npx -y @smithery/cli@latest run <qualifiedName>
     installConfig = {
       command: "npx",
-      args: ["-y", "@smithery/sdk", "run", qualifiedName],
+      args: ["-y", "@smithery/cli@latest", "run", qualifiedName],
       env: {},
     };
+  }
+
+  // Reject installation if it resolves to mcp-remote (which requires browser OAuth/tunneling)
+  if (installConfig) {
+    const isMcpRemote = (installConfig.args || []).some((arg: string) => String(arg).includes("mcp-remote"));
+    if (isMcpRemote) {
+      try {
+        await supabase.from("smithery_server_installs").upsert({
+          qualified_name: qualifiedName,
+          display_name: displayName ?? qualifiedName,
+          status: "failed",
+          install_config: null,
+          error_message: "This MCP server is remote-only and requires hosted cloud connection. Local installation is not supported.",
+          installed_at: null,
+        }, { onConflict: "qualified_name" });
+      } catch (_) {}
+
+      return NextResponse.json({
+        success: false,
+        error: "This MCP server is remote-only and requires hosted cloud connection. Please click the 'Remote' button to connect instead.",
+      });
+    }
   }
 
   // Save successful install to DB
@@ -206,35 +227,6 @@ export async function POST(req: Request) {
   } catch (e) {
     console.error("[Smithery Install] Failed to save install record:", e);
     // Not fatal — return success anyway
-  }
-
-  // Install the package locally in node_modules to enable direct 'node' execution (bypassing WScript/npx cache permission issues)
-  try {
-    const { resolveNpmPackage } = await import("../../manual/route");
-    const npmPackageName = await resolveNpmPackage(qualifiedName);
-    
-    // Validate if the resolved package is a match or a false positive (meaning the server has no local NPM package)
-    const parts = qualifiedName.split("/");
-    const shortName = parts[parts.length - 1].toLowerCase();
-    const cleanPkgName = npmPackageName.replace(/^@/, "").split("/").pop() || "";
-    
-    if (!cleanPkgName.toLowerCase().includes(shortName)) {
-      throw new Error(`This server is remote-only and does not have a local NPM package. Please click "Remote" to connect instead.`);
-    }
-
-    console.log(`[Smithery Install] Running local npm install for ${npmPackageName}...`);
-    await execAsync(`npm install --no-save --legacy-peer-deps ${npmPackageName}`, {
-      timeout: 300000,
-      env: process.env,
-    });
-  } catch (err: any) {
-    console.warn("[Smithery Install] Failed to install package locally:", err);
-    if (err.message && err.message.includes("remote-only")) {
-      return NextResponse.json({
-        success: false,
-        error: err.message
-      });
-    }
   }
 
   // Fetch the configuration schema from Smithery's API to extract required environment variables

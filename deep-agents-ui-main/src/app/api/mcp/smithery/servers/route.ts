@@ -104,13 +104,30 @@ export async function GET(req: Request) {
 
   // 2. Load server-side installed packages from Supabase
   let installedNames = new Set<string>();
+  let failedPrivateNames = new Set<string>();
   try {
     const { data: installs } = await supabase
       .from("smithery_server_installs")
-      .select("qualified_name, status")
-      .eq("status", "installed");
+      .select("qualified_name, status, error_message");
     for (const row of installs ?? []) {
-      installedNames.add(row.qualified_name);
+      if (row.status === "installed") {
+        installedNames.add(row.qualified_name);
+      } else if (row.status === "failed") {
+        const err = (row.error_message ?? "").toLowerCase();
+        if (
+          err.includes("private") ||
+          err.includes("not found") ||
+          err.includes("forbidden") ||
+          err.includes("404") ||
+          err.includes("login") ||
+          err.includes("sign in") ||
+          err.includes("remote-only") ||
+          err.includes("remote only") ||
+          err.includes("mcp-remote")
+        ) {
+          failedPrivateNames.add(row.qualified_name);
+        }
+      }
     }
   } catch (e) {
     // Non-fatal
@@ -150,8 +167,10 @@ export async function GET(req: Request) {
       securityType = "verified";
     }
 
+    const qualName = s.qualifiedName ?? s.qualified_name ?? s.name ?? "";
+
     return {
-      qualifiedName: s.qualifiedName ?? s.qualified_name ?? s.name ?? "",
+      qualifiedName: qualName,
       displayName: s.displayName ?? s.display_name ?? s.name ?? s.qualifiedName ?? "",
       description: s.description ?? "",
       iconUrl: s.iconUrl ?? s.icon_url ?? s.icon ?? "",
@@ -160,9 +179,9 @@ export async function GET(req: Request) {
       isVerified,
       isRemote,
       homepage: s.homepage ?? s.url ?? "",
-      isDeployable: true, // All servers show Install by default (npx install handles failures gracefully)
-      isInstalledOnServer: installedNames.has(s.qualifiedName ?? s.name ?? ""),
-      isConnectedRemote: activeRemoteSlugs.has(s.qualifiedName ?? s.name ?? ""),
+      isDeployable: !failedPrivateNames.has(qualName),
+      isInstalledOnServer: installedNames.has(qualName),
+      isConnectedRemote: activeRemoteSlugs.has(qualName),
       createdAt: s.createdAt ?? s.created_at,
     };
   });
