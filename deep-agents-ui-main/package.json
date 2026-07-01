@@ -55,9 +55,7 @@
     "tailwind-merge": "^2.6",
     "twitter-api-v2": "^1.29.0",
     "use-stick-to-bottom": "^1.1.1",
-    "uuid": "^9.0.1",
-    "@upstash/context7-mcp": "^3.2.2",
-    "search-mcp": "^0.1.0"
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
