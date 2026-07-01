@@ -7,7 +7,7 @@ const targetScript = process.argv[2];
 const targetArgs = process.argv.slice(3);
 
 if (!targetScript) {
-  console.error("Usage: node mcp-wrapper.js <path-to-mcp-server.js> [args...]");
+  console.error("Usage: node mcp-wrapper.cjs <path-to-mcp-server.js> [args...]");
   process.exit(1);
 }
 

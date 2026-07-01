@@ -769,11 +769,11 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
                 cmd_val = config_data.get("command")
                 args_val = config_data.get("args") or []
                 
-                # Wrap node stdio servers with mcp-wrapper.js to filter out non-JSON stdout banners
-                if cmd_val == "node" and len(args_val) > 0 and args_val[0].endswith(".js") and not any("mcp-wrapper.js" in str(a) for a in args_val):
-                    wrapper_path = "mcp-wrapper.js"
+                # Wrap node stdio servers with mcp-wrapper.cjs to filter out non-JSON stdout banners
+                if cmd_val == "node" and len(args_val) > 0 and args_val[0].endswith(".js") and not any("mcp-wrapper.cjs" in str(a) for a in args_val):
+                    wrapper_path = "mcp-wrapper.cjs"
                     if not os.path.exists(wrapper_path):
-                        alt_path = os.path.join("deep-agents-ui-main", "mcp-wrapper.js")
+                        alt_path = os.path.join("deep-agents-ui-main", "mcp-wrapper.cjs")
                         if os.path.exists(alt_path):
                             wrapper_path = alt_path
                     args_val = [wrapper_path] + args_val

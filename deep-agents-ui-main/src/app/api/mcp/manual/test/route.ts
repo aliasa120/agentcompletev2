@@ -39,14 +39,14 @@ export async function testStdioMcp(command: string, args: string[], env: Record<
       }
     }
 
-    // Wrap node executions with mcp-wrapper.js to filter out plain text stdout banners
-    if (runCommand === "node" && runArgs[0] && runArgs[0].endsWith(".js") && !runArgs[0].includes("mcp-wrapper.js")) {
+    // Wrap node executions with mcp-wrapper.cjs to filter out plain text stdout banners
+    if (runCommand === "node" && runArgs[0] && runArgs[0].endsWith(".js") && !runArgs[0].includes("mcp-wrapper.cjs")) {
       const fs = require("fs");
       const path = require("path");
-      let wrapperPath = "mcp-wrapper.js";
+      let wrapperPath = "mcp-wrapper.cjs";
       if (!fs.existsSync(path.resolve(process.cwd(), wrapperPath))) {
         // If running in Next.js development server, cwd might be root
-        const altPath = path.join("deep-agents-ui-main", "mcp-wrapper.js");
+        const altPath = path.join("deep-agents-ui-main", "mcp-wrapper.cjs");
         if (fs.existsSync(path.resolve(process.cwd(), altPath))) {
           wrapperPath = altPath;
         }
