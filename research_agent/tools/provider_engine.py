@@ -89,18 +89,31 @@ def _fetch_settings_from_supabase() -> dict[str, str]:
 
 def run_in_thread(func, *args, **kwargs):
     import threading
-    res, err = [], []
-    def target():
-        try:
-            res.append(func(*args, **kwargs))
-        except Exception as e:
-            err.append(e)
-    t = threading.Thread(target=target)
-    t.start()
-    t.join()
-    if err:
-        raise err[0]
-    return res[0]
+    try:
+        from blockbuster.blockbuster import blockbuster_skip
+        skip_token = blockbuster_skip.set(True)
+    except Exception:
+        skip_token = None
+
+    try:
+        res, err = [], []
+        def target():
+            try:
+                res.append(func(*args, **kwargs))
+            except Exception as e:
+                err.append(e)
+        t = threading.Thread(target=target)
+        t.start()
+        t.join()
+        if err:
+            raise err[0]
+        return res[0]
+    finally:
+        if skip_token is not None:
+            try:
+                blockbuster_skip.reset(skip_token)
+            except Exception:
+                pass
 
 
 def get_settings() -> dict[str, str]:

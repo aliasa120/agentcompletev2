@@ -90,30 +90,43 @@ def _prepend_path(env: dict, directory: str) -> dict:
 
 def _resolve_stdio_command(command: str, env: dict) -> tuple[str, dict]:
     """Resolve a stdio MCP command and dynamically inject directory to PATH."""
-    resolved_command = os.path.expanduser(str(command).strip())
-    resolved_env = dict(env or {})
+    try:
+        from blockbuster.blockbuster import blockbuster_skip
+        skip_token = blockbuster_skip.set(True)
+    except Exception:
+        skip_token = None
 
-    if os.sep not in resolved_command:
-        path_arg = resolved_env.get("PATH")
-        which_hit = shutil.which(resolved_command, path=path_arg)
-        if which_hit:
-            resolved_command = which_hit
-        elif resolved_command in {"npx", "npm", "node"}:
-            home = os.path.expanduser("~")
-            candidates = [
-                os.path.join(home, ".local", "bin", resolved_command),
-                os.path.join(os.sep, "usr", "local", "bin", resolved_command),
-            ]
-            for candidate in candidates:
-                if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-                    resolved_command = candidate
-                    break
+    try:
+        resolved_command = os.path.expanduser(str(command).strip())
+        resolved_env = dict(env or {})
 
-    command_dir = os.path.dirname(resolved_command)
-    if command_dir:
-        resolved_env = _prepend_path(resolved_env, command_dir)
+        if os.sep not in resolved_command:
+            path_arg = resolved_env.get("PATH")
+            which_hit = shutil.which(resolved_command, path=path_arg)
+            if which_hit:
+                resolved_command = which_hit
+            elif resolved_command in {"npx", "npm", "node"}:
+                home = os.path.expanduser("~")
+                candidates = [
+                    os.path.join(home, ".local", "bin", resolved_command),
+                    os.path.join(os.sep, "usr", "local", "bin", resolved_command),
+                ]
+                for candidate in candidates:
+                    if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                        resolved_command = candidate
+                        break
 
-    return resolved_command, resolved_env
+        command_dir = os.path.dirname(resolved_command)
+        if command_dir:
+            resolved_env = _prepend_path(resolved_env, command_dir)
+
+        return resolved_command, resolved_env
+    finally:
+        if skip_token is not None:
+            try:
+                blockbuster_skip.reset(skip_token)
+            except Exception:
+                pass
 
 # --- Environment Sandboxing Definitions ---
 _SAFE_ENV_KEYS = frozenset({
@@ -745,21 +758,34 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
     if config_data and isinstance(config_data, dict):
         transport = config_data.get("transport", "sse")
         if transport == "stdio":
-            safe_env = _build_safe_env(config_data.get("env", {}))
-            cmd_val = config_data.get("command")
-            args_val = config_data.get("args") or []
-            
-            # Wrap node stdio servers with mcp-wrapper.js to filter out non-JSON stdout banners
-            if cmd_val == "node" and len(args_val) > 0 and args_val[0].endswith(".js") and not any("mcp-wrapper.js" in str(a) for a in args_val):
-                wrapper_path = "mcp-wrapper.js"
-                if not os.path.exists(wrapper_path):
-                    alt_path = os.path.join("deep-agents-ui-main", "mcp-wrapper.js")
-                    if os.path.exists(alt_path):
-                        wrapper_path = alt_path
-                args_val = [wrapper_path] + args_val
-            
-            # Resolve bare commands under restricted PATH and inject binary directory
-            cmd_val, safe_env = _resolve_stdio_command(cmd_val, safe_env)
+            try:
+                from blockbuster.blockbuster import blockbuster_skip
+                skip_token = blockbuster_skip.set(True)
+            except Exception:
+                skip_token = None
+
+            try:
+                safe_env = _build_safe_env(config_data.get("env", {}))
+                cmd_val = config_data.get("command")
+                args_val = config_data.get("args") or []
+                
+                # Wrap node stdio servers with mcp-wrapper.js to filter out non-JSON stdout banners
+                if cmd_val == "node" and len(args_val) > 0 and args_val[0].endswith(".js") and not any("mcp-wrapper.js" in str(a) for a in args_val):
+                    wrapper_path = "mcp-wrapper.js"
+                    if not os.path.exists(wrapper_path):
+                        alt_path = os.path.join("deep-agents-ui-main", "mcp-wrapper.js")
+                        if os.path.exists(alt_path):
+                            wrapper_path = alt_path
+                    args_val = [wrapper_path] + args_val
+                
+                # Resolve bare commands under restricted PATH and inject binary directory
+                cmd_val, safe_env = _resolve_stdio_command(cmd_val, safe_env)
+            finally:
+                if skip_token is not None:
+                    try:
+                        blockbuster_skip.reset(skip_token)
+                    except Exception:
+                        pass
                 
             server_config = {
                 "manual_server": {
