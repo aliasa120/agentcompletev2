@@ -321,6 +321,9 @@ ALTER TABLE workflows ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
 ALTER TABLE feeder_sources ADD COLUMN IF NOT EXISTS workflow_id UUID REFERENCES workflows(id) ON DELETE SET NULL;
 ALTER TABLE feeder_articles ADD COLUMN IF NOT EXISTS workflow_id UUID REFERENCES workflows(id) ON DELETE SET NULL;
 ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS workflow_id UUID REFERENCES workflows(id) ON DELETE SET NULL;
+ALTER TABLE feeder_seen_guids ADD COLUMN IF NOT EXISTS workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE;
+ALTER TABLE feeder_seen_hashes ADD COLUMN IF NOT EXISTS workflow_id UUID REFERENCES workflows(id) ON DELETE CASCADE;
+ALTER TABLE feeder_articles ADD COLUMN IF NOT EXISTS source_id UUID REFERENCES feeder_sources(id) ON DELETE CASCADE;
 
 -- ── RLS: Disable RLS on all tables (team app — auth guards routes) ──
 ALTER TABLE workflows              DISABLE ROW LEVEL SECURITY;

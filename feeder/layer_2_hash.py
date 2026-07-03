@@ -14,7 +14,7 @@ def compute_hash(title: str, description: str, url: str = "") -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def layer_2_hash(title: str, description: str, url: str = "") -> tuple[bool, str, str]:
+def layer_2_hash(title: str, description: str, url: str = "", workflow_id: str = None) -> tuple[bool, str, str]:
     """Layer 2: Hash check only. Returns (is_new, hash, context_note).
 
     Returns:
@@ -23,8 +23,12 @@ def layer_2_hash(title: str, description: str, url: str = "") -> tuple[bool, str
     """
     h = compute_hash(title, description, url)
     try:
-        result = supabase_client.table("feeder_seen_hashes") \
-            .select("id").eq("hash", h).execute()
+        query = supabase_client.table("feeder_seen_hashes").select("id").eq("hash", h)
+        if workflow_id:
+            query = query.eq("workflow_id", workflow_id)
+        else:
+            query = query.is_("workflow_id", "null")
+        result = query.execute()
         if result.data:
             return False, h, f"Hash already in DB (exact content duplicate)"
         return True, h, ""

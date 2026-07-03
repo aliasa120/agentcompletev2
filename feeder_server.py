@@ -134,7 +134,7 @@ class FeederHandler(BaseHTTPRequestHandler):
 # ---------------------------------------------------------------------------
 def run():
     server = ThreadingHTTPServer(("0.0.0.0", 8080), FeederHandler)
-    print("✅ Feeder HTTP server running on port 8080 (scheduling handled by cron_scheduler.py)", flush=True)
+    print("[feeder_server] Feeder HTTP server running on port 8080 (scheduling handled by cron_scheduler.py)", flush=True)
     server.serve_forever()
 
 

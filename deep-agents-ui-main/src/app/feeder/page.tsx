@@ -30,19 +30,27 @@ function formatPKT(iso: string | null): string {
     });
 }
 
+interface Workflow {
+    id: string;
+    name: string;
+}
+
 export default function FeederDashboard() {
+    const [workflows, setWorkflows] = useState<Workflow[]>([]);
+    const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>("");
     const [stats, setStats] = useState({ pending: 0, processing: 0, done: 0, total: 0 });
     const [pendingArticles, setPendingArticles] = useState<PendingArticle[]>([]);
     const [isFetching, setIsFetching] = useState(false);
     const [pipelineLog, setPipelineLog] = useState<string>("");
 
-    const loadData = useCallback(async () => {
+    const loadData = useCallback(async (workflowId: string) => {
+        if (!workflowId) return;
         try {
             const [pendRes, procRes, doneRes, artRes] = await Promise.all([
-                supabase.from("feeder_articles").select("id", { count: "exact", head: true }).eq("status", "Pending"),
-                supabase.from("feeder_articles").select("id", { count: "exact", head: true }).eq("status", "Processing"),
-                supabase.from("feeder_articles").select("id", { count: "exact", head: true }).eq("status", "Done"),
-                supabase.from("feeder_articles").select("id", { count: "exact", head: true }),
+                supabase.from("feeder_articles").select("id", { count: "exact", head: true }).eq("status", "Pending").eq("workflow_id", workflowId),
+                supabase.from("feeder_articles").select("id", { count: "exact", head: true }).eq("status", "Processing").eq("workflow_id", workflowId),
+                supabase.from("feeder_articles").select("id", { count: "exact", head: true }).eq("status", "Done").eq("workflow_id", workflowId),
+                supabase.from("feeder_articles").select("id", { count: "exact", head: true }).eq("workflow_id", workflowId),
             ]);
             setStats({
                 pending: pendRes.count ?? 0,
@@ -56,6 +64,7 @@ export default function FeederDashboard() {
                 .from("feeder_articles")
                 .select("id,title,source_domain,published_at,created_at,url")
                 .eq("status", "Pending")
+                .eq("workflow_id", workflowId)
                 .order("created_at", { ascending: true })
                 .limit(50);
             setPendingArticles(data ?? []);
@@ -64,13 +73,43 @@ export default function FeederDashboard() {
         }
     }, []);
 
-    useEffect(() => { loadData(); }, [loadData]);
+    // Load active workflows on mount
+    useEffect(() => {
+        const loadWorkflows = async () => {
+            try {
+                const { data } = await supabase
+                    .from("workflows")
+                    .select("id, name")
+                    .eq("is_active", true)
+                    .order("name");
+                if (data && data.length > 0) {
+                    setWorkflows(data);
+                    setSelectedWorkflowId(data[0].id);
+                }
+            } catch (e) {
+                console.error("Error loading workflows:", e);
+            }
+        };
+        loadWorkflows();
+    }, []);
+
+    // Reload data when selected workflow changes
+    useEffect(() => {
+        if (selectedWorkflowId) {
+            loadData(selectedWorkflowId);
+        }
+    }, [selectedWorkflowId, loadData]);
 
     const triggerPipeline = async () => {
+        if (!selectedWorkflowId) return;
         setIsFetching(true);
         setPipelineLog("Running pipeline…");
         try {
-            const res = await fetch("/api/feeder/run", { method: "POST" });
+            const res = await fetch("/api/feeder/run", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ workflow_id: selectedWorkflowId }),
+            });
             const data = await res.json();
             if (data.success) {
                 setPipelineLog(data.log || "Pipeline ran successfully.");
@@ -81,29 +120,54 @@ export default function FeederDashboard() {
             setPipelineLog("Error: " + e.message);
         } finally {
             setIsFetching(false);
-            loadData();
+            if (selectedWorkflowId) {
+                loadData(selectedWorkflowId);
+            }
         }
     };
 
     const clearPending = async () => {
-        if (!confirm("Delete all Pending articles?")) return;
-        await supabase.from("feeder_articles").delete().eq("status", "Pending");
-        loadData();
+        if (!selectedWorkflowId) return;
+        if (!confirm("Delete all Pending articles for this workflow?")) return;
+        await supabase.from("feeder_articles").delete().eq("status", "Pending").eq("workflow_id", selectedWorkflowId);
+        loadData(selectedWorkflowId);
+    };
+
+    const handleRefresh = () => {
+        if (selectedWorkflowId) {
+            loadData(selectedWorkflowId);
+        }
     };
 
     return (
         <div className="flex h-screen flex-col bg-background">
             <header className="flex h-16 shrink-0 items-center justify-between border-b px-6">
-                <div className="flex items-center gap-3">
-                    <Activity className="h-5 w-5 text-primary" />
-                    <h1 className="text-xl font-semibold">Feeder Dashboard</h1>
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
+                        <Activity className="h-5 w-5 text-primary" />
+                        <h1 className="text-xl font-semibold">Feeder Dashboard</h1>
+                    </div>
+                    {workflows.length > 0 && (
+                        <div className="flex items-center gap-2 border-l pl-4">
+                            <span className="text-xs font-semibold text-muted-foreground">Workflow:</span>
+                            <select
+                                value={selectedWorkflowId}
+                                onChange={e => setSelectedWorkflowId(e.target.value)}
+                                className="h-9 rounded-lg border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary transition-all font-semibold"
+                            >
+                                {workflows.map(wf => (
+                                    <option key={wf.id} value={wf.id}>{wf.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                 </div>
                 <div className="flex items-center gap-2">
                     <ThemeToggle />
                     {/* Run Pipeline — moved to header per user request */}
                     <Button
                         onClick={triggerPipeline}
-                        disabled={isFetching}
+                        disabled={isFetching || !selectedWorkflowId}
                         size="sm"
                         className="bg-primary text-primary-foreground"
                     >
@@ -116,13 +180,13 @@ export default function FeederDashboard() {
                         variant="destructive"
                         size="sm"
                         onClick={clearPending}
-                        disabled={isFetching}
+                        disabled={isFetching || !selectedWorkflowId}
                     >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Clear Pending
                     </Button>
 
-                    <Button variant="outline" size="sm" onClick={loadData}>
+                    <Button variant="outline" size="sm" onClick={handleRefresh} disabled={!selectedWorkflowId}>
                         <RefreshCw className="mr-2 h-4 w-4" />Refresh
                     </Button>
                     <Link href="/feeder/settings">
