@@ -14,8 +14,6 @@ dependencies = [
     "requests>=2.32.0",
     "pydantic>=2.0.0",
     "rich>=14.0.0",
-    "jupyter>=1.0.0",
-    "ipykernel>=6.20.0",
     "httpx>=0.28.1",
     "markdownify>=1.2.0",
     "markdown>=3.6",
@@ -28,10 +26,8 @@ dependencies = [
     "litellm>=1.81.16",
     "fuzzywuzzy>=0.18.0",
     "python-levenshtein>=0.27.3",
-    "spacy>=3.8.11",
     "smartcrop>=0.4.2",
     "pinecone>=7.0.0",
-    "cerebras-cloud-sdk>=1.67.0",
     "composio-langchain>=0.6.0",
     "langchain-mcp-adapters>=0.1.0",
     "python-telegram-bot>=22.8",
@@ -39,7 +35,6 @@ dependencies = [
     "pg8000>=1.30.0",
     "mem0ai>=0.1.0",
     "langchain-pinecone>=0.2.0",
-    "neo4j>=5.12.0",
     "cohere>=7.0.4",
 ]
 
