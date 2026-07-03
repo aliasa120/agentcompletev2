@@ -102,37 +102,6 @@ export async function GET(req: Request) {
   const total = pagination.totalCount ?? pagination.total ?? rawServers.length;
   const totalPages = pagination.totalPages ?? Math.ceil(total / limit);
 
-  // 2. Load server-side installed packages from Supabase
-  let installedNames = new Set<string>();
-  let failedPrivateNames = new Set<string>();
-  try {
-    const { data: installs } = await supabase
-      .from("smithery_server_installs")
-      .select("qualified_name, status, error_message");
-    for (const row of installs ?? []) {
-      if (row.status === "installed") {
-        installedNames.add(row.qualified_name);
-      } else if (row.status === "failed") {
-        const err = (row.error_message ?? "").toLowerCase();
-        if (
-          err.includes("private") ||
-          err.includes("not found") ||
-          err.includes("forbidden") ||
-          err.includes("404") ||
-          err.includes("login") ||
-          err.includes("sign in") ||
-          err.includes("remote-only") ||
-          err.includes("remote only") ||
-          err.includes("mcp-remote")
-        ) {
-          failedPrivateNames.add(row.qualified_name);
-        }
-      }
-    }
-  } catch (e) {
-    // Non-fatal
-  }
-
   // Load active remote manual connections from Supabase
   let activeRemoteSlugs = new Set<string>();
   try {
@@ -179,8 +148,8 @@ export async function GET(req: Request) {
       isVerified,
       isRemote,
       homepage: s.homepage ?? s.url ?? "",
-      isDeployable: !failedPrivateNames.has(qualName),
-      isInstalledOnServer: installedNames.has(qualName),
+      isDeployable: false, // Local download disabled entirely
+      isInstalledOnServer: false,
       isConnectedRemote: activeRemoteSlugs.has(qualName),
       createdAt: s.createdAt ?? s.created_at,
     };

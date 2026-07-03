@@ -1138,20 +1138,6 @@ export async function DELETE(req: Request) {
     }
   }
 
-  async function cleanupSmitheryInstall(conn: any) {
-    if (conn && conn.mcp_url) {
-      try {
-        const parsed = JSON.parse(conn.mcp_url);
-        if (parsed.smithery_qualified_name) {
-          await supabase
-            .from("smithery_server_installs")
-            .delete()
-            .eq("qualified_name", parsed.smithery_qualified_name);
-        }
-      } catch (_) {}
-    }
-  }
-
   try {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -1176,7 +1162,6 @@ export async function DELETE(req: Request) {
           for (const c of (allConns || [])) {
             if (c.mcp_url?.startsWith(baseServerUrl)) {
               await cleanupToolAssignments(c);
-              await cleanupSmitheryInstall(c);
               await supabase.from("mcp_connections").delete().eq("id", c.id);
             }
           }
@@ -1193,7 +1178,6 @@ export async function DELETE(req: Request) {
       } else {
         // Standard manual connection -> delete the row from DB
         await cleanupToolAssignments(conn);
-        await cleanupSmitheryInstall(conn);
         await supabase.from("mcp_connections").delete().eq("id", id);
       }
     }

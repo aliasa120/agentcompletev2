@@ -2,12 +2,11 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Search, Globe, Download, CheckCircle2, Loader2, AlertTriangle,
+  Search, Globe, CheckCircle2, Loader2, AlertTriangle,
   ExternalLink, Shield, ShieldAlert, Users, ChevronDown, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SmitheryInstallDialog } from "./SmitheryInstallDialog";
 import { SmitheryConnectDialog } from "./SmitheryConnectDialog";
 
 interface SmitheryServer {
@@ -47,7 +46,6 @@ export function SmitheryMarketplace({ onRefresh, onReloadAgent }: SmitheryMarket
   const [totalCount, setTotalCount] = useState(0);
   const [apiError, setApiError] = useState("");
 
-  const [installTarget, setInstallTarget] = useState<SmitheryServer | null>(null);
   const [connectTarget, setConnectTarget] = useState<SmitheryServer | null>(null);
 
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -132,13 +130,7 @@ export function SmitheryMarketplace({ onRefresh, onReloadAgent }: SmitheryMarket
     fetchServers(query, sort, verifiedOnly, next, true);
   };
 
-  const handleInstallSuccess = (connectionId: string) => {
-    setInstallTarget(null);
-    onRefresh();
-    if (onReloadAgent) onReloadAgent();
-    // Re-fetch to update isInstalledOnServer badges
-    fetchServers(query, sort, verifiedOnly, 1);
-  };
+
 
   const handleConnectSuccess = (connectionId: string) => {
     setConnectTarget(null);
@@ -160,10 +152,8 @@ export function SmitheryMarketplace({ onRefresh, onReloadAgent }: SmitheryMarket
               Smithery AI · 3,000+ MCP Servers
             </p>
             <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">
-              Browse the free Smithery registry. Each server has two options:{" "}
-              <strong>Download &amp; Install</strong> (runs locally on your server — each user adds
-              their own credentials) or <strong>Connect Remote</strong> (Smithery managed cloud
-              — each user enters their own Smithery API key).
+              Browse the free Smithery registry and connect to any server securely via your Smithery account
+              with managed OAuth and configuration settings directly in our app.
             </p>
           </div>
           <button
@@ -260,11 +250,10 @@ export function SmitheryMarketplace({ onRefresh, onReloadAgent }: SmitheryMarket
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-[560px] overflow-y-auto pr-1">
-            {servers.map((server, idx) => (
+             {servers.map((server, idx) => (
               <SmitheryServerCard
                 key={`${server.qualifiedName}-${idx}`}
                 server={server}
-                onInstall={() => setInstallTarget(server)}
                 onConnect={() => setConnectTarget(server)}
               />
             ))}
@@ -294,13 +283,7 @@ export function SmitheryMarketplace({ onRefresh, onReloadAgent }: SmitheryMarket
       </div>
 
       {/* Dialogs */}
-      {installTarget && (
-        <SmitheryInstallDialog
-          server={installTarget}
-          onClose={() => setInstallTarget(null)}
-          onSuccess={handleInstallSuccess}
-        />
-      )}
+
       {connectTarget && (
         <SmitheryConnectDialog
           server={connectTarget}
@@ -316,18 +299,16 @@ export function SmitheryMarketplace({ onRefresh, onReloadAgent }: SmitheryMarket
 
 function SmitheryServerCard({
   server,
-  onInstall,
   onConnect,
 }: {
   server: SmitheryServer;
-  onInstall: () => void;
   onConnect: () => void;
 }) {
   return (
     <div
       className={`rounded-xl border p-3 flex flex-col gap-2.5 transition-all hover:shadow-md ${
-        server.isInstalledOnServer
-          ? "border-violet-500/30 bg-violet-500/5"
+        server.isConnectedRemote
+          ? "border-emerald-500/30 bg-emerald-500/5"
           : "border-border bg-card hover:border-primary/30"
       }`}
     >
@@ -399,62 +380,28 @@ function SmitheryServerCard({
             {formatUseCount(server.useCount)} uses
           </span>
         )}
-        {server.isInstalledOnServer && (
-          <span className="flex items-center gap-0.5 text-[9px] font-semibold text-violet-600 dark:text-violet-400">
-            <CheckCircle2 className="h-2.5 w-2.5" />
-            Installed
-          </span>
-        )}
         {server.isConnectedRemote && (
           <span className="flex items-center gap-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
             <CheckCircle2 className="h-2.5 w-2.5" />
             Connected
           </span>
         )}
-        {!server.isDeployable && (
-          <span className="text-[9px] text-amber-600 dark:text-amber-500 font-medium">
-            Remote only
-          </span>
-        )}
       </div>
 
-      {/* Action buttons */}
-      <div className="flex gap-1.5 mt-auto">
-        {/* Download & Install — only show if deployable */}
-        {server.isDeployable ? (
-          <Button
-            size="sm"
-            variant={server.isInstalledOnServer ? "outline" : "outline"}
-            onClick={onInstall}
-            className={`flex-1 h-7 text-[10px] gap-1 ${
-              server.isInstalledOnServer
-                ? "border-violet-400/50 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10"
-                : ""
-            }`}
-          >
-            <Download className="h-3 w-3" />
-            {server.isInstalledOnServer ? "Add My Keys" : "Install"}
-          </Button>
-        ) : (
-          <div className="flex-1 flex items-center justify-center h-7 text-[10px] text-amber-600 dark:text-amber-500 border border-amber-500/20 rounded-md bg-amber-500/5 gap-1">
-            <AlertTriangle className="h-2.5 w-2.5" />
-            Private
-          </div>
-        )}
-
-        {/* Connect Remote */}
+      {/* Action button */}
+      <div className="mt-auto">
         <Button
           size="sm"
           variant={server.isConnectedRemote ? "outline" : "default"}
           onClick={onConnect}
-          className={`flex-1 h-7 text-[10px] gap-1 ${
+          className={`w-full h-7 text-[10px] gap-1 ${
             server.isConnectedRemote
               ? "border-emerald-400/50 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
               : ""
           }`}
         >
           <Globe className="h-3 w-3" />
-          {server.isConnectedRemote ? "Configure" : "Remote"}
+          {server.isConnectedRemote ? "Configure" : "Connect"}
         </Button>
       </div>
     </div>
