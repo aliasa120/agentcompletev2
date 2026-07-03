@@ -95,8 +95,8 @@ def fetch_rss_feed(url: str, max_age_minutes: int = 0) -> list[FeederArticle]:
     # Strategy: ask Google for a wider window (at least 1h, max 24h) and let Layer -2
     # do the precise minute-level time cut in Python.
     if max_age_minutes > 0 and "news.google.com/rss" in url:
-        # Round up to nearest hour, clamp between 1h and 24h
-        when_hours = max(1, min(24, math.ceil(max_age_minutes / 60)))
+        # Round up to nearest hour, clamp between 1h and 720h (30 days)
+        when_hours = max(1, min(720, math.ceil(max_age_minutes / 60)))
         when_val = f"{when_hours}h"
 
         from urllib.parse import urlparse, parse_qs, urlencode, urlunparse

@@ -10,7 +10,7 @@ import {
     PlusCircle, Rss, Globe, ShieldCheck, X, BarChart3,
     AlertTriangle, Database, Zap, AlarmClock, Clock,
     ChevronRight, Timer, Layers, CheckCircle2, XCircle,
-    Sparkles, Loader2, Save
+    Sparkles, Loader2, Save, Pencil, Check
 } from "lucide-react";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { LLM_PROVIDERS } from "@/app/components/settings/ProviderOrderingSection";
@@ -103,6 +103,9 @@ export default function FeederSettingsPage() {
     const [settings, setSettings] = useState<Record<string, string>>(DEFAULTS);
     const [dbSettings, setDbSettings] = useState<Record<string, string>>(DEFAULTS); // last saved snapshot
     const [isDirty, setIsDirty] = useState(false);
+    const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
+    const [editUrl, setEditUrl] = useState("");
+    const [editLabel, setEditLabel] = useState("");
 
     const [statsWorkflowId, setStatsWorkflowId] = useState<string>("");
     const [stats, setStats] = useState({ guids: 0, hashes: 0, articles: 0, pending: 0, done: 0 });
@@ -342,6 +345,23 @@ export default function FeederSettingsPage() {
     const toggleSource = async (id: string, is_active: boolean) => { await supabase.from("feeder_sources").update({ is_active: !is_active }).eq("id", id); loadAll(); };
     const updateSourceWorkflow = async (id: string, workflow_id: string | null) => {
         await supabase.from("feeder_sources").update({ workflow_id }).eq("id", id);
+        loadAll();
+    };
+    const startEditingSource = (source: FeedSource) => {
+        setEditingSourceId(source.id);
+        setEditUrl(source.url);
+        setEditLabel(source.label);
+    };
+    const saveSourceEdit = async (id: string) => {
+        if (!editUrl.trim()) return;
+        await supabase
+            .from("feeder_sources")
+            .update({
+                url: editUrl.trim(),
+                label: editLabel.trim() || editUrl.trim(),
+            })
+            .eq("id", id);
+        setEditingSourceId(null);
         loadAll();
     };
 
@@ -681,10 +701,29 @@ export default function FeederSettingsPage() {
                                     <button onClick={() => toggleSource(s.id, s.is_active)} title={s.is_active ? "Active · click to pause" : "Paused · click to activate"}>
                                         <div className={`h-2.5 w-2.5 rounded-full transition-colors ${s.is_active ? "bg-primary" : "bg-muted-foreground/30"}`} />
                                     </button>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="font-medium truncate">{s.label}</p>
-                                        <p className="text-xs text-muted-foreground truncate">{s.url}</p>
-                                    </div>
+                                    
+                                    {editingSourceId === s.id ? (
+                                        <div className="flex-1 flex flex-col gap-1.5 p-1">
+                                            <Input
+                                                value={editLabel}
+                                                onChange={e => setEditLabel(e.target.value)}
+                                                className="h-8 text-xs bg-background"
+                                                placeholder="Label"
+                                            />
+                                            <Input
+                                                value={editUrl}
+                                                onChange={e => setEditUrl(e.target.value)}
+                                                className="h-8 text-xs bg-background"
+                                                placeholder="RSS URL"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-medium truncate">{s.label}</p>
+                                            <p className="text-xs text-muted-foreground truncate">{s.url}</p>
+                                        </div>
+                                    )}
+
                                     <select
                                         value={s.workflow_id || ""}
                                         onChange={e => updateSourceWorkflow(s.id, e.target.value || null)}
@@ -695,9 +734,26 @@ export default function FeederSettingsPage() {
                                             <option key={w.id} value={w.id}>{w.name}</option>
                                         ))}
                                     </select>
-                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive shrink-0" onClick={() => deleteSource(s.id)}>
-                                        <X className="h-3 w-3" />
-                                    </Button>
+
+                                    {editingSourceId === s.id ? (
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-primary" onClick={() => saveSourceEdit(s.id)} title="Save changes">
+                                                <Check className="h-3.5 w-3.5" />
+                                            </Button>
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => setEditingSourceId(null)} title="Cancel">
+                                                <X className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => startEditingSource(s)} title="Edit link/label">
+                                                <Pencil className="h-3 w-3" />
+                                            </Button>
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => deleteSource(s.id)} title="Delete source">
+                                                <X className="h-3 w-3" />
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
