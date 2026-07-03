@@ -241,6 +241,68 @@ async function handleLocalConnect(body: {
 
 
 
+async function getServerConfigSchema(qualifiedName: string): Promise<any | null> {
+  try {
+    const res = await fetch(`https://api.smithery.ai/servers/${qualifiedName}`, {
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0"
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const connections = data.connections ?? [];
+      const httpConn = connections.find((c: any) => c.configSchema && Object.keys(c.configSchema).length > 0);
+      if (httpConn && httpConn.configSchema) {
+        return httpConn.configSchema;
+      }
+    }
+  } catch (e) {
+    console.warn("[Smithery Connect] Failed to fetch server schema from registry:", e);
+  }
+  return null;
+}
+
+function mapConfigSchema(configSchema: any) {
+  const query: Record<string, any> = {};
+  const headers: Record<string, any> = {};
+  
+  if (configSchema && configSchema.properties) {
+    const requiredList = configSchema.required ?? [];
+    
+    for (const [key, prop] of Object.entries(configSchema.properties) as [string, any][]) {
+      const isRequired = requiredList.includes(key);
+      const xFrom = prop["x-from"] ?? {};
+      
+      const fieldSpec = {
+        type: prop.type ?? "string",
+        label: prop.title ?? key,
+        description: prop.description ?? "",
+        required: isRequired,
+        examples: prop.examples ?? [],
+        format: prop.format ?? ""
+      };
+      
+      if (xFrom.headers) {
+        headers[key] = fieldSpec;
+      } else if (xFrom.query) {
+        query[key] = fieldSpec;
+      } else {
+        // Fallback guess
+        const k = key.toLowerCase();
+        if (k.includes("key") || k.includes("token") || k.includes("auth") || k.includes("password") || k.includes("secret")) {
+          headers[key] = fieldSpec;
+        } else {
+          query[key] = fieldSpec;
+        }
+      }
+    }
+  }
+  
+  return { query, headers };
+}
+
 /**
  * Remote connect: User connects to Smithery's managed cloud using their own Smithery API key.
  * Initiates the connection on Smithery, detects if OAuth/API-key input is required,
@@ -286,6 +348,45 @@ async function handleRemoteConnect(body: {
 
   if (!namespace) {
     return NextResponse.json({ success: false, error: "No namespace found for this API key on Smithery." });
+  }
+
+  // 1.5 Fetch configuration schema from Smithery registry details
+  const registrySchema = await getServerConfigSchema(qualifiedName);
+  if (registrySchema && registrySchema.properties && Object.keys(registrySchema.properties).length > 0) {
+    const requiredFields = registrySchema.required ?? [];
+    const providedConfigKeys = new Set(
+      config
+        ? "query" in config || "headers" in config
+          ? [...Object.keys(config.query ?? {}), ...Object.keys(config.headers ?? {})]
+          : Object.keys(config)
+        : []
+    );
+    
+    const isMissingRequired = requiredFields.some((f: string) => !providedConfigKeys.has(f));
+    
+    if (!config || Object.keys(config).length === 0 || isMissingRequired) {
+      const mappedSchema = mapConfigSchema(registrySchema);
+      return NextResponse.json({
+        success: true,
+        requiresInput: true,
+        configSchema: mappedSchema,
+        missingFields: {
+          query: requiredFields.filter((f: string) => {
+            const prop = registrySchema.properties[f];
+            const xFrom = prop?.["x-from"] ?? {};
+            return !("headers" in xFrom) && !providedConfigKeys.has(f);
+          }),
+          headers: requiredFields.filter((f: string) => {
+            const prop = registrySchema.properties[f];
+            const xFrom = prop?.["x-from"] ?? {};
+            return "headers" in xFrom && !providedConfigKeys.has(f);
+          })
+        },
+        setupUrl: null,
+        namespace,
+        smitheryConnectionId: "",
+      });
+    }
   }
 
   // 2. Build the MCP URL — embed any user-provided config (API keys) into the URL/headers
