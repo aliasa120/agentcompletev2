@@ -26,9 +26,6 @@ RUN uv pip install --system -e .
 # Copy application source
 COPY . .
 
-# Install Node-based local MCP packages (like Context7 and Parallel Web Search)
-RUN cd deep-agents-ui-main && npm install @upstash/context7-mcp search-mcp
-
 # Create output directories (gitignored so not in source — must exist at runtime)
 RUN mkdir -p output/candidate_images
 
