@@ -32,12 +32,17 @@ def _make_model() -> ChatOpenAI:
 
 
 # ── DB helper: fetch recent titles ───────────────────────────────────────────
-def _fetch_recent_db_titles(limit: int = 300) -> list[str]:
+def _fetch_recent_db_titles(limit: int = 300, workflow_id: str = None) -> list[str]:
     """Fetch the most recently stored article titles from feeder_articles."""
     try:
+        query = supabase_client.table("feeder_articles").select("title")
+        if workflow_id:
+            query = query.eq("workflow_id", workflow_id)
+        else:
+            query = query.is_("workflow_id", "null")
+            
         res = (
-            supabase_client.table("feeder_articles")
-            .select("title")
+            query
             .order("created_at", desc=True)
             .limit(limit)
             .execute()
@@ -73,6 +78,7 @@ def _format_db_titles(titles: list[str]) -> str:
 def run_feeder_dedup_agent(
     articles: list[Any],
     db_title_limit: int = 300,
+    workflow_id: str = None,
 ) -> tuple[list[Any], list[tuple[Any, str]]]:
     """
     Run the LLM-based deduplication agent on a batch of articles.
@@ -80,6 +86,7 @@ def run_feeder_dedup_agent(
     Args:
         articles:         List of FeederArticle objects (already passed L1 + L2)
         db_title_limit:   How many recent DB titles to compare against
+        workflow_id:      workflow ID to scope verification context
 
     Returns:
         (kept, dropped_with_reasons)
@@ -92,7 +99,7 @@ def run_feeder_dedup_agent(
     print(f"\n  [FeederAgent] Starting dedup on {len(articles)} articles...")
 
     # Fetch DB context
-    db_titles = _fetch_recent_db_titles(db_title_limit)
+    db_titles = _fetch_recent_db_titles(db_title_limit, workflow_id)
     print(f"  [FeederAgent] Loaded {len(db_titles)} recent DB titles for comparison.")
 
     # Build prompt

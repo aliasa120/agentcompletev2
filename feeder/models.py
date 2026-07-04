@@ -16,6 +16,7 @@ class FeederArticle(BaseModel):
     status: str = "Processing"
     embedding: Optional[list[float]] = None   # set by L5, stored atomically at pipeline end
     workflow_id: Optional[str] = None
+    source_id: Optional[str] = None
 
 
 class LayerResult(BaseModel):

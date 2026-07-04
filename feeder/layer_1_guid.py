@@ -7,7 +7,7 @@ Per plan spec:
 from feeder.db import supabase_client
 
 
-def layer_1_guid(guid: str) -> tuple[bool, str]:
+def layer_1_guid(guid: str, workflow_id: str = None) -> tuple[bool, str]:
     """Returns (is_new, context_note). Does NOT write to DB.
 
     Returns:
@@ -15,8 +15,12 @@ def layer_1_guid(guid: str) -> tuple[bool, str]:
         (False, "GUID exists") -> DUPLICATE, drop
     """
     try:
-        result = supabase_client.table("feeder_seen_guids") \
-            .select("id").eq("guid", guid).execute()
+        query = supabase_client.table("feeder_seen_guids").select("id").eq("guid", guid)
+        if workflow_id:
+            query = query.eq("workflow_id", workflow_id)
+        else:
+            query = query.is_("workflow_id", "null")
+        result = query.execute()
         if result.data:
             return False, f"GUID already in DB: {guid[:40]}..."
         return True, ""

@@ -7,11 +7,19 @@ import { NextResponse } from 'next/server';
 // Locally (non-Docker), fall back to localhost:8080.
 const FEEDER_SERVER_URL = process.env.FEEDER_SERVER_URL || 'http://backend:8080';
 
-export async function POST() {
+export async function POST(req: Request) {
     try {
+        let body = {};
+        try {
+            body = await req.json();
+        } catch (e) {
+            // Ignore parse errors for empty/non-JSON bodies
+        }
+
         const response = await fetch(`${FEEDER_SERVER_URL}/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
             signal: AbortSignal.timeout(310_000), // 5-min + buffer
         });
 

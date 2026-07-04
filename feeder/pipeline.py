@@ -70,18 +70,18 @@ def load_domain_priority() -> dict[str, int]:
 
 def load_feed_sources(workflow_id: str = None) -> list[dict]:
     try:
-        query = supabase_client.table("feeder_sources").select("url, workflow_id").eq("is_active", True)
+        query = supabase_client.table("feeder_sources") \
+            .select("id, url, workflow_id, workflows!inner(is_active)") \
+            .eq("is_active", True) \
+            .eq("workflows.is_active", True)
         if workflow_id:
             query = query.eq("workflow_id", workflow_id)
         res = query.execute()
         sources = res.data or []
-        if sources:
-            return sources
+        return [{"id": s["id"], "url": s["url"], "workflow_id": s["workflow_id"]} for s in sources]
     except Exception as e:
         print(f"Warning: Could not load feed sources: {e}")
-    if not workflow_id:
-        return [{"url": "https://news.google.com/rss/search?q=pakistan&hl=en-PK&gl=PK&ceid=PK:en", "workflow_id": None}]
-    return []
+        return []
 
 
 def fetch_rss_feed(url: str, max_age_minutes: int = 0) -> list[FeederArticle]:
@@ -95,8 +95,8 @@ def fetch_rss_feed(url: str, max_age_minutes: int = 0) -> list[FeederArticle]:
     # Strategy: ask Google for a wider window (at least 1h, max 24h) and let Layer -2
     # do the precise minute-level time cut in Python.
     if max_age_minutes > 0 and "news.google.com/rss" in url:
-        # Round up to nearest hour, clamp between 1h and 24h
-        when_hours = max(1, min(24, math.ceil(max_age_minutes / 60)))
+        # Round up to nearest hour, clamp between 1h and 720h (30 days)
+        when_hours = max(1, min(720, math.ceil(max_age_minutes / 60)))
         when_val = f"{when_hours}h"
 
         from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
@@ -175,9 +175,11 @@ def run_feeder_pipeline(workflow_id: str = None) -> tuple[list[FeederArticle], l
     for src in feed_sources:
         url = src["url"]
         wf_id = src.get("workflow_id")
+        src_id = src.get("id")
         fetched = fetch_rss_feed(url, max_age_minutes=effective_max_minutes)
         for art in fetched:
             art.workflow_id = wf_id
+            art.source_id = src_id
         raw.extend(fetched)
     print(f"Fetched {len(raw)} raw articles from {len(feed_sources)} feed(s).")
 
@@ -221,13 +223,13 @@ def run_feeder_pipeline(workflow_id: str = None) -> tuple[list[FeederArticle], l
         t = art.title
 
         # L1 - GUID
-        is_new, note = layer_1_guid(art.guid)
+        is_new, note = layer_1_guid(art.guid, art.workflow_id)
         if not is_new:
             _log_drop("-1 GUID", t, note)
             dropped.append((art, "L1 GUID duplicate")); continue
 
         # L2 - Hash
-        is_new, h, note = layer_2_hash(art.title, art.description, art.link)
+        is_new, h, note = layer_2_hash(art.title, art.description, art.link, art.workflow_id)
         art.hash = h
         if not is_new:
             _log_drop("-2 Hash", t, note)
@@ -241,7 +243,7 @@ def run_feeder_pipeline(workflow_id: str = None) -> tuple[list[FeederArticle], l
     # -- Feeder Dedup Agent: replaces L3 (Fuzzy) + L4 (NER) + L5 (Semantic) --
     print(f"\n-> Running Feeder Dedup Agent on {len(passed)} articles...")
     final, agent_dropped = run_feeder_dedup_agent(
-        passed, db_title_limit=agent_db_limit
+        passed, db_title_limit=agent_db_limit, workflow_id=workflow_id
     )
     for art, reason in agent_dropped:
         dropped.append((art, f"Agent dedup: {reason}"))
@@ -261,12 +263,13 @@ def run_feeder_pipeline(workflow_id: str = None) -> tuple[list[FeederArticle], l
 
         print(f"\nStoring {len(final)} articles atomically...")
         for art in final:
+            target_wf_id = art.workflow_id or workflow_id
             try:
-                supabase_client.table("feeder_seen_guids").insert({"guid": art.guid}).execute()
+                supabase_client.table("feeder_seen_guids").insert({"guid": art.guid, "workflow_id": target_wf_id}).execute()
             except Exception as e:
                 print(f"  [store] GUID error: {e}")
             try:
-                supabase_client.table("feeder_seen_hashes").insert({"hash": art.hash}).execute()
+                supabase_client.table("feeder_seen_hashes").insert({"hash": art.hash, "workflow_id": target_wf_id}).execute()
             except Exception as e:
                 print(f"  [store] Hash error: {e}")
             try:
@@ -279,9 +282,10 @@ def run_feeder_pipeline(workflow_id: str = None) -> tuple[list[FeederArticle], l
                     "source_domain": art.domain,
                     "status": "Pending",
                 }
-                target_wf_id = art.workflow_id or workflow_id
                 if target_wf_id:
                     row["workflow_id"] = target_wf_id
+                if art.source_id:
+                    row["source_id"] = art.source_id
                 if art.published_parsed is not None:
                     row["published_at"] = art.published_parsed.isoformat()
                 supabase_client.table("feeder_articles").upsert(row, on_conflict="guid").execute()

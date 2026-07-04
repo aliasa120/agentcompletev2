@@ -9,9 +9,11 @@ import {
     Settings, Home, Activity, RefreshCw, Trash2,
     PlusCircle, Rss, Globe, ShieldCheck, X, BarChart3,
     AlertTriangle, Database, Zap, AlarmClock, Clock,
-    ChevronRight, Timer, Layers, CheckCircle2, XCircle
+    ChevronRight, Timer, Layers, CheckCircle2, XCircle,
+    Sparkles, Loader2, Save, Pencil, Check
 } from "lucide-react";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
+import { LLM_PROVIDERS } from "@/app/components/settings/ProviderOrderingSection";
 
 interface FeedSource { id: string; url: string; label: string; is_active: boolean; workflow_id?: string | null; }
 interface WhitelistDomain { id: string; domain: string; note: string; workflow_id?: string | null; }
@@ -101,15 +103,62 @@ export default function FeederSettingsPage() {
     const [settings, setSettings] = useState<Record<string, string>>(DEFAULTS);
     const [dbSettings, setDbSettings] = useState<Record<string, string>>(DEFAULTS); // last saved snapshot
     const [isDirty, setIsDirty] = useState(false);
+    const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
+    const [editUrl, setEditUrl] = useState("");
+    const [editLabel, setEditLabel] = useState("");
 
+    const [statsWorkflowId, setStatsWorkflowId] = useState<string>("");
     const [stats, setStats] = useState({ guids: 0, hashes: 0, articles: 0, pending: 0, done: 0 });
     const [articlesByStatus, setArticlesByStatus] = useState<{ status: string; count: number }[]>([]);
     const [loading, setLoading] = useState(false);
     const [dangerConfirm, setDangerConfirm] = useState(false);
     const [nukeBusy, setNukeBusy] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [agentSettings, setAgentSettings] = useState<Record<string, string>>({
+        feeder_provider: "vercel",
+        feeder_model: "minimax/minimax-m2.7"
+    });
+    const [isAgentLLMDirty, setIsAgentLLMDirty] = useState(false);
+    const [agentSaveStatus, setAgentSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
     const [pktTime, setPktTime] = useState("");
     const [nextTriggerIn, setNextTriggerIn] = useState<string | null>(null);
+
+    // Dynamic stats loader
+    const loadStats = useCallback(async (workflowId: string) => {
+        try {
+            let guidQuery = supabase.from("feeder_seen_guids").select("id", { count: "exact", head: true });
+            let hashQuery = supabase.from("feeder_seen_hashes").select("id", { count: "exact", head: true });
+            let artQuery = supabase.from("feeder_articles").select("status");
+
+            if (workflowId) {
+                guidQuery = guidQuery.eq("workflow_id", workflowId);
+                hashQuery = hashQuery.eq("workflow_id", workflowId);
+                artQuery = artQuery.eq("workflow_id", workflowId);
+            }
+
+            const [guidRes, hashRes, artRes] = await Promise.all([
+                guidQuery,
+                hashQuery,
+                artQuery
+            ]);
+
+            const statusCounts: Record<string, number> = {};
+            for (const a of artRes.data ?? []) {
+                statusCounts[a.status] = (statusCounts[a.status] ?? 0) + 1;
+            }
+            setArticlesByStatus(Object.entries(statusCounts).map(([status, count]) => ({ status, count })));
+
+            setStats({
+                guids: guidRes.count ?? 0,
+                hashes: hashRes.count ?? 0,
+                articles: artRes.data?.length ?? 0,
+                pending: statusCounts["Pending"] ?? 0,
+                done: statusCounts["Done"] ?? 0,
+            });
+        } catch (e) {
+            console.error("Error loading stats:", e);
+        }
+    }, []);
 
     // Live PKT clock
     useEffect(() => {
@@ -122,6 +171,11 @@ export default function FeederSettingsPage() {
         const id = setInterval(tick, 1000);
         return () => clearInterval(id);
     }, []);
+
+    // Reload stats when stats selection changes
+    useEffect(() => {
+        loadStats(statsWorkflowId);
+    }, [statsWorkflowId, loadStats]);
 
     // Auto-trigger countdown — shows exact PKT target time + time remaining
     useEffect(() => {
@@ -150,14 +204,12 @@ export default function FeederSettingsPage() {
     const loadAll = useCallback(async () => {
         setLoading(true);
         try {
-            const [srcsRes, domsRes, settRes, guidRes, hashRes, artRes, wfsRes] = await Promise.all([
+            const [srcsRes, domsRes, settRes, wfsRes, agentSettRes] = await Promise.all([
                 supabase.from("feeder_sources").select("*").order("created_at"),
                 supabase.from("feeder_whitelisted_domains").select("*").order("domain"),
                 supabase.from("feeder_settings").select("key,value"),
-                supabase.from("feeder_seen_guids").select("id", { count: "exact", head: true }),
-                supabase.from("feeder_seen_hashes").select("id", { count: "exact", head: true }),
-                supabase.from("feeder_articles").select("status, workflow_id"),
                 supabase.from("workflows").select("id, name, feeder_enabled, feeder_interval_minutes").order("name"),
+                supabase.from("agent_settings").select("key,value"),
             ]);
 
             setSources(srcsRes.data ?? []);
@@ -173,36 +225,22 @@ export default function FeederSettingsPage() {
             setDbSettings(loaded);
             setIsDirty(false);
 
-            const statusCounts: Record<string, number> = {};
-            for (const a of artRes.data ?? []) statusCounts[a.status] = (statusCounts[a.status] ?? 0) + 1;
-            setArticlesByStatus(Object.entries(statusCounts).map(([status, count]) => ({ status, count })));
-
-            const counts: Record<string, { pending: number; total: number }> = {};
-            for (const a of artRes.data ?? []) {
-                const wfId = a.workflow_id;
-                if (wfId) {
-                    if (!counts[wfId]) {
-                        counts[wfId] = { pending: 0, total: 0 };
-                    }
-                    counts[wfId].total++;
-                    if (a.status === "Pending") {
-                        counts[wfId].pending++;
-                    }
+            // Populate Feeder Agent LLM settings
+            const agentLlm: Record<string, string> = { feeder_provider: "vercel", feeder_model: "minimax/minimax-m2.7" };
+            for (const row of agentSettRes.data ?? []) {
+                if (row.key === "feeder_provider" || row.key === "feeder_model") {
+                    agentLlm[row.key] = row.value ?? "";
                 }
             }
-            setWfArticleCounts(counts);
+            setAgentSettings(agentLlm);
+            setIsAgentLLMDirty(false);
 
-            setStats({
-                guids: guidRes.count ?? 0,
-                hashes: hashRes.count ?? 0,
-                articles: artRes.data?.length ?? 0,
-                pending: statusCounts["Pending"] ?? 0,
-                done: statusCounts["Done"] ?? 0,
-            });
+            // Fetch dynamic stats
+            loadStats(statsWorkflowId);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [statsWorkflowId, loadStats]);
 
     useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -272,11 +310,92 @@ export default function FeederSettingsPage() {
         });
         setNewUrl(""); setNewLabel(""); setSelectedWorkflowId(""); loadAll();
     };
-    const deleteSource = async (id: string) => { await supabase.from("feeder_sources").delete().eq("id", id); loadAll(); };
+    const deleteSource = async (id: string) => {
+        // 1. Get workflow_id of target source
+        const { data: source } = await supabase.from("feeder_sources").select("workflow_id").eq("id", id).maybeSingle();
+        const workflowId = source?.workflow_id;
+
+        // 2. Delete all related articles in feeder_articles for this source
+        await supabase.from("feeder_articles").delete().eq("source_id", id);
+
+        // 3. Delete the source itself
+        await supabase.from("feeder_sources").delete().eq("id", id);
+
+        if (workflowId) {
+            // 4. Check if there are any other active sources left for this workflow
+            const { data: otherSources } = await supabase
+                .from("feeder_sources")
+                .select("id")
+                .eq("workflow_id", workflowId);
+
+            if (!otherSources || otherSources.length === 0) {
+                // Turn off feeder scheduler for this workflow
+                await supabase
+                    .from("workflows")
+                    .update({ feeder_enabled: false })
+                    .eq("id", workflowId);
+
+                // Delete all seen guids/hashes for this workflow context to completely reset seen history
+                await supabase.from("feeder_seen_guids").delete().eq("workflow_id", workflowId);
+                await supabase.from("feeder_seen_hashes").delete().eq("workflow_id", workflowId);
+            }
+        }
+        loadAll();
+    };
     const toggleSource = async (id: string, is_active: boolean) => { await supabase.from("feeder_sources").update({ is_active: !is_active }).eq("id", id); loadAll(); };
     const updateSourceWorkflow = async (id: string, workflow_id: string | null) => {
         await supabase.from("feeder_sources").update({ workflow_id }).eq("id", id);
         loadAll();
+    };
+    const startEditingSource = (source: FeedSource) => {
+        setEditingSourceId(source.id);
+        setEditUrl(source.url);
+        setEditLabel(source.label);
+    };
+    const saveSourceEdit = async (id: string) => {
+        if (!editUrl.trim()) return;
+        await supabase
+            .from("feeder_sources")
+            .update({
+                url: editUrl.trim(),
+                label: editLabel.trim() || editUrl.trim(),
+            })
+            .eq("id", id);
+        setEditingSourceId(null);
+        loadAll();
+    };
+
+    const handleProviderChange = (prov: string) => {
+        const nextMeta = LLM_PROVIDERS.find(p => p.id === prov) || LLM_PROVIDERS[0];
+        const nextModel = nextMeta?.defaultModels?.[0]?.value || "";
+        setAgentSettings(prev => ({ ...prev, feeder_provider: prov, feeder_model: nextModel }));
+        setIsAgentLLMDirty(true);
+    };
+    const handleModelChange = (model: string) => {
+        setAgentSettings(prev => ({ ...prev, feeder_model: model }));
+        setIsAgentLLMDirty(true);
+    };
+    const saveAgentSettings = async () => {
+        setAgentSaveStatus("saving");
+        try {
+            const rows = [
+                { key: "feeder_provider", value: agentSettings.feeder_provider || "vercel", updated_at: new Date().toISOString() },
+                { key: "feeder_model", value: agentSettings.feeder_model || "minimax/minimax-m2.7", updated_at: new Date().toISOString() },
+            ];
+            const { error } = await supabase.from("agent_settings").upsert(rows, { onConflict: "key" });
+            if (error) {
+                console.error("Error saving agent LLM settings:", error);
+                setAgentSaveStatus("error");
+            } else {
+                setAgentSaveStatus("saved");
+                setIsAgentLLMDirty(false);
+            }
+        } catch (e) {
+            console.error("Exception saving agent LLM settings:", e);
+            setAgentSaveStatus("error");
+        } finally {
+            setTimeout(() => setAgentSaveStatus("idle"), 3000);
+        }
     };
 
     const addDomain = async () => {
@@ -318,6 +437,9 @@ export default function FeederSettingsPage() {
     };
 
     const autoEnabled = settings.feeder_auto_trigger_enabled === "true";
+    const selectedProvider = agentSettings.feeder_provider || "vercel";
+    const providerMeta = LLM_PROVIDERS.find(p => p.id === selectedProvider) || LLM_PROVIDERS[0];
+    const models = providerMeta?.defaultModels || [];
 
     return (
         <div className="flex h-screen flex-col bg-background overflow-hidden">
@@ -346,9 +468,24 @@ export default function FeederSettingsPage() {
             <main className="flex-1 overflow-auto p-6 space-y-6">
                 {/* Stats */}
                 <section>
-                    <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
-                        <BarChart3 className="h-4 w-4" />Database Statistics
-                    </h2>
+                    <div className="flex items-center justify-between mb-3">
+                        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                            <BarChart3 className="h-4 w-4" />Database Statistics
+                        </h2>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-muted-foreground">Filter Stats:</span>
+                            <select
+                                value={statsWorkflowId}
+                                onChange={e => setStatsWorkflowId(e.target.value)}
+                                className="h-8 rounded border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary font-semibold"
+                            >
+                                <option value="">(Global / All Workflows)</option>
+                                {workflows.map(w => (
+                                    <option key={w.id} value={w.id}>{w.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
                     <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                         <StatCard label="Seen GUIDs" value={stats.guids} icon={Database} color="text-primary" sub="Layer 1" />
                         <StatCard label="Seen Hashes" value={stats.hashes} icon={ShieldCheck} color="text-primary" sub="Layer 2" />
@@ -564,10 +701,29 @@ export default function FeederSettingsPage() {
                                     <button onClick={() => toggleSource(s.id, s.is_active)} title={s.is_active ? "Active · click to pause" : "Paused · click to activate"}>
                                         <div className={`h-2.5 w-2.5 rounded-full transition-colors ${s.is_active ? "bg-primary" : "bg-muted-foreground/30"}`} />
                                     </button>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="font-medium truncate">{s.label}</p>
-                                        <p className="text-xs text-muted-foreground truncate">{s.url}</p>
-                                    </div>
+                                    
+                                    {editingSourceId === s.id ? (
+                                        <div className="flex-1 flex flex-col gap-1.5 p-1">
+                                            <Input
+                                                value={editLabel}
+                                                onChange={e => setEditLabel(e.target.value)}
+                                                className="h-8 text-xs bg-background"
+                                                placeholder="Label"
+                                            />
+                                            <Input
+                                                value={editUrl}
+                                                onChange={e => setEditUrl(e.target.value)}
+                                                className="h-8 text-xs bg-background"
+                                                placeholder="RSS URL"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-medium truncate">{s.label}</p>
+                                            <p className="text-xs text-muted-foreground truncate">{s.url}</p>
+                                        </div>
+                                    )}
+
                                     <select
                                         value={s.workflow_id || ""}
                                         onChange={e => updateSourceWorkflow(s.id, e.target.value || null)}
@@ -578,9 +734,26 @@ export default function FeederSettingsPage() {
                                             <option key={w.id} value={w.id}>{w.name}</option>
                                         ))}
                                     </select>
-                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive shrink-0" onClick={() => deleteSource(s.id)}>
-                                        <X className="h-3 w-3" />
-                                    </Button>
+
+                                    {editingSourceId === s.id ? (
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-primary" onClick={() => saveSourceEdit(s.id)} title="Save changes">
+                                                <Check className="h-3.5 w-3.5" />
+                                            </Button>
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => setEditingSourceId(null)} title="Cancel">
+                                                <X className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => startEditingSource(s)} title="Edit link/label">
+                                                <Pencil className="h-3 w-3" />
+                                            </Button>
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => deleteSource(s.id)} title="Delete source">
+                                                <X className="h-3 w-3" />
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -655,6 +828,59 @@ export default function FeederSettingsPage() {
                         </div>
                     </section>
                 </div>
+
+                {/* Feeder Agent LLM Settings */}
+                <section className="rounded-xl border bg-card shadow-sm">
+                    <div className="p-4 border-b flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        <h2 className="font-semibold">Feeder Agent LLM Model Settings</h2>
+                    </div>
+                    <div className="p-5 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Feeder Agent LLM Provider</label>
+                                <select
+                                    value={selectedProvider}
+                                    onChange={e => handleProviderChange(e.target.value)}
+                                    className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all font-semibold font-sans"
+                                >
+                                    {LLM_PROVIDERS.map(p => (
+                                        <option key={p.id} value={p.id}>{p.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Feeder Agent LLM Model</label>
+                                <select
+                                    value={agentSettings.feeder_model || "minimax/minimax-m2.7"}
+                                    onChange={e => handleModelChange(e.target.value)}
+                                    className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+                                >
+                                    {models.map(m => (
+                                        <option key={m.value} value={m.value}>{m.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 pt-2">
+                            <Button
+                                onClick={saveAgentSettings}
+                                disabled={agentSaveStatus === "saving" || !isAgentLLMDirty}
+                                className="bg-primary text-primary-foreground text-xs font-semibold h-9 px-4 flex items-center gap-1.5"
+                            >
+                                {agentSaveStatus === "saving" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                                {isAgentLLMDirty ? "Save Feeder Model Settings" : "No Changes"}
+                            </Button>
+                            {agentSaveStatus === "saved" && (
+                                <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1 animate-pulse">
+                                    <CheckCircle2 className="h-4 w-4" /> Feeder Agent model saved successfully!
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                </section>
 
                 {/* Clear tables */}
                 <section className="rounded-xl border bg-card shadow-sm">

@@ -65,12 +65,6 @@ class FeederHandler(BaseHTTPRequestHandler):
             
             response = _run_pipeline(workflow_id)
             status = 200 if response["success"] else 500
-            body = json.dumps(response).encode()
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
             body = json.dumps(response).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
@@ -134,7 +128,7 @@ class FeederHandler(BaseHTTPRequestHandler):
 # ---------------------------------------------------------------------------
 def run():
     server = ThreadingHTTPServer(("0.0.0.0", 8080), FeederHandler)
-    print("✅ Feeder HTTP server running on port 8080 (scheduling handled by cron_scheduler.py)", flush=True)
+    print("[feeder_server] Feeder HTTP server running on port 8080 (scheduling handled by cron_scheduler.py)", flush=True)
     server.serve_forever()
 
 
