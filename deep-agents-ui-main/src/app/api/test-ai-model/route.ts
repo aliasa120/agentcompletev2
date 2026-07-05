@@ -49,8 +49,7 @@ export async function GET() {
   if (ninerouter_key) {
     env_status["ninerouter"] = true;
     try {
-      const isDocker = fs.existsSync("/.dockerenv");
-      const nineRouterBaseUrl = process.env.NEXT_PUBLIC_NINE_ROUTER_URL || (isDocker ? "http://ninerouter:20128" : "http://localhost:20128");
+      const nineRouterBaseUrl = process.env.NINE_ROUTER_INTERNAL_URL || process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "http://localhost:20128";
       const res = await fetch(`${nineRouterBaseUrl}/v1/models`, {
         headers: { "Authorization": `Bearer ${ninerouter_key}` }
       });
@@ -197,8 +196,7 @@ export async function POST(request: NextRequest) {
 
   if (ninerouter_key) {
     resolvedKey = ninerouter_key;
-    const isDocker = fs.existsSync("/.dockerenv");
-    const base = process.env.NEXT_PUBLIC_NINE_ROUTER_URL || (isDocker ? "http://ninerouter:20128" : "http://localhost:20128");
+    const base = process.env.NINE_ROUTER_INTERNAL_URL || process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "http://localhost:20128";
     resolvedBase = base.endsWith("/v1") ? base : `${base}/v1`;
   } else {
     if (provider === "litellm") {
