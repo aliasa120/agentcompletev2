@@ -819,7 +819,19 @@ export default function AgentSettingsPage() {
   );
 
   const renderGatewayIframe = (pathSuffix: string) => {
-    const nineRouterBaseUrl = process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "http://localhost:20128";
+    let nineRouterBaseUrl = process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "http://localhost:20128";
+    if (typeof window !== "undefined") {
+      const hostname = window.location.hostname;
+      const protocol = window.location.protocol;
+      
+      if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.startsWith("192.168.")) {
+        nineRouterBaseUrl = "http://localhost:20128";
+      } else if (/^[0-9.]+$/.test(hostname)) {
+        nineRouterBaseUrl = `${protocol}//${hostname}:20128`;
+      } else {
+        nineRouterBaseUrl = `${protocol}//9router.${hostname}`;
+      }
+    }
     const iframeUrl = `${nineRouterBaseUrl}${pathSuffix}`;
 
     return (
