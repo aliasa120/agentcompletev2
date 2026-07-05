@@ -47,6 +47,7 @@ const AGENT_SETTING_KEYS = [
   "vector_indexing_provider", "vector_indexing_model",
   "super_indexing_enabled", "normal_indexing_enabled",
   "mem0_enabled", "mem0_extraction_provider", "mem0_extraction_model",
+  "ninerouter_client_api_key",
 ];
 
 const DEFAULTS: Record<string, string> = {
@@ -69,6 +70,7 @@ const DEFAULTS: Record<string, string> = {
   mem0_enabled: "false",
   mem0_extraction_provider: "vercel",
   mem0_extraction_model: "xiaomi/mimo-v2.5-pro",
+  ninerouter_client_api_key: "",
 };
 
 const SEARCH_PROVIDERS = [
@@ -816,6 +818,61 @@ export default function AgentSettingsPage() {
     </div>
   );
 
+  const renderGatewayIframe = (pathSuffix: string) => {
+    const nineRouterBaseUrl = process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "http://localhost:20128";
+    const iframeUrl = `${nineRouterBaseUrl}${pathSuffix}`;
+
+    return (
+      <div className="space-y-6 flex flex-col h-[calc(100vh-10rem)]">
+        {/* 9Router Client API Key Configuration Card */}
+        <div className="rounded-xl border bg-card p-5 shadow-sm space-y-4 shrink-0">
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-primary" />
+            <h3 className="font-semibold text-sm">9Router Client Credentials</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Enter your 9Router Client API Key below. This key will be used to securely authenticate your LLM requests routed through the 9Router gateway.
+          </p>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 max-w-md">
+              <Input
+                type="password"
+                placeholder="9Router Client API Key (e.g. 9r_...)"
+                value={settings.ninerouter_client_api_key || ""}
+                onChange={(e) => setSetting("ninerouter_client_api_key", e.target.value)}
+                className="h-9 text-xs animate-none"
+              />
+            </div>
+            <Button
+              onClick={saveSettings}
+              disabled={saveStatus === "saving" || !isDirty}
+              size="sm"
+              className="h-9 font-semibold text-xs px-4"
+            >
+              {saveStatus === "saving" ? "Saving…" : "Save Key"}
+            </Button>
+            {saveStatus === "saved" && (
+              <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1">
+                <CheckCircle2 className="h-4 w-4" /> Saved
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Unified 9Router Dashboard Iframe */}
+        <div className="flex-1 border rounded-xl overflow-hidden bg-card/45 shadow-sm relative min-h-[480px]">
+          <iframe
+            src={iframeUrl}
+            className="w-full h-full border-0 absolute inset-0 bg-transparent"
+            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+            allow="clipboard-write; clipboard-read"
+            title="9Router Gateway Interface"
+          />
+        </div>
+      </div>
+    );
+  };
+
   const renderSection = () => {
     switch (section) {
       case "workflows": return <WorkflowsSection />;
@@ -848,6 +905,14 @@ export default function AgentSettingsPage() {
         />
       );
       case "telegram-bots": return <TelegramBotsSection />;
+      case "gateway":
+      case "gateway-dashboard": return renderGatewayIframe("/dashboard");
+      case "gateway-providers": return renderGatewayIframe("/dashboard/providers");
+      case "gateway-combos": return renderGatewayIframe("/dashboard/combos");
+      case "gateway-quota": return renderGatewayIframe("/dashboard/quota");
+      case "gateway-token-saver": return renderGatewayIframe("/dashboard/token-saver");
+      case "gateway-usage": return renderGatewayIframe("/dashboard/usage");
+      case "gateway-console-log": return renderGatewayIframe("/dashboard/console-log");
       default:          return null;
     }
   };
@@ -889,7 +954,7 @@ export default function AgentSettingsPage() {
           onToggleExpanded={() => setIsSidebarExpanded(!isSidebarExpanded)}
         />
         <main className="flex-1 overflow-y-auto p-6">
-          <div className={cn("mx-auto", section.startsWith("tools") ? "w-full max-w-none" : "max-w-4xl")}>
+          <div className={cn("mx-auto", (section.startsWith("tools") || section.startsWith("gateway")) ? "w-full max-w-none" : "max-w-4xl")}>
             {renderSection()}
           </div>
         </main>

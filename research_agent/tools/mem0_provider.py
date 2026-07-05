@@ -39,17 +39,13 @@ def get_mem0_client() -> Optional[Any]:
         if isinstance(v, str) and ("your_" in v.lower() or v.lower().endswith("_here")):
             os.environ.pop(k, None)
 
-    # Get LLM configuration
-    provider = settings.get("mem0_extraction_provider", "novita")
-    model = settings.get("mem0_extraction_model", "deepseek/deepseek-v4-flash")
-
-    # Get API key and Base URL
-    from .provider_registry import get_provider_api_key, get_provider_base_url
-    api_key = get_provider_api_key(provider)
-    base_url = get_provider_base_url(provider)
+    # Get LLM configuration via unified provider_engine resolver
+    provider = settings.get("mem0_extraction_provider", "ninerouter").strip().lower()
+    from .provider_engine import get_llm_config
+    base_url, api_key, model = get_llm_config("mem0_extraction")
 
     if not api_key:
-        logger.warning(f"Mem0 LLM provider {provider} API key is missing.")
+        logger.warning("Mem0 LLM provider API key is missing.")
         return None
 
     # Setup embeddings
