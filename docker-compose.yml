@@ -96,7 +96,9 @@ services:
 
   # ── 9Router AI Gateway (port 20128, public) ─────────────────────────────
   ninerouter:
-    image: decolua/9router:latest
+    build:
+      context: ./9router-master
+      dockerfile: Dockerfile
     container_name: ninerouter
     restart: unless-stopped
     ports:
