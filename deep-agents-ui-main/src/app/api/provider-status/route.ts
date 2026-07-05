@@ -155,7 +155,8 @@ export async function GET() {
   }
 
   try {
-    const nineRouterBaseUrl = process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "http://localhost:20128";
+    const isDocker = fs.existsSync("/.dockerenv");
+    const nineRouterBaseUrl = process.env.NEXT_PUBLIC_NINE_ROUTER_URL || (isDocker ? "http://ninerouter:20128" : "http://localhost:20128");
     
     // Fetch all available models from 9Router using client Bearer token
     const res = await fetch(`${nineRouterBaseUrl}/v1/models`, {
