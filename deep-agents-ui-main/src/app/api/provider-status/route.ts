@@ -155,15 +155,12 @@ export async function GET() {
   }
 
   try {
-    const isDocker = fs.existsSync("/.dockerenv");
-    const nineRouterBaseUrl = process.env.NEXT_PUBLIC_NINE_ROUTER_URL || (isDocker ? "http://ninerouter:20128" : "http://localhost:20128");
+    const isDocker = !!process.env.NINE_ROUTER_INTERNAL_URL;
+    const nineRouterBaseUrl = process.env.NINE_ROUTER_INTERNAL_URL || process.env.NEXT_PUBLIC_NINE_ROUTER_URL || (isDocker ? "http://ninerouter:20128" : "http://localhost:20128");
     
     // Fetch all available models from 9Router using client Bearer token
     const res = await fetch(`${nineRouterBaseUrl}/v1/models`, {
-      headers: {
-        "Authorization": `Bearer ${ninerouter_key}`,
-        "x-9r-only-active": "true"
-      }
+      headers: { "Authorization": `Bearer ${ninerouter_key}` }
     });
     if (res.ok) {
       const d = await res.json();

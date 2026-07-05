@@ -86,6 +86,7 @@ services:
     environment:
       - FEEDER_SERVER_URL=http://feeder_svc:8080
       - NEXT_PUBLIC_API_URL=http://backend:2024
+      - NINE_ROUTER_INTERNAL_URL=http://ninerouter:20128
     volumes:
       - shared-node-modules:/app/node_modules
       - shared-npm-cache:/app/shared_npm_cache

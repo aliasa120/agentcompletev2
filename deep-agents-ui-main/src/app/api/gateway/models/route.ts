@@ -41,8 +41,7 @@ export async function GET(request: NextRequest) {
     const clientApiKey = settingsData?.value?.trim() || process.env.NINE_ROUTER_API_KEY || "";
 
     // 3. Query local 9Router instance models endpoint
-    const isDocker = fs.existsSync("/.dockerenv");
-    const nineRouterBaseUrl = process.env.NEXT_PUBLIC_NINE_ROUTER_URL || (isDocker ? "http://ninerouter:20128" : "http://localhost:20128");
+    const nineRouterBaseUrl = process.env.NINE_ROUTER_INTERNAL_URL || process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "http://localhost:20128";
     
     const headers: Record<string, string> = {};
     if (clientApiKey) {
@@ -50,10 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     const res = await fetch(`${nineRouterBaseUrl}/v1/models`, {
-      headers: {
-        ...headers,
-        "x-9r-only-active": "true"
-      },
+      headers,
       next: { revalidate: 10 } // cache for 10 seconds to reduce load
     });
 
