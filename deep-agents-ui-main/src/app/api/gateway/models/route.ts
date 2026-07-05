@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
     if (clientApiKey) {
       headers["Authorization"] = `Bearer ${clientApiKey}`;
     }
+    headers["x-9r-only-active"] = "true";
 
     const res = await fetch(`${nineRouterBaseUrl}/v1/models`, {
       headers,
