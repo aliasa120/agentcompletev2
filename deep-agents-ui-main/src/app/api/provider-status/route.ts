@@ -160,7 +160,10 @@ export async function GET() {
     
     // Fetch all available models from 9Router using client Bearer token
     const res = await fetch(`${nineRouterBaseUrl}/v1/models`, {
-      headers: { "Authorization": `Bearer ${ninerouter_key}` }
+      headers: {
+        "Authorization": `Bearer ${ninerouter_key}`,
+        "x-9r-only-active": "true"
+      }
     });
     if (res.ok) {
       const d = await res.json();

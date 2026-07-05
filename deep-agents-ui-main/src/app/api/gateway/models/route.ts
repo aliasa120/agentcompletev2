@@ -50,7 +50,10 @@ export async function GET(request: NextRequest) {
     }
 
     const res = await fetch(`${nineRouterBaseUrl}/v1/models`, {
-      headers,
+      headers: {
+        ...headers,
+        "x-9r-only-active": "true"
+      },
       next: { revalidate: 10 } // cache for 10 seconds to reduce load
     });
 
