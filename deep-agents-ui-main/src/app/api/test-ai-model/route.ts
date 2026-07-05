@@ -51,7 +51,10 @@ export async function GET() {
     try {
       const nineRouterBaseUrl = process.env.NINE_ROUTER_INTERNAL_URL || process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "http://localhost:20128";
       const res = await fetch(`${nineRouterBaseUrl}/v1/models`, {
-        headers: { "Authorization": `Bearer ${ninerouter_key}` }
+        headers: {
+          "Authorization": `Bearer ${ninerouter_key}`,
+          "x-9r-only-active": "true"
+        }
       });
       const d = await res.json();
       const models = d.data || [];
