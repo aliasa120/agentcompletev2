@@ -39,12 +39,27 @@ export function MemoriesSection({
   const [isClearing, setIsClearing] = useState<boolean>(false);
 
   const mem0Enabled = globalSettings.mem0_enabled === "true";
-  const selectedProvider = globalSettings.mem0_extraction_provider || "vercel";
-  const selectedModel = globalSettings.mem0_extraction_model || "xiaomi/mimo-v2.5-pro";
+  const selectedProvider = globalSettings.mem0_extraction_provider || "ninerouter";
+  const selectedModel = globalSettings.mem0_extraction_model || "oc/auto";
 
-  // Find models for selected provider
-  const providerMeta = LLM_PROVIDERS.find(p => p.id === selectedProvider) || LLM_PROVIDERS[0];
-  const models = providerMeta.defaultModels || [];
+  const [providerMetas, setProviderMetas] = useState<any[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+
+  useEffect(() => {
+    setLoadingModels(true);
+    fetch("/api/provider-status")
+      .then(r => r.json())
+      .then(data => {
+        setProviderMetas(data.providers || []);
+      })
+      .catch(err => {
+        console.error("Failed to load providers in MemoriesSection:", err);
+      })
+      .finally(() => setLoadingModels(false));
+  }, []);
+
+  const providerMeta = providerMetas.find(p => p.id === selectedProvider) || providerMetas[0];
+  const models = providerMeta?.defaultModels || [];
 
   // Fetch workflows from Supabase
   const fetchWorkflows = useCallback(async () => {
@@ -192,17 +207,21 @@ export function MemoriesSection({
                   onChange={e => {
                     const prov = e.target.value;
                     setGlobalSetting("mem0_extraction_provider", prov);
-                    // Auto-select first model of new provider
-                    const nextMeta = LLM_PROVIDERS.find(p => p.id === prov) || LLM_PROVIDERS[0];
-                    if (nextMeta.defaultModels.length) {
+                    const nextMeta = providerMetas.find(p => p.id === prov) || providerMetas[0];
+                    if (nextMeta && nextMeta.defaultModels && nextMeta.defaultModels.length) {
                       setGlobalSetting("mem0_extraction_model", nextMeta.defaultModels[0].value);
                     }
                   }}
                   className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all font-medium"
+                  disabled={providerMetas.length === 0}
                 >
-                  {LLM_PROVIDERS.map(p => (
-                    <option key={p.id} value={p.id}>{p.label}</option>
-                  ))}
+                  {providerMetas.length === 0 ? (
+                    <option value="">No gateway providers configured</option>
+                  ) : (
+                    providerMetas.map(p => (
+                      <option key={p.id} value={p.id}>{p.label}</option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -212,10 +231,15 @@ export function MemoriesSection({
                   value={selectedModel}
                   onChange={e => setGlobalSetting("mem0_extraction_model", e.target.value)}
                   className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+                  disabled={loadingModels}
                 >
-                  {models.map(m => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
+                  {loadingModels ? (
+                    <option value="">Loading dynamic models...</option>
+                  ) : (
+                    models.map((m: any) => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
+                    ))
+                  )}
                 </select>
               </div>
             </div>

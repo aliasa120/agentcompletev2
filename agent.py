@@ -796,18 +796,30 @@ def load_dynamic_agents_by_workflow():
             main_prompt = _get_agent_system_prompt_with_images(client, main_id, base_main_prompt)
 
             # Resolve Main Agent provider and model dynamically
-            main_provider = main_cfg.get("provider") or "vercel"
+            main_provider = (main_cfg.get("provider") or "vercel").strip().lower()
             main_model_name = main_cfg.get("model") or "xiaomi/mimo-v2.5-pro"
 
-            from research_agent.tools.provider_engine import get_provider_base_url, get_provider_api_key, get_provider_config
-            main_base_url = get_provider_base_url(main_provider)
-
-            cfg = get_provider_config(main_provider)
-            needs_v1 = cfg and "base_url_env" in cfg
-            if needs_v1 and not main_base_url.endswith("/v1"):
-                main_base_url = main_base_url + "/v1"
-
-            main_api_key = get_provider_api_key(main_provider)
+            from research_agent.tools.provider_engine import get_provider_base_url, get_provider_api_key, get_provider_config, get_all_provider_names
+            
+            is_gateway_sub = main_provider not in get_all_provider_names()
+            if is_gateway_sub:
+                main_base_url = get_provider_base_url("ninerouter")
+                main_api_key = db_settings.get("ninerouter_client_api_key", "").strip()
+                if not main_api_key:
+                    main_api_key = get_provider_api_key("ninerouter")
+            else:
+                main_base_url = get_provider_base_url(main_provider)
+                cfg = get_provider_config(main_provider)
+                needs_v1 = cfg and "base_url_env" in cfg
+                if needs_v1 and not main_base_url.endswith("/v1"):
+                    main_base_url = main_base_url + "/v1"
+                
+                if main_provider == "ninerouter":
+                    main_api_key = db_settings.get("ninerouter_client_api_key", "").strip()
+                    if not main_api_key:
+                        main_api_key = get_provider_api_key(main_provider)
+                else:
+                    main_api_key = get_provider_api_key(main_provider)
 
             main_model = ResilientChatModel(
                 model=main_model_name,
@@ -910,17 +922,28 @@ def load_dynamic_agents_by_workflow():
 
                 sub_prompt = _get_agent_system_prompt_with_images(client, sub_id, base_sub_prompt)
                 
-                sub_provider = sub.get("provider") or "vercel"
+                sub_provider = (sub.get("provider") or "vercel").strip().lower()
                 sub_model_name = sub.get("model") or "xiaomi/mimo-v2.5-pro"
 
-                sub_base_url = get_provider_base_url(sub_provider)
-
-                sub_cfg = get_provider_config(sub_provider)
-                sub_needs_v1 = sub_cfg and "base_url_env" in sub_cfg
-                if sub_needs_v1 and not sub_base_url.endswith("/v1"):
-                    sub_base_url = sub_base_url + "/v1"
-
-                sub_api_key = get_provider_api_key(sub_provider)
+                is_sub_gateway = sub_provider not in get_all_provider_names()
+                if is_sub_gateway:
+                    sub_base_url = get_provider_base_url("ninerouter")
+                    sub_api_key = db_settings.get("ninerouter_client_api_key", "").strip()
+                    if not sub_api_key:
+                        sub_api_key = get_provider_api_key("ninerouter")
+                else:
+                    sub_base_url = get_provider_base_url(sub_provider)
+                    sub_cfg = get_provider_config(sub_provider)
+                    sub_needs_v1 = sub_cfg and "base_url_env" in sub_cfg
+                    if sub_needs_v1 and not sub_base_url.endswith("/v1"):
+                        sub_base_url = sub_base_url + "/v1"
+                    
+                    if sub_provider == "ninerouter":
+                        sub_api_key = db_settings.get("ninerouter_client_api_key", "").strip()
+                        if not sub_api_key:
+                            sub_api_key = get_provider_api_key(sub_provider)
+                    else:
+                        sub_api_key = get_provider_api_key(sub_provider)
 
                 sub_model = ResilientChatModel(
                     model=sub_model_name,

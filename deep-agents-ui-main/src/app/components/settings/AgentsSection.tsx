@@ -779,6 +779,67 @@ function AgentEditorCard({
   const [savedOk, setSavedOk] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const [dynamicModels, setDynamicModels] = useState<{ value: string; label: string; badge: string }[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+
+  useEffect(() => {
+    if (provider === "ninerouter") {
+      setLoadingModels(true);
+      fetch("/api/gateway/models")
+        .then(r => r.json())
+        .then(d => {
+          const fetched = (d.data || []).map((m: any) => ({
+            value: m.id,
+            label: m.name || m.id,
+            badge: "Dynamic"
+          }));
+          setDynamicModels(fetched.length ? fetched : [
+            { value: "kr/claude-sonnet-4.5", label: "Claude Sonnet 4.5 (Kiro)", badge: "Free" },
+            { value: "oc/auto", label: "OpenCode Auto", badge: "Free" }
+          ]);
+        })
+        .catch(err => {
+          console.error("Failed to load dynamic models:", err);
+          setDynamicModels([
+            { value: "kr/claude-sonnet-4.5", label: "Claude Sonnet 4.5 (Kiro)", badge: "Free" },
+            { value: "oc/auto", label: "OpenCode Auto", badge: "Free" }
+          ]);
+        })
+        .finally(() => setLoadingModels(false));
+    } else {
+      setDynamicModels([]);
+    }
+  }, [provider]);
+
+  const updatedProviderMetas = providerMetas.map(p => {
+    if (p.id === "ninerouter") {
+      return { ...p, defaultModels: dynamicModels, keySet: true };
+    }
+    return p;
+  });
+
+  // Auto-correct provider & model selections if they are not in the loaded list
+  useEffect(() => {
+    if (updatedProviderMetas.length > 0) {
+      const hasProvider = updatedProviderMetas.some(p => p.id === provider);
+      if (!hasProvider) {
+        const firstProv = updatedProviderMetas[0].id;
+        setProvider(firstProv);
+        if (updatedProviderMetas[0].defaultModels && updatedProviderMetas[0].defaultModels.length > 0) {
+          setModel(updatedProviderMetas[0].defaultModels[0].value);
+        }
+      } else {
+        const currentMeta = updatedProviderMetas.find(p => p.id === provider);
+        if (currentMeta && currentMeta.defaultModels && currentMeta.defaultModels.length > 0) {
+          const hasModel = currentMeta.defaultModels.some((m: any) => m.value === model);
+          if (!hasModel) {
+            setModel(currentMeta.defaultModels[0].value);
+          }
+        }
+      }
+    }
+  }, [provider, updatedProviderMetas, model]);
+
   const isDirty =
     name !== agent.name ||
     description !== agent.description ||
@@ -933,54 +994,46 @@ function AgentEditorCard({
               onChange={e => {
                 const newProv = e.target.value;
                 setProvider(newProv);
-                const meta = providerMetas.find(p => p.id === newProv);
+                const meta = updatedProviderMetas.find(p => p.id === newProv);
                 if (meta && meta.defaultModels && meta.defaultModels.length > 0) {
                   setModel(meta.defaultModels[0].value);
                 }
               }}
               className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+              disabled={updatedProviderMetas.length === 0}
             >
-              {providerMetas.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.label} {!p.keySet ? "⚠️ no key" : ""}
-                </option>
-              ))}
+              {updatedProviderMetas.length === 0 ? (
+                <option value="">No gateway providers configured</option>
+              ) : (
+                updatedProviderMetas.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.label} {!p.keySet ? "⚠️ no key" : ""}
+                  </option>
+                ))
+              )}
             </select>
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">LLM Model</label>
-            <div className="space-y-1.5">
-              <Input
-                value={model}
-                onChange={e => setModel(e.target.value)}
-                placeholder="Model name (e.g. gpt-4o)..."
-                className="h-8 text-xs font-mono"
-              />
+            <select
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+              disabled={loadingModels || updatedProviderMetas.find(p => p.id === provider)?.defaultModels?.length === 0}
+            >
               {(() => {
-                const meta = providerMetas.find(p => p.id === provider);
-                if (meta && meta.defaultModels && meta.defaultModels.length > 0) {
-                  return (
-                    <div className="flex flex-wrap gap-1">
-                      {meta.defaultModels.map((m: any) => (
-                        <button
-                          key={m.value}
-                          type="button"
-                          onClick={() => setModel(m.value)}
-                          className={`text-[9px] px-1.5 py-0.5 rounded border transition-all
-                            ${model === m.value
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "border-border bg-muted hover:bg-accent text-muted-foreground"
-                            }`}
-                        >
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
-                  );
+                const meta = updatedProviderMetas.find(p => p.id === provider);
+                const modelsList = meta?.defaultModels || [];
+                if (modelsList.length === 0) {
+                  return <option value="">No models available for this provider</option>;
                 }
-                return null;
+                return modelsList.map((m: any) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label} ({m.value})
+                  </option>
+                ));
               })()}
-            </div>
+            </select>
           </div>
         </div>
 

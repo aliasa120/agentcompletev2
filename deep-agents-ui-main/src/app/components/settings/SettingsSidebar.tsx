@@ -3,7 +3,7 @@
 import React from "react";
 import {
   Wrench, Cpu, Bot, Users, LayoutList, BookOpen, Image as ImageIcon,
-  ChevronRight, Database, Settings, Menu, Brain
+  ChevronRight, Database, Settings, Menu, Brain, Route
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,15 @@ export type SettingsSection =
   | "configuration"
   | "feeder"
   | "memories"
-  | "telegram-bots";
+  | "telegram-bots"
+  | "gateway"
+  | "gateway-dashboard"
+  | "gateway-providers"
+  | "gateway-combos"
+  | "gateway-quota"
+  | "gateway-token-saver"
+  | "gateway-usage"
+  | "gateway-console-log";
 
 interface NavItem {
   id: SettingsSection;
@@ -51,6 +59,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "AI Providers",
     description: "Models, search, extract, image",
     icon: <Cpu className="h-4 w-4" />,
+  },
+  {
+    id: "gateway",
+    label: "AI Gateway",
+    description: "RTK token saver, fallbacks & models",
+    icon: <Route className="h-4 w-4" />,
   },
   {
     id: "agents",
@@ -120,6 +134,10 @@ export function SettingsSidebar({ active, onChange, isExpanded = true, onToggleE
   const [isToolsExpanded, setIsToolsExpanded] = React.useState(isToolsActive);
   const prevIsToolsActive = React.useRef(isToolsActive);
 
+  const isGatewayActive = ["gateway", "gateway-dashboard", "gateway-providers", "gateway-combos", "gateway-quota", "gateway-token-saver", "gateway-usage", "gateway-console-log"].includes(active);
+  const [isGatewayExpanded, setIsGatewayExpanded] = React.useState(isGatewayActive);
+  const prevIsGatewayActive = React.useRef(isGatewayActive);
+
   React.useEffect(() => {
     if (isToolsActive && !prevIsToolsActive.current) {
       setIsToolsExpanded(true);
@@ -128,6 +146,15 @@ export function SettingsSidebar({ active, onChange, isExpanded = true, onToggleE
     }
     prevIsToolsActive.current = isToolsActive;
   }, [isToolsActive]);
+
+  React.useEffect(() => {
+    if (isGatewayActive && !prevIsGatewayActive.current) {
+      setIsGatewayExpanded(true);
+    } else if (!isGatewayActive && prevIsGatewayActive.current) {
+      setIsGatewayExpanded(false);
+    }
+    prevIsGatewayActive.current = isGatewayActive;
+  }, [isGatewayActive]);
 
   return (
     <nav className={cn(
@@ -217,6 +244,94 @@ export function SettingsSidebar({ active, onChange, isExpanded = true, onToggleE
                       { id: "tools-manual" as const, label: "Manual MCP" },
                       { id: "tools-smithery" as const, label: "Smithery AI" },
                       { id: "tools-zapier" as const, label: "Zapier Platform" },
+                    ].map((sub) => {
+                      const isSubActive = active === sub.id;
+                      return (
+                        <button
+                          key={sub.id}
+                          onClick={() => onChange(sub.id)}
+                          className={cn(
+                            "text-left px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all",
+                            isSubActive
+                              ? "text-primary font-semibold bg-primary/5"
+                              : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                          )}
+                        >
+                          {sub.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          if (item.id === "gateway") {
+            return (
+              <div key={item.id} className="flex flex-col">
+                <button
+                  onClick={() => {
+                    onChange("gateway-dashboard");
+                    setIsGatewayExpanded(true);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-4 py-3 text-left transition-all group",
+                    isGatewayActive
+                      ? "bg-primary/10 border-r-2 border-primary text-primary"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                    !isExpanded && "justify-center px-0 py-3 border-r-0"
+                  )}
+                  title={item.label}
+                >
+                  <span className={cn(
+                    "shrink-0 transition-colors",
+                    isGatewayActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                    !isExpanded && "mx-auto"
+                  )}>
+                    {item.icon}
+                  </span>
+                  {isExpanded && (
+                    <div className="flex-1 min-w-0">
+                      <p className={cn("text-sm font-medium truncate", isGatewayActive ? "text-primary" : "")}>
+                        {item.label}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5 leading-tight">
+                        {item.description}
+                      </p>
+                    </div>
+                  )}
+                  {isExpanded && (
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsGatewayExpanded(prev => !prev);
+                      }}
+                      className={cn(
+                        "p-1 rounded hover:bg-muted-foreground/10 text-muted-foreground hover:text-foreground transition-all duration-200 shrink-0",
+                        isGatewayActive && "text-primary hover:text-primary hover:bg-primary/20"
+                      )}
+                    >
+                      <ChevronRight
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                          isGatewayExpanded ? "rotate-90" : ""
+                        )}
+                      />
+                    </div>
+                  )}
+                </button>
+
+                {isExpanded && isGatewayExpanded && (
+                  <div className="pl-6 border-l border-border/60 ml-6 flex flex-col gap-1 mt-1 mb-2">
+                    {[
+                      { id: "gateway-dashboard" as const, label: "Dashboard" },
+                      { id: "gateway-providers" as const, label: "Providers" },
+                      { id: "gateway-combos" as const, label: "Combos" },
+                      { id: "gateway-quota" as const, label: "Quota" },
+                      { id: "gateway-token-saver" as const, label: "Token Saver" },
+                      { id: "gateway-usage" as const, label: "Usage" },
+                      { id: "gateway-console-log" as const, label: "Console Logs" },
                     ].map((sub) => {
                       const isSubActive = active === sub.id;
                       return (

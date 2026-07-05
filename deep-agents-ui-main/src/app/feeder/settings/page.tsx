@@ -13,7 +13,6 @@ import {
     Sparkles, Loader2, Save, Pencil, Check
 } from "lucide-react";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
-import { LLM_PROVIDERS } from "@/app/components/settings/ProviderOrderingSection";
 
 interface FeedSource { id: string; url: string; label: string; is_active: boolean; workflow_id?: string | null; }
 interface WhitelistDomain { id: string; domain: string; note: string; workflow_id?: string | null; }
@@ -120,6 +119,7 @@ export default function FeederSettingsPage() {
     });
     const [isAgentLLMDirty, setIsAgentLLMDirty] = useState(false);
     const [agentSaveStatus, setAgentSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [providerMetas, setProviderMetas] = useState<any[]>([]);
     const [pktTime, setPktTime] = useState("");
     const [nextTriggerIn, setNextTriggerIn] = useState<string | null>(null);
 
@@ -204,17 +204,19 @@ export default function FeederSettingsPage() {
     const loadAll = useCallback(async () => {
         setLoading(true);
         try {
-            const [srcsRes, domsRes, settRes, wfsRes, agentSettRes] = await Promise.all([
+            const [srcsRes, domsRes, settRes, wfsRes, agentSettRes, provsRes] = await Promise.all([
                 supabase.from("feeder_sources").select("*").order("created_at"),
                 supabase.from("feeder_whitelisted_domains").select("*").order("domain"),
                 supabase.from("feeder_settings").select("key,value"),
                 supabase.from("workflows").select("id, name, feeder_enabled, feeder_interval_minutes").order("name"),
                 supabase.from("agent_settings").select("key,value"),
+                fetch("/api/provider-status").then(r => r.json()).catch(() => ({ providers: [] })),
             ]);
 
             setSources(srcsRes.data ?? []);
             setDomains(domsRes.data ?? []);
             setWorkflows(wfsRes.data ?? []);
+            setProviderMetas(provsRes.providers ?? []);
 
             // Build settings map — start with defaults, overlay DB values
             const loaded: Record<string, string> = { ...DEFAULTS };
@@ -226,7 +228,7 @@ export default function FeederSettingsPage() {
             setIsDirty(false);
 
             // Populate Feeder Agent LLM settings
-            const agentLlm: Record<string, string> = { feeder_provider: "vercel", feeder_model: "minimax/minimax-m2.7" };
+            const agentLlm: Record<string, string> = { feeder_provider: "ninerouter", feeder_model: "oc/auto" };
             for (const row of agentSettRes.data ?? []) {
                 if (row.key === "feeder_provider" || row.key === "feeder_model") {
                     agentLlm[row.key] = row.value ?? "";
@@ -366,7 +368,7 @@ export default function FeederSettingsPage() {
     };
 
     const handleProviderChange = (prov: string) => {
-        const nextMeta = LLM_PROVIDERS.find(p => p.id === prov) || LLM_PROVIDERS[0];
+        const nextMeta = providerMetas.find(p => p.id === prov) || providerMetas[0];
         const nextModel = nextMeta?.defaultModels?.[0]?.value || "";
         setAgentSettings(prev => ({ ...prev, feeder_provider: prov, feeder_model: nextModel }));
         setIsAgentLLMDirty(true);
@@ -379,8 +381,8 @@ export default function FeederSettingsPage() {
         setAgentSaveStatus("saving");
         try {
             const rows = [
-                { key: "feeder_provider", value: agentSettings.feeder_provider || "vercel", updated_at: new Date().toISOString() },
-                { key: "feeder_model", value: agentSettings.feeder_model || "minimax/minimax-m2.7", updated_at: new Date().toISOString() },
+                { key: "feeder_provider", value: agentSettings.feeder_provider || "ninerouter", updated_at: new Date().toISOString() },
+                { key: "feeder_model", value: agentSettings.feeder_model || "oc/auto", updated_at: new Date().toISOString() },
             ];
             const { error } = await supabase.from("agent_settings").upsert(rows, { onConflict: "key" });
             if (error) {
@@ -437,8 +439,8 @@ export default function FeederSettingsPage() {
     };
 
     const autoEnabled = settings.feeder_auto_trigger_enabled === "true";
-    const selectedProvider = agentSettings.feeder_provider || "vercel";
-    const providerMeta = LLM_PROVIDERS.find(p => p.id === selectedProvider) || LLM_PROVIDERS[0];
+    const selectedProvider = agentSettings.feeder_provider || "ninerouter";
+    const providerMeta = providerMetas.find(p => p.id === selectedProvider) || providerMetas[0];
     const models = providerMeta?.defaultModels || [];
 
     return (
@@ -843,10 +845,15 @@ export default function FeederSettingsPage() {
                                     value={selectedProvider}
                                     onChange={e => handleProviderChange(e.target.value)}
                                     className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all font-semibold font-sans"
+                                    disabled={providerMetas.length === 0}
                                 >
-                                    {LLM_PROVIDERS.map(p => (
-                                        <option key={p.id} value={p.id}>{p.label}</option>
-                                    ))}
+                                    {providerMetas.length === 0 ? (
+                                        <option value="">No gateway providers configured</option>
+                                    ) : (
+                                        providerMetas.map((p: any) => (
+                                            <option key={p.id} value={p.id}>{p.label}</option>
+                                        ))
+                                    )}
                                 </select>
                             </div>
 
@@ -857,7 +864,7 @@ export default function FeederSettingsPage() {
                                     onChange={e => handleModelChange(e.target.value)}
                                     className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
                                 >
-                                    {models.map(m => (
+                                    {models.map((m: any) => (
                                         <option key={m.value} value={m.value}>{m.label}</option>
                                     ))}
                                 </select>

@@ -173,6 +173,11 @@ _AGENT_DEFAULTS: dict[str, dict[str, str]] = {
         "provider": "vercel",
         "model": "google/gemini-2.5-flash",
     },
+    # Mem0 extraction settings
+    "mem0_extraction": {
+        "provider": "ninerouter",
+        "model": "oc/auto",
+    },
 }
 
 
@@ -202,26 +207,28 @@ def get_llm_config(agent: str) -> tuple[str, str, str]:
     provider = settings.get(f"{agent}_provider", defaults["provider"]).strip().lower()
     model = settings.get(f"{agent}_model", defaults["model"]).strip()
 
-    # Validate provider is registered
-    if provider not in get_all_provider_names():
-        logger.warning(
-            f"[provider_engine] Unknown provider '{provider}' for agent '{agent}'. "
-            f"Falling back to '{defaults['provider']}'. "
-            f"Valid providers: {get_all_provider_names()}"
-        )
-        provider = defaults["provider"]
+    is_gateway_sub_provider = provider not in get_all_provider_names()
 
-    # Resolve base_url from registry (handles dynamic env-var URLs like LiteLLM)
-    base_url = get_provider_base_url(provider)
+    if is_gateway_sub_provider:
+        # Route through 9Router base URL & client credentials
+        base_url = get_provider_base_url("ninerouter")
+        api_key = settings.get("ninerouter_client_api_key", "").strip()
+        if not api_key:
+            api_key = get_provider_api_key("ninerouter")
+    else:
+        # Resolve base_url from registry
+        base_url = get_provider_base_url(provider)
+        cfg = get_provider_config(provider)
+        needs_v1 = cfg and "base_url_env" in cfg
+        if needs_v1 and not base_url.endswith("/v1"):
+            base_url = base_url + "/v1"
 
-    # LiteLLM and similar need /v1 appended
-    cfg = get_provider_config(provider)
-    needs_v1 = cfg and "base_url_env" in cfg  # only dynamic-URL providers need this
-    if needs_v1 and not base_url.endswith("/v1"):
-        base_url = base_url + "/v1"
-
-    # Resolve API key from env ONLY — never from Supabase
-    api_key = get_provider_api_key(provider)
+        if provider == "ninerouter":
+            api_key = settings.get("ninerouter_client_api_key", "").strip()
+            if not api_key:
+                api_key = get_provider_api_key(provider)
+        else:
+            api_key = get_provider_api_key(provider)
 
     if not model:
         model = defaults["model"]
@@ -229,7 +236,7 @@ def get_llm_config(agent: str) -> tuple[str, str, str]:
     if not api_key:
         logger.warning(
             f"[provider_engine] ⚠️ No API key found for provider '{provider}' "
-            f"(env var: {get_provider_config(provider).get('env_key', '?')}). "
+            f"(env var: {get_provider_config('ninerouter' if is_gateway_sub_provider else provider).get('env_key', '?')}). "
             f"Set it in your .env file."
         )
 

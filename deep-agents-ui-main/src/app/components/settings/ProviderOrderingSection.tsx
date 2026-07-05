@@ -554,160 +554,14 @@ function ProviderCategoryPanel({
 
 export const LLM_PROVIDERS = [
   {
-    id: "vercel",
-    label: "Vercel AI Gateway",
-    envKey: "AI_GATEWAY_API_KEY",
-    docsUrl: "https://ai-gateway.vercel.sh",
+    id: "ninerouter",
+    label: "9Router AI Gateway",
+    envKey: "NINE_ROUTER_API_KEY",
+    docsUrl: "http://localhost:20128",
     defaultModels: [
-      { value: "xiaomi/mimo-v2.5-pro", label: "MiMo v2.5 Pro", badge: "Recommended" },
-      { value: "moonshotai/kimi-k2.5", label: "Kimi K2.5", badge: "Vision" },
-      { value: "minimax/minimax-m2.7", label: "MiniMax M2.7", badge: "Fast" },
-      { value: "openai/gpt-4o", label: "GPT-4o", badge: "OpenAI" },
-      { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", badge: "Google" },
-      { value: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5", badge: "Anthropic" },
-    ],
-  },
-  {
-    id: "openai",
-    label: "OpenAI",
-    envKey: "OPENAI_API_KEY",
-    docsUrl: "https://platform.openai.com/api-keys",
-    defaultModels: [
-      { value: "gpt-4.1", label: "GPT-4.1", badge: "Latest" },
-      { value: "gpt-4o", label: "GPT-4o", badge: "Vision" },
-      { value: "gpt-4o-mini", label: "GPT-4o Mini", badge: "Fast" },
-      { value: "o3", label: "o3", badge: "Reasoning" },
-      { value: "o4-mini", label: "o4-mini", badge: "Reasoning" },
-    ],
-  },
-  {
-    id: "anthropic",
-    label: "Anthropic",
-    envKey: "ANTHROPIC_API_KEY",
-    docsUrl: "https://console.anthropic.com/settings/keys",
-    defaultModels: [
-      { value: "claude-opus-4-5", label: "Claude Opus 4.5", badge: "Most Capable" },
-      { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", badge: "Balanced" },
-      { value: "claude-haiku-3-5", label: "Claude Haiku 3.5", badge: "Fast" },
-    ],
-  },
-  {
-    id: "google",
-    label: "Google Gemini",
-    envKey: "GOOGLE_API_KEY",
-    docsUrl: "https://aistudio.google.com/app/apikey",
-    defaultModels: [
-      { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", badge: "Latest" },
-      { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", badge: "Fast" },
-      { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash", badge: "Stable" },
-    ],
-  },
-  {
-    id: "openrouter",
-    label: "OpenRouter",
-    envKey: "OPENROUTER_API_KEY",
-    docsUrl: "https://openrouter.ai/keys",
-    defaultModels: [
-      { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", badge: "Google" },
-      { value: "meta-llama/llama-4-maverick", label: "Llama 4 Maverick", badge: "Meta" },
-      { value: "deepseek/deepseek-r2", label: "DeepSeek R2", badge: "Reasoning" },
-      { value: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5", badge: "Anthropic" },
-      { value: "openai/gpt-4o", label: "GPT-4o", badge: "OpenAI" },
-      { value: "mistralai/mistral-large", label: "Mistral Large", badge: "Mistral" },
-    ],
-  },
-  {
-    id: "litellm",
-    label: "LiteLLM Proxy",
-    envKey: "LITELLM_API_KEY",
-    docsUrl: "https://github.com/BerriAI/litellm",
-    defaultModels: [
-      { value: "mimo-v2.5-pro", label: "Mimo v2.5 Pro", badge: "LiteLLM" },
-      { value: "openai/gpt-oss-120b", label: "GPT OSS 120B", badge: "LiteLLM" },
-    ],
-  },
-  {
-    id: "groq",
-    label: "Groq",
-    envKey: "GROQ_API_KEY",
-    docsUrl: "https://console.groq.com/keys",
-    defaultModels: [
-      { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B", badge: "Fast" },
-      { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B", badge: "Ultra Fast" },
-      { value: "gemma2-9b-it", label: "Gemma 2 9B", badge: "Google" },
-      { value: "deepseek-r1-distill-llama-70b", label: "DeepSeek R1 70B", badge: "Reasoning" },
-    ],
-  },
-  {
-    id: "together",
-    label: "Together AI",
-    envKey: "TOGETHER_API_KEY",
-    docsUrl: "https://api.together.xyz",
-    defaultModels: [
-      { value: "meta-llama/Llama-3.3-70B-Instruct-Turbo", label: "Llama 3.3 70B Turbo", badge: "Fast" },
-      { value: "deepseek-ai/DeepSeek-R1", label: "DeepSeek R1", badge: "Reasoning" },
-      { value: "Qwen/Qwen2.5-72B-Instruct-Turbo", label: "Qwen 2.5 72B", badge: "Qwen" },
-      { value: "mistralai/Mistral-7B-Instruct-v0.3", label: "Mistral 7B", badge: "Efficient" },
-    ],
-  },
-  {
-    id: "nvidia",
-    label: "NVIDIA NIM",
-    envKey: "NVIDIA_API_KEY",
-    docsUrl: "https://build.nvidia.com",
-    defaultModels: [
-      { value: "minimaxai/minimax-m2.7", label: "MiniMax M2.7", badge: "Recommended" },
-      { value: "stepfun-ai/step-3.7-flash", label: "Step 3.7 Flash", badge: "Fast" },
-      { value: "openai/gpt-oss-120b", label: "GPT OSS 120B", badge: "Large" },
-      { value: "deepseek-ai/deepseek-v4-flash", label: "DeepSeek V4 Flash", badge: "Reasoning" },
-    ],
-  },
-  {
-    id: "mimo",
-    label: "Xiaomi MiMo",
-    envKey: "MIMO_API_KEY",
-    docsUrl: "https://platform.xiaomimimo.com",
-    defaultModels: [
-      { value: "mimo-v2.5-pro", label: "MiMo V2.5 Pro", badge: "Flagship" },
-      { value: "mimo-v2.5", label: "MiMo V2.5", badge: "Fast" },
-    ],
-  },
-  {
-    id: "novita",
-    label: "Novita AI",
-    envKey: "NOVITA_API_KEY",
-    docsUrl: "https://novita.ai",
-    defaultModels: [
-      { value: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", badge: "Recommended" },
-      { value: "deepseek/deepseek-r2", label: "DeepSeek R2", badge: "Reasoning" },
-      { value: "meta-llama/llama-4-maverick", label: "Llama 4 Maverick", badge: "Meta" },
-      { value: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B", badge: "Fast" },
-      { value: "qwen/qwen3-235b-a22b", label: "Qwen3 235B", badge: "Large" },
-      { value: "google/gemma-3-27b-it", label: "Gemma 3 27B", badge: "Google" },
-    ],
-  },
-  {
-    id: "opencode",
-    label: "OpenCode AI",
-    envKey: "OPENCODE_API_KEY",
-    docsUrl: "https://opencode.ai",
-    defaultModels: [
-      { value: "minimax-m3-free", label: "MiniMax M3 Free", badge: "MiniMax" },
-      { value: "mimo-v2.5-free", label: "MiMo V2.5 Free", badge: "Xiaomi" },
-      { value: "north-mini-code-free", label: "North Mini Code Free", badge: "Stealth" },
-      { value: "nemotron-3-ultra-free", label: "Nemotron 3 Ultra Free", badge: "NVIDIA" },
-      { value: "deepseek-v4-flash-free", label: "DeepSeek V4 Flash Free", badge: "DeepSeek" },
-      { value: "qwen3.6-plus", label: "Qwen3.6 Plus Free", badge: "Qwen" },
-    ],
-  },
-  {
-    id: "deepseek",
-    label: "DeepSeek",
-    envKey: "DEEPSEEK_API_KEY",
-    docsUrl: "https://platform.deepseek.com",
-    defaultModels: [
-      { value: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", badge: "Fast" },
-      { value: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro", badge: "Pro" },
+      { value: "kr/claude-sonnet-4.5", label: "Claude Sonnet 4.5 (Kiro)", badge: "Free" },
+      { value: "oc/auto", label: "OpenCode Auto", badge: "Free" },
+      { value: "cc/claude-opus-4-7", label: "Claude Opus 4.7 (Sub)", badge: "Subscription" },
     ],
   },
 ];
@@ -715,7 +569,9 @@ export const LLM_PROVIDERS = [
 type TestResult = { status: "idle" | "testing" | "ok" | "error"; latency?: number; error?: string };
 
 function LLMProvidersPanel() {
-  const [activeProviderId, setActiveProviderId] = useState("vercel");
+  const [providerMetas, setProviderMetas] = useState<any[]>([]);
+  const [loadingProviders, setLoadingProviders] = useState(true);
+  const [activeProviderId, setActiveProviderId] = useState("");
   const [customModelsByProvider, setCustomModelsByProvider] = useState<Record<string, string[]>>({});
   const [newModelInputs, setNewModelInputs] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
@@ -723,6 +579,21 @@ function LLMProvidersPanel() {
   const [envStatus, setEnvStatus] = useState<Record<string, boolean>>({});
   const [selectedModel, setSelectedModel] = useState<Record<string, string>>({});
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
+
+  useEffect(() => {
+    setLoadingProviders(true);
+    fetch("/api/provider-status")
+      .then(r => r.json())
+      .then(data => {
+        const provs = data.providers || [];
+        setProviderMetas(provs);
+        if (provs.length > 0) {
+          setActiveProviderId(provs[0].id);
+        }
+      })
+      .catch(err => console.error("Failed to load providers in LLMProvidersPanel:", err))
+      .finally(() => setLoadingProviders(false));
+  }, []);
 
   useEffect(() => {
     fetch("/api/test-ai-model")
@@ -734,19 +605,20 @@ function LLMProvidersPanel() {
       .catch(() => {});
   }, []);
 
+  const activeProvider = providerMetas.find(p => p.id === activeProviderId) || providerMetas[0];
+
   const allModels = (providerId: string, defaults: { value: string; label: string; badge: string }[]) => {
     const custom = customModelsByProvider[providerId] ?? [];
     return [
-      ...defaults,
+      ...(defaults || []),
       ...custom.map(v => ({ value: v, label: v, badge: "Custom" })),
     ];
   };
 
   const handleTestModel = async (providerId: string) => {
-    const activeProvider = LLM_PROVIDERS.find(p => p.id === providerId);
     if (!activeProvider) return;
-    const models = allModels(providerId, activeProvider.defaultModels);
-    const model = selectedModel[providerId] ?? models[0]?.value;
+    const modelsList = allModels(providerId, activeProvider.defaultModels);
+    const model = selectedModel[providerId] ?? modelsList[0]?.value;
     if (!model) return;
 
     setTestResults(prev => ({ ...prev, [providerId]: { status: "testing" } }));
@@ -804,12 +676,32 @@ function LLMProvidersPanel() {
     }
   };
 
-  const activeProvider = LLM_PROVIDERS.find(p => p.id === activeProviderId) || LLM_PROVIDERS[0];
-  const customModels = customModelsByProvider[activeProvider.id] ?? [];
-  const keySet = envStatus[activeProvider.id] === true;
-  const models = allModels(activeProvider.id, activeProvider.defaultModels);
-  const selected = selectedModel[activeProvider.id] ?? models[0]?.value ?? "";
-  const tr = testResults[activeProvider.id] ?? { status: "idle" };
+  const customModels = activeProvider ? (customModelsByProvider[activeProvider.id] ?? []) : [];
+  const keySet = activeProvider ? (envStatus[activeProvider.id] === true) : false;
+  const models = activeProvider ? allModels(activeProvider.id, activeProvider.defaultModels) : [];
+  const selected = activeProvider ? (selectedModel[activeProvider.id] ?? models[0]?.value ?? "") : "";
+  const tr: TestResult = activeProvider ? (testResults[activeProvider.id] ?? { status: "idle" }) : { status: "idle" };
+
+  if (loadingProviders) {
+    return (
+      <div className="rounded-xl border bg-card shadow-sm p-6 flex flex-col items-center justify-center min-h-[300px]">
+        <Loader2 className="h-8 w-8 text-primary animate-spin" />
+        <p className="text-xs text-muted-foreground mt-2 font-semibold">Loading gateway providers...</p>
+      </div>
+    );
+  }
+
+  if (providerMetas.length === 0) {
+    return (
+      <div className="rounded-xl border bg-card shadow-sm p-6 flex flex-col items-center justify-center min-h-[300px]">
+        <Brain className="h-8 w-8 text-muted-foreground" />
+        <p className="text-sm font-semibold mt-2">No gateway providers configured</p>
+        <p className="text-xs text-muted-foreground mt-1 max-w-sm text-center leading-relaxed">
+          Please configure your 9Router client API key and enable provider connections inside the AI Gateway tab first.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
@@ -831,15 +723,22 @@ function LLMProvidersPanel() {
               value={activeProviderId}
               onChange={e => setActiveProviderId(e.target.value)}
               className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all font-medium"
+              disabled={loadingProviders || providerMetas.length === 0}
             >
-              {LLM_PROVIDERS.map(p => {
-                const isConnected = envStatus[p.id] === true;
-                return (
-                  <option key={p.id} value={p.id}>
-                    {p.label} ({isConnected ? "Connected" : "Key Not Set"})
-                  </option>
-                );
-              })}
+              {loadingProviders ? (
+                <option value="">Loading providers...</option>
+              ) : providerMetas.length === 0 ? (
+                <option value="">No gateway providers configured</option>
+              ) : (
+                providerMetas.map(p => {
+                  const isConnected = envStatus[p.id] === true;
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {p.label} ({isConnected ? "Connected" : "Key Not Set"})
+                    </option>
+                  );
+                })
+              )}
             </select>
           </div>
 
@@ -861,23 +760,21 @@ function LLMProvidersPanel() {
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
               <Key className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-muted-foreground">Requires environment variable:</span>
+              <span className="text-muted-foreground">Gateway Provider Status:</span>
               <code className="text-[11px] font-mono bg-muted-foreground/10 px-1.5 py-0.5 rounded text-foreground font-bold">
-                {activeProvider.envKey}
+                {activeProvider?.label || "None"}
               </code>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Add this key to your server's <code className="font-mono bg-muted px-1 rounded text-[10px]">.env</code> file to enable this provider.
+              Configure and manage credentials for this provider directly inside the 9Router Gateway dashboard.
             </p>
           </div>
-          <a
-            href={activeProvider.docsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={() => setActiveProviderId("gateway")}
             className="shrink-0 h-8 px-3.5 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 flex items-center justify-center gap-1 text-xs font-semibold transition-colors"
           >
-            Get Key <ChevronRight className="h-3.5 w-3.5" />
-          </a>
+            Configure 9Router <ChevronRight className="h-3.5 w-3.5" />
+          </button>
         </div>
 
         {/* Row 2: Select Model & Test */}
@@ -888,17 +785,24 @@ function LLMProvidersPanel() {
           <div className="flex flex-col sm:flex-row gap-2.5">
             <select
               value={selected}
-              onChange={e => setSelectedModel(prev => ({ ...prev, [activeProvider.id]: e.target.value }))}
+              onChange={e => setSelectedModel(prev => ({ ...prev, [activeProvider?.id]: e.target.value }))}
               className="flex-1 h-9 rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono"
+              disabled={loadingProviders || providerMetas.length === 0}
             >
-              {models.map(m => (
-                <option key={m.value} value={m.value}>
-                  {m.label} ({m.badge})
-                </option>
-              ))}
+              {loadingProviders ? (
+                <option value="">Loading dynamic models...</option>
+              ) : providerMetas.length === 0 ? (
+                <option value="">No models available</option>
+              ) : (
+                models.map((m: any) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label} ({m.badge})
+                  </option>
+                ))
+              )}
             </select>
             <button
-              onClick={() => handleTestModel(activeProvider.id)}
+              onClick={() => handleTestModel(activeProvider?.id)}
               disabled={tr.status === "testing" || !keySet}
               className={`h-9 px-4 rounded-md text-xs font-medium flex items-center justify-center gap-1.5 border transition-all shrink-0
                 ${tr.status === "ok"
@@ -992,78 +896,7 @@ function LLMProvidersPanel() {
   );
 }
 
-function SuperIndexingSettingsPanel({
-  globalSettings,
-  setGlobalSetting,
-  saveGlobalSettings,
-  saveStatus,
-}: {
-  globalSettings: Record<string, string>;
-  setGlobalSetting: (k: string, v: string) => void;
-  saveGlobalSettings: () => Promise<void>;
-  saveStatus: "idle" | "saving" | "saved" | "error";
-}) {
-  const superEnabled = globalSettings.super_indexing_enabled === "true";
-  const normalEnabled = globalSettings.normal_indexing_enabled === "true";
 
-  return (
-    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2.5 px-4 py-3 border-b bg-muted/20">
-        <Brain className="h-4 w-4 text-primary" />
-        <span className="font-semibold text-sm">Super Index & Sync Settings</span>
-        <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full ml-1">
-          Control tool indexing and progressive disclosure behavior
-        </span>
-      </div>
-
-      <div className="p-5 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="flex items-center justify-between p-3.5 rounded-lg border bg-muted/20">
-            <div>
-              <p className="text-xs font-semibold">Enable Super Indexing</p>
-              <p className="text-[10px] text-muted-foreground">Summarize MCP connections and load tools on-demand via list_tools(mcp_name="...")</p>
-            </div>
-            <button
-              onClick={() => setGlobalSetting("super_indexing_enabled", superEnabled ? "false" : "true")}
-              className={`relative w-11 h-6 rounded-full transition-colors ${superEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-            >
-              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${superEnabled ? "left-6" : "left-1"}`} />
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between p-3.5 rounded-lg border bg-muted/20">
-            <div>
-              <p className="text-xs font-semibold">Enable Normal Prompt Indexing</p>
-              <p className="text-[10px] text-muted-foreground">Inject compact tool summaries directly into agent system prompt</p>
-            </div>
-            <button
-              onClick={() => setGlobalSetting("normal_indexing_enabled", normalEnabled ? "false" : "true")}
-              className={`relative w-11 h-6 rounded-full transition-colors ${normalEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-            >
-              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${normalEnabled ? "left-6" : "left-1"}`} />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 pt-3 border-t">
-          <Button
-            onClick={saveGlobalSettings}
-            disabled={saveStatus === "saving"}
-            className="bg-primary text-primary-foreground text-xs font-semibold h-9 px-4 flex items-center gap-1.5"
-          >
-            {saveStatus === "saving" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            Save Indexing Settings
-          </Button>
-          {saveStatus === "saved" && (
-            <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1 animate-pulse">
-              <CheckCircle2 className="h-4 w-4" /> Saved successfully!
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 
 
@@ -1172,15 +1005,7 @@ export function ProviderOrderingSection({
         <LLMProvidersPanel />
       </div>
 
-      {/* Super Indexing Settings */}
-      {globalSettings && setGlobalSetting && saveGlobalSettings && saveStatus && (
-        <SuperIndexingSettingsPanel
-          globalSettings={globalSettings}
-          setGlobalSetting={setGlobalSetting}
-          saveGlobalSettings={saveGlobalSettings}
-          saveStatus={saveStatus}
-        />
-      )}
+
 
 
 

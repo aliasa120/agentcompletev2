@@ -37,178 +37,19 @@ class ProviderConfig(TypedDict, total=False):
 # Order determines the display order in the UI.
 
 PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
-    "vercel": {
-        "base_url": "https://ai-gateway.vercel.sh/v1",
-        "env_key": "AI_GATEWAY_API_KEY",
-        "label": "Vercel AI Gateway",
-        "openai_compat": True,
-        "badge_color": "from-blue-500 to-indigo-600",
-        "default_models": [
-            {"value": "xiaomi/mimo-v2.5-pro",        "label": "Mimo v2.5 Pro",       "badge": "Recommended"},
-            {"value": "moonshotai/kimi-k2.5",         "label": "Kimi K2.5",           "badge": "Vision"},
-            {"value": "minimax/minimax-m2.7",          "label": "MiniMax M2.7",        "badge": "Fast"},
-            {"value": "openai/gpt-4o",                 "label": "GPT-4o",              "badge": "OpenAI"},
-            {"value": "google/gemini-2.5-flash",       "label": "Gemini 2.5 Flash",    "badge": "Google"},
-            {"value": "anthropic/claude-sonnet-4-5",  "label": "Claude Sonnet 4.5",   "badge": "Anthropic"},
-        ],
-    },
-    "openai": {
-        "base_url": "https://api.openai.com/v1",
-        "env_key": "OPENAI_API_KEY",
-        "label": "OpenAI",
-        "openai_compat": True,
-        "badge_color": "from-green-500 to-emerald-600",
-        "default_models": [
-            {"value": "gpt-4.1",         "label": "GPT-4.1",           "badge": "Latest"},
-            {"value": "gpt-4o",          "label": "GPT-4o",            "badge": "Vision"},
-            {"value": "gpt-4o-mini",     "label": "GPT-4o Mini",       "badge": "Fast"},
-            {"value": "o3",              "label": "o3",                "badge": "Reasoning"},
-            {"value": "o4-mini",         "label": "o4-mini",           "badge": "Reasoning"},
-        ],
-    },
-    "anthropic": {
-        "base_url": "https://api.anthropic.com/v1",
-        "env_key": "ANTHROPIC_API_KEY",
-        "label": "Anthropic",
-        "openai_compat": True,  # via OpenAI-compat proxy; direct use needs langchain-anthropic
-        "badge_color": "from-orange-500 to-amber-600",
-        "default_models": [
-            {"value": "claude-opus-4-5",       "label": "Claude Opus 4.5",     "badge": "Most Capable"},
-            {"value": "claude-sonnet-4-5",     "label": "Claude Sonnet 4.5",   "badge": "Balanced"},
-            {"value": "claude-haiku-3-5",      "label": "Claude Haiku 3.5",    "badge": "Fast"},
-        ],
-    },
-    "openrouter": {
-        "base_url": "https://openrouter.ai/api/v1",
-        "env_key": "OPENROUTER_API_KEY",
-        "label": "OpenRouter",
-        "openai_compat": True,
-        "badge_color": "from-violet-500 to-purple-600",
-        "default_models": [
-            {"value": "google/gemini-2.5-flash",              "label": "Gemini 2.5 Flash",       "badge": "Google"},
-            {"value": "meta-llama/llama-4-maverick",          "label": "Llama 4 Maverick",       "badge": "Meta"},
-            {"value": "deepseek/deepseek-r2",                 "label": "DeepSeek R2",            "badge": "Reasoning"},
-            {"value": "anthropic/claude-sonnet-4-5",         "label": "Claude Sonnet 4.5",      "badge": "Anthropic"},
-            {"value": "openai/gpt-4o",                        "label": "GPT-4o",                 "badge": "OpenAI"},
-            {"value": "mistralai/mistral-large",              "label": "Mistral Large",          "badge": "Mistral"},
-        ],
-    },
-    "litellm": {
-        "base_url_env": "LITELLM_BASE_URL",
-        "base_url_default": "http://47.82.164.26:4000",
-        "env_key": "LITELLM_API_KEY",
-        "label": "LiteLLM Proxy",
-        "openai_compat": True,
-        "badge_color": "from-purple-500 to-pink-600",
-        "default_models": [
-            {"value": "mimo-v2.5-pro",         "label": "Mimo v2.5 Pro",    "badge": "LiteLLM"},
-            {"value": "openai/gpt-oss-120b",   "label": "GPT OSS 120B",     "badge": "LiteLLM"},
-        ],
-    },
-    "groq": {
-        "base_url": "https://api.groq.com/openai/v1",
-        "env_key": "GROQ_API_KEY",
-        "label": "Groq",
-        "openai_compat": True,
-        "badge_color": "from-rose-500 to-red-600",
-        "default_models": [
-            {"value": "llama-3.3-70b-versatile",   "label": "Llama 3.3 70B",     "badge": "Fast"},
-            {"value": "llama-3.1-8b-instant",      "label": "Llama 3.1 8B",      "badge": "Ultra-Fast"},
-            {"value": "gemma2-9b-it",              "label": "Gemma 2 9B",        "badge": "Google"},
-            {"value": "deepseek-r1-distill-llama-70b", "label": "DeepSeek R1 70B", "badge": "Reasoning"},
-        ],
-    },
-    "together": {
-        "base_url": "https://api.together.xyz/v1",
-        "env_key": "TOGETHER_API_KEY",
-        "label": "Together AI",
-        "openai_compat": True,
-        "badge_color": "from-teal-500 to-cyan-600",
-        "default_models": [
-            {"value": "meta-llama/Llama-3.3-70B-Instruct-Turbo",  "label": "Llama 3.3 70B Turbo",   "badge": "Fast"},
-            {"value": "deepseek-ai/DeepSeek-R1",                  "label": "DeepSeek R1",            "badge": "Reasoning"},
-            {"value": "Qwen/Qwen2.5-72B-Instruct-Turbo",          "label": "Qwen 2.5 72B",          "badge": "Qwen"},
-            {"value": "mistralai/Mistral-7B-Instruct-v0.3",       "label": "Mistral 7B",             "badge": "Efficient"},
-        ],
-    },
-    "nvidia": {
-        # NVIDIA NIM — OpenAI-compatible inference API.
-        # NOTE: NIM sometimes emits empty-choices SSE chunks; the provider_engine
-        # and agent's astream() already guard against these (check choices before
-        # reading delta.content).
-        "base_url": "https://integrate.api.nvidia.com/v1",
-        "env_key": "NVIDIA_API_KEY",
-        "label": "NVIDIA NIM",
-        "openai_compat": True,
-        "badge_color": "from-green-600 to-lime-500",
-        "default_models": [
-            {"value": "minimaxai/minimax-m2.7",      "label": "MiniMax M2.7",        "badge": "Recommended"},
-            {"value": "stepfun-ai/step-3.7-flash",    "label": "Step 3.7 Flash",      "badge": "Fast"},
-            {"value": "openai/gpt-oss-120b",           "label": "GPT OSS 120B",        "badge": "Large"},
-            {"value": "deepseek-ai/deepseek-v4-flash", "label": "DeepSeek V4 Flash",   "badge": "Reasoning"},
-        ],
-    },
-    "mimo": {
-        # Xiaomi MiMo — OpenAI-compatible chat API.
-        # Endpoint: https://api.xiaomimimo.com/v1/chat/completions
-        # Auth: Authorization: Bearer $MIMO_API_KEY
-        # Docs: https://platform.xiaomimimo.com/docs/en-US/api/chat/openai-api
-        "base_url": "https://api.xiaomimimo.com/v1",
-        "env_key": "MIMO_API_KEY",
-        "label": "Xiaomi MiMo",
-        "openai_compat": True,
-        "badge_color": "from-orange-400 to-red-500",
-        "default_models": [
-            {"value": "mimo-v2.5-pro", "label": "MiMo V2.5 Pro", "badge": "Flagship"},
-            {"value": "mimo-v2.5",     "label": "MiMo V2.5",     "badge": "Fast"},
-        ],
-    },
-    "novita": {
-        # Novita AI — OpenAI-compatible inference API.
-        # Endpoint: https://api.novita.ai/openai/v1
-        # Auth: Authorization: Bearer $NOVITA_API_KEY
-        # Docs: https://novita.ai/docs
-        "base_url": "https://api.novita.ai/openai/v1",
-        "env_key": "NOVITA_API_KEY",
-        "label": "Novita AI",
+    "ninerouter": {
+        "base_url_env": "NINE_ROUTER_URL",
+        "base_url_default": "http://localhost:20128/v1",
+        "env_key": "NINE_ROUTER_API_KEY",
+        "label": "9Router AI Gateway",
         "openai_compat": True,
         "badge_color": "from-cyan-500 to-blue-600",
         "default_models": [
-            {"value": "deepseek/deepseek-v4-flash",            "label": "DeepSeek V4 Flash",    "badge": "Recommended"},
-            {"value": "deepseek/deepseek-r2",                  "label": "DeepSeek R2",           "badge": "Reasoning"},
-            {"value": "meta-llama/llama-4-maverick",           "label": "Llama 4 Maverick",      "badge": "Meta"},
-            {"value": "meta-llama/llama-3.3-70b-instruct",    "label": "Llama 3.3 70B",         "badge": "Fast"},
-            {"value": "qwen/qwen3-235b-a22b",                  "label": "Qwen3 235B",            "badge": "Large"},
-            {"value": "google/gemma-3-27b-it",                 "label": "Gemma 3 27B",           "badge": "Google"},
+            {"value": "kr/claude-sonnet-4.5", "label": "Claude Sonnet 4.5 (Kiro)", "badge": "Free"},
+            {"value": "oc/auto",              "label": "OpenCode Auto",           "badge": "Free"},
+            {"value": "cc/claude-opus-4-7",   "label": "Claude Opus 4.7 (Sub)",   "badge": "Subscription"},
         ],
     },
-    "opencode": {
-        "base_url": "https://opencode.ai/zen/v1",
-        "env_key": "OPENCODE_API_KEY",
-        "label": "OpenCode AI",
-        "openai_compat": True,
-        "badge_color": "from-violet-600 to-indigo-700",
-        "default_models": [
-            {"value": "minimax-m3-free",       "label": "MiniMax M3 Free",       "badge": "MiniMax"},
-            {"value": "mimo-v2.5-free",        "label": "MiMo V2.5 Free",        "badge": "Xiaomi"},
-            {"value": "north-mini-code-free",  "label": "North Mini Code Free",  "badge": "Stealth"},
-            {"value": "nemotron-3-ultra-free", "label": "Nemotron 3 Ultra Free", "badge": "NVIDIA"},
-            {"value": "deepseek-v4-flash-free", "label": "DeepSeek V4 Flash Free", "badge": "DeepSeek"},
-            {"value": "qwen3.6-plus",          "label": "Qwen3.6 Plus Free",     "badge": "Qwen"},
-        ],
-    },
-    "deepseek": {
-        "base_url": "https://api.deepseek.com",
-        "env_key": "DEEPSEEK_API_KEY",
-        "label": "DeepSeek",
-        "openai_compat": True,
-        "badge_color": "from-blue-600 via-sky-500 to-cyan-400",
-        "default_models": [
-            {"value": "deepseek/deepseek-v4-flash", "label": "DeepSeek V4 Flash", "badge": "Fast"},
-            {"value": "deepseek/deepseek-v4-pro",   "label": "DeepSeek V4 Pro",   "badge": "Pro"},
-        ],
-    },
-
 }
 
 
