@@ -188,9 +188,8 @@ function comboMatchesKinds(combo, kindFilter) {
 /**
  * Build OpenAI-format models list filtered by service kinds.
  * @param {string[]} kindFilter - List of service kinds to include (e.g. ["llm"], ["webSearch","webFetch"]).
- * @param {boolean} onlyActive - If true, do not return static fallback models when connection list is empty.
  */
-export async function buildModelsList(kindFilter, onlyActive = false) {
+export async function buildModelsList(kindFilter) {
   let connections = [];
   try {
     connections = await getProviderConnections();
@@ -251,7 +250,7 @@ export async function buildModelsList(kindFilter, onlyActive = false) {
     models.push(entry);
   }
 
-  if (connections.length === 0 && !onlyActive) {
+  if (connections.length === 0) {
     // DB unavailable -> return static models, filtered by per-model kind
     const aliasToProviderId = Object.fromEntries(
       Object.entries(PROVIDER_ID_TO_ALIAS).map(([id, alias]) => [alias, id])
@@ -476,10 +475,9 @@ export async function OPTIONS() {
  * GET /v1/models - OpenAI compatible models list (LLM/chat models only by default).
  * For other capabilities use /v1/models/{kind} (image, tts, stt, embedding, image-to-text, web).
  */
-export async function GET(request) {
+export async function GET() {
   try {
-    const onlyActive = request?.headers?.get("x-9r-only-active") === "true" || request?.nextUrl?.searchParams?.get("only_active") === "true";
-    const data = await buildModelsList([LLM_KIND], onlyActive);
+    const data = await buildModelsList([LLM_KIND]);
     return Response.json({ object: "list", data }, {
       headers: { "Access-Control-Allow-Origin": "*" },
     });

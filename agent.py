@@ -569,10 +569,15 @@ def _bind_agent_id_to_load_tools(load_tools_tool, agent_id: str):
 
 def _bind_agent_id_to_call_tool(call_tool_tool, agent_id: str):
     from langchain_core.tools import tool
-    from typing import Dict, Any
+    from typing import Dict, Any, Optional
+    from langchain_core.runnables import RunnableConfig
     
     @tool("call_tool")
-    def call_tool_bound(tool_name: str, arguments: Dict[str, Any]) -> str:
+    def call_tool_bound(
+        tool_name: str,
+        arguments: Dict[str, Any],
+        config: Optional[RunnableConfig] = None,
+    ) -> str:
         """Execute a dynamically loaded tool with the specified arguments.
 
         Use this tool to execute any tool from the <available_tools> index or found via list_tools
@@ -583,7 +588,7 @@ def _bind_agent_id_to_call_tool(call_tool_tool, agent_id: str):
             tool_name: The name of the tool to execute (e.g. 'publish_to_wordpress')
             arguments: A dictionary of arguments to pass to the tool (e.g. {'blog_post_markdown': '...', 'category_id': 1})
         """
-        return call_tool_tool.func(tool_name=tool_name, arguments=arguments, agent_id=agent_id)
+        return call_tool_tool.func(tool_name=tool_name, arguments=arguments, agent_id=agent_id, config=config)
     return call_tool_bound
 
 # Global registry of compiled workflow agents
@@ -687,6 +692,7 @@ def load_dynamic_agents_by_workflow():
             list_skills,
             manage_skill,
             build_skills_index,
+            cronjob,
         )
 
         tool_lookup = {
@@ -708,6 +714,7 @@ def load_dynamic_agents_by_workflow():
             "load_tools": load_tools,
             "call_tool": call_tool,
             "youtube_transcript": youtube_transcript,
+            "cronjob": cronjob,
         }
 
         tool_assignments_by_agent = {}
