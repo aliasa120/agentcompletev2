@@ -155,7 +155,8 @@ def create_tables():
     # Check which tables already exist
     tables_to_create = []
     for table in ["workflows", "agent_configs", "agent_tool_assignments",
-                  "mcp_connections", "skills_library", "design_assets", "telegram_chat_bindings", "telegram_bots"]:
+                  "mcp_connections", "skills_library", "design_assets", "telegram_chat_bindings", "telegram_bots",
+                  "agent_scheduled_tasks"]:
         exists = _table_exists(table)
         status = "✅ exists" if exists else "❌ missing"
         print(f"  {table}: {status}")
@@ -314,6 +315,39 @@ CREATE TABLE IF NOT EXISTS telegram_bots (
 -- Migration: drop legacy workflow_id column if it exists
 ALTER TABLE telegram_bots DROP COLUMN IF EXISTS workflow_id;
 
+-- ── agent_scheduled_tasks ────────────────────────────────────
+CREATE TABLE IF NOT EXISTS agent_scheduled_tasks (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name                TEXT NOT NULL,
+  prompt              TEXT,
+  skills              JSONB DEFAULT '[]',
+  model               TEXT,
+  provider            TEXT,
+  base_url            TEXT,
+  script              TEXT,
+  no_agent            BOOLEAN DEFAULT false,
+  context_from        JSONB DEFAULT '[]',
+  schedule            JSONB NOT NULL,
+  schedule_display    TEXT NOT NULL,
+  repeat_times        INTEGER,
+  repeat_completed    INTEGER DEFAULT 0,
+  enabled             BOOLEAN DEFAULT true,
+  state               TEXT DEFAULT 'scheduled',
+  paused_at           TIMESTAMPTZ,
+  paused_reason       TEXT,
+  deliver             TEXT DEFAULT 'local',
+  origin              JSONB DEFAULT '{}',
+  enabled_toolsets    JSONB DEFAULT '[]',
+  workdir             TEXT,
+  last_run_at         TIMESTAMPTZ,
+  last_run_logs       TEXT,
+  last_status         TEXT,
+  last_error          TEXT,
+  next_run_at         TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ DEFAULT now(),
+  updated_at          TIMESTAMPTZ DEFAULT now()
+);
+
 -- Migration: add is_active column to workflows table if it doesn't exist
 ALTER TABLE workflows ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
 
@@ -334,6 +368,7 @@ ALTER TABLE skills_library         DISABLE ROW LEVEL SECURITY;
 ALTER TABLE design_assets          DISABLE ROW LEVEL SECURITY;
 ALTER TABLE telegram_chat_bindings  DISABLE ROW LEVEL SECURITY;
 ALTER TABLE telegram_bots           DISABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_scheduled_tasks   DISABLE ROW LEVEL SECURITY;
 
 -- ── Realtime: Enable for instant config reloads ──────────────
 ALTER PUBLICATION supabase_realtime ADD TABLE workflows;
@@ -341,6 +376,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE agent_configs;
 ALTER PUBLICATION supabase_realtime ADD TABLE agent_tool_assignments;
 ALTER PUBLICATION supabase_realtime ADD TABLE mcp_connections;
 ALTER PUBLICATION supabase_realtime ADD TABLE telegram_chat_bindings;
+ALTER PUBLICATION supabase_realtime ADD TABLE agent_scheduled_tasks;
 
 -- ── Indexes ──────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_agent_configs_type
@@ -349,6 +385,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_tool_assignments_agent
   ON agent_tool_assignments(agent_id);
 CREATE INDEX IF NOT EXISTS idx_mcp_connections_status
   ON mcp_connections(status);
+CREATE INDEX IF NOT EXISTS idx_agent_scheduled_tasks_next_run
+  ON agent_scheduled_tasks(next_run_at) WHERE enabled = true;
 
 SELECT 'Migration complete ✅' AS status;
 """
@@ -501,6 +539,7 @@ def seed_tool_assignments():
             ("builtin", "get_wordpress_categories", "WP Categories"),
             ("builtin", "publish_to_wordpress",   "Publish to WordPress"),
             ("builtin", "youtube_transcript",     "YouTube Transcript"),
+            ("builtin", "cronjob",                "Cron Scheduler"),
         ],
         "Research Subagent": [
             ("builtin", "unified_search",   "Web Search"),

@@ -72,6 +72,7 @@ const BUILTIN_TOOLS = [
   { tool_key: "list_tools",             tool_label: "List Tools",            category: "Routing" },
   { tool_key: "load_tools",             tool_label: "Load Tools",            category: "Routing" },
   { tool_key: "call_tool",              tool_label: "Call Tool",             category: "Routing" },
+  { tool_key: "cronjob",                tool_label: "Cron Scheduler",        category: "Routing" },
 ];
 
 const TOOL_CATEGORIES = ["Search", "Reasoning", "Images", "Skills", "Output", "Routing"];

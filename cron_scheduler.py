@@ -24,6 +24,7 @@ import requests
 import threading
 from datetime import datetime, timezone
 from dotenv import load_dotenv
+from typing import Optional, List, Dict, Any
 
 def fire_in_background(func, *args, **kwargs):
     """Run a function in a background thread."""
@@ -230,7 +231,7 @@ def _lg_create_thread(workflow_id: str = None) -> str:
     return r.json()["thread_id"]
 
 
-def _lg_create_run(thread_id: str, assistant_id: str, content: str, workflow_id: str) -> None:
+def _lg_create_run(thread_id: str, assistant_id: str, content: str, workflow_id: str = None) -> dict:
     payload = {
         "assistant_id": assistant_id,
         "input": {"messages": [{"role": "human", "content": content}]},
@@ -247,6 +248,90 @@ def _lg_create_run(thread_id: str, assistant_id: str, content: str, workflow_id:
         timeout=15,
     )
     r.raise_for_status()
+    return r.json()
+
+
+def _lg_get_run(thread_id: str, run_id: str) -> dict:
+    r = requests.get(
+        f"{LG_URL}/threads/{thread_id}/runs/{run_id}",
+        headers={"Content-Type": "application/json"},
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def _lg_get_messages(thread_id: str) -> list:
+    r = requests.get(
+        f"{LG_URL}/threads/{thread_id}/state",
+        headers={"Content-Type": "application/json"},
+        timeout=10,
+    )
+    r.raise_for_status()
+    state = r.json()
+    return state.get("values", {}).get("messages", [])
+
+
+def get_final_assistant_message(thread_id: str) -> str:
+    try:
+        msgs = _lg_get_messages(thread_id)
+        assistant_msgs = []
+        for m in msgs:
+            role = m.get("role") or m.get("type")
+            if role in ["assistant", "ai"]:
+                content = m.get("content")
+                if isinstance(content, list):
+                    text_parts = []
+                    for part in content:
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            text_parts.append(part.get("text", ""))
+                        elif isinstance(part, str):
+                            text_parts.append(part)
+                    content = "\n".join(text_parts)
+                if content:
+                    assistant_msgs.append((m.get("created_at") or "", content))
+        if assistant_msgs:
+            try:
+                assistant_msgs.sort(key=lambda x: x[0])
+            except Exception:
+                pass
+            return assistant_msgs[-1][1]
+    except Exception as e:
+        log.warning(f"Could not parse messages for thread {thread_id}: {e}")
+    return ""
+
+
+def run_script_job(script_path: str, workdir: Optional[str] = None) -> tuple[str, str]:
+    import subprocess
+    import sys
+    try:
+        ext = os.path.splitext(script_path)[1].lower()
+        if ext == ".py":
+            cmd = [sys.executable, script_path]
+        elif ext == ".sh":
+            cmd = ["bash", script_path]
+        elif ext == ".bat" or ext == ".cmd":
+            cmd = [script_path]
+        else:
+            cmd = [script_path]
+            
+        cwd = workdir if workdir and os.path.exists(workdir) else None
+        
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=600,
+            shell=True if os.name == 'nt' else False
+        )
+        status = "success" if result.returncode == 0 else "failed"
+        return status, result.stdout
+    except subprocess.TimeoutExpired as te:
+        return "failed", f"Execution timed out after 10 minutes.\nStdout/Stderr:\n{te.stdout}"
+    except Exception as e:
+        return "failed", f"Failed to execute script: {str(e)}"
 
 
 # ── Agent trigger ────────────────────────────────────────────────────────────
@@ -537,6 +622,199 @@ def check_auto_publish() -> None:
         log.error(f"check_auto_publish error: {e}")
 
 
+# ── Scheduled Tasks trigger ──────────────────────────────────────────────────
+def check_scheduled_tasks() -> None:
+    try:
+        now_str = now_iso()
+        # Query where enabled=true, state is not 'running', and next_run_at <= now
+        params = f"enabled=eq.true&state=neq.running&next_run_at=lte.{now_str}"
+        due_tasks = _sb_get("agent_scheduled_tasks", params)
+        if not due_tasks:
+            return
+
+        log.info(f"⏰ Scheduled Tasks: {len(due_tasks)} task(s) due.")
+
+        for task in due_tasks:
+            job_id = task["id"]
+            task_name = task["name"]
+            
+            # Immediately lock the task by setting state to 'running'
+            try:
+                run_time = now_iso()
+                _sb_patch("agent_scheduled_tasks", f"id=eq.{job_id}", {
+                    "state": "running",
+                    "last_run_at": run_time,
+                    "updated_at": run_time
+                })
+            except Exception as e:
+                log.error(f"Failed to lock job {task_name} ({job_id}): {e}")
+                continue
+
+            # Execute the task asynchronously
+            fire_in_background(_execute_scheduled_task, task)
+
+    except Exception as e:
+        log.error(f"check_scheduled_tasks error: {e}")
+
+
+def _execute_scheduled_task(task: dict) -> None:
+    job_id = task["id"]
+    task_name = task["name"]
+    no_agent = task.get("no_agent", False)
+    
+    log.info(f"🚀 Executing scheduled task: {task_name} (ID: {job_id})")
+    
+    # Resolve context_from
+    context_blocks = []
+    context_from = task.get("context_from") or []
+    if isinstance(context_from, str):
+        try:
+            context_from = json.loads(context_from)
+        except Exception:
+            context_from = []
+            
+    if context_from:
+        for upstream_id in context_from:
+            try:
+                upstream = _sb_get("agent_scheduled_tasks", f"id=eq.{upstream_id}")
+                if upstream:
+                    u_task = upstream[0]
+                    u_name = u_task.get("name", "Unknown")
+                    u_logs = u_task.get("last_run_logs") or "No logs/output available."
+                    context_blocks.append(
+                        f"### Upstream Context from Task '{u_name}' (ID: {upstream_id})\n"
+                        f"{u_logs}\n"
+                    )
+            except Exception as e:
+                log.warning(f"Failed to fetch context from upstream job {upstream_id}: {e}")
+
+    # Build prompt
+    prompt = task.get("prompt") or ""
+    if context_blocks:
+        prompt = "\n\n".join(context_blocks) + "\n\nPrompt:\n" + prompt
+
+    status = "failed"
+    logs = ""
+    error_msg = None
+
+    try:
+        if no_agent:
+            # Script-only task
+            script_path = task.get("script")
+            if not script_path:
+                status = "failed"
+                logs = "Error: no_agent=True but no script path provided."
+            else:
+                workdir = task.get("workdir")
+                status, logs = run_script_job(script_path, workdir)
+        else:
+            # Agent LangGraph task
+            assistant_id = "research"
+            try:
+                assistants = _lg_list_assistants()
+                if assistants:
+                    assistant_id = assistants[0]["assistant_id"]
+            except Exception as e:
+                log.warning(f"Could not fetch assistants for scheduled task — using fallback 'research': {e}")
+                
+            wf_id = task.get("origin", {}).get("workflow_id") if isinstance(task.get("origin"), dict) else None
+            thread_id = _lg_create_thread(wf_id)
+            
+            run = _lg_create_run(thread_id, assistant_id, prompt, wf_id)
+            run_id = run.get("run_id") or run.get("id")
+            if not run_id:
+                raise KeyError(f"Could not find run_id in LangGraph run response: {run}")
+            
+            log.info(f"  LangGraph run created: thread={thread_id}, run={run_id}. Polling completion...")
+            
+            start_time = time.time()
+            timeout = 1800
+            completed = False
+            
+            while time.time() - start_time < timeout:
+                try:
+                    run_data = _lg_get_run(thread_id, run_id)
+                    run_status = run_data.get("status")
+                except Exception as poll_err:
+                    log.warning(f"  [Poll Warning] Temporary timeout or connection issue checking run status: {poll_err}. Retrying in 5s...")
+                    time.sleep(5)
+                    continue
+                
+                if run_status not in ["pending", "running", "queued"]:
+                    completed = True
+                    if run_status == "success":
+                        status = "success"
+                    else:
+                        status = "failed"
+                        error_msg = f"LangGraph run status: {run_status}"
+                    break
+                
+                time.sleep(5)
+                
+            if not completed:
+                status = "failed"
+                error_msg = "LangGraph run timed out after 30 minutes."
+                try:
+                    requests.post(f"{LG_URL}/threads/{thread_id}/runs/{run_id}/cancel", timeout=5)
+                except Exception:
+                    pass
+            else:
+                logs = get_final_assistant_message(thread_id)
+                if not logs:
+                    logs = f"LangGraph run completed with status '{status}' but no assistant response was found."
+
+    except Exception as e:
+        status = "failed"
+        error_msg = str(e)
+        logs = f"Exception occurred during execution:\n{str(e)}"
+        log.error(f"Error executing scheduled task {task_name}: {e}", exc_info=True)
+
+    # Post-execution updates
+    try:
+        now_time = now_iso()
+        repeat_times = task.get("repeat_times")
+        repeat_completed = task.get("repeat_completed") or 0
+        enabled = task.get("enabled", True)
+        state = "scheduled"
+        
+        if status == "success":
+            repeat_completed += 1
+            if repeat_times and repeat_completed >= repeat_times:
+                enabled = False
+                state = "completed"
+                
+        # Calculate next run
+        schedule_dict = task.get("schedule")
+        if isinstance(schedule_dict, str):
+            try:
+                schedule_dict = json.loads(schedule_dict)
+            except Exception:
+                schedule_dict = {}
+                
+        next_run_at = None
+        if enabled and state == "scheduled":
+            from research_agent.tools.cronjob import compute_next_run
+            next_run_at = compute_next_run(schedule_dict, last_run_at=now_time)
+            if not next_run_at:
+                enabled = False
+                state = "completed"
+
+        updates = {
+            "state": state,
+            "enabled": enabled,
+            "repeat_completed": repeat_completed,
+            "last_status": status,
+            "last_run_logs": logs,
+            "last_error": error_msg,
+            "next_run_at": next_run_at,
+            "updated_at": now_time
+        }
+        _sb_patch("agent_scheduled_tasks", f"id=eq.{job_id}", updates)
+        log.info(f"✅ Scheduled task completed: {task_name} (Status: {status}, Next Run: {next_run_at})")
+    except Exception as e:
+        log.error(f"Failed to update task post-run status for {task_name}: {e}")
+
+
 # ── Main loop ────────────────────────────────────────────────────────────────
 def main():
     log.info("=" * 60)
@@ -551,6 +829,7 @@ def main():
         log.info("--- tick ---")
         fire_in_background(check_feeder)
         fire_in_background(check_agent)
+        fire_in_background(check_scheduled_tasks)
         fire_in_background(check_auto_publish)
         time.sleep(TICK_SECONDS)
 

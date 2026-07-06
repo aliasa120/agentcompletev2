@@ -28,6 +28,7 @@ from .wordpress_publisher import get_wordpress_categories, publish_to_wordpress
 # ── Skills system (Hermes-style self-improvement) ────────────────────────
 from .list_skills import list_skills, build_skills_index
 from .manage_skill import manage_skill
+from .cronjob import cronjob
 
 # ── Dynamic Tool Routing ──────────────────────────────────────────────────
 from .dynamic_router import list_tools, load_tools, unload_unused_tools, build_tools_index, call_tool
@@ -59,6 +60,7 @@ __all__ = [
     # ── Skills system ──────────────────────────────────────────────────────────
     "list_skills",
     "manage_skill",
+    "cronjob",
     "build_skills_index",
     # ── Raw providers (not exposed to agent directly) ─────────────────────────
     "linkup_search",

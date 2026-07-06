@@ -3,7 +3,7 @@
 import React from "react";
 import {
   Wrench, Cpu, Bot, Users, LayoutList, BookOpen, Image as ImageIcon,
-  ChevronRight, Database, Settings, Menu, Brain, Route
+  ChevronRight, Database, Settings, Menu, Brain, Route, AlarmClock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +24,7 @@ export type SettingsSection =
   | "feeder"
   | "memories"
   | "telegram-bots"
+  | "scheduled-tasks"
   | "gateway"
   | "gateway-dashboard"
   | "gateway-providers"
@@ -47,6 +48,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "Workflows",
     description: "Manage multiple agentic pipelines",
     icon: <LayoutList className="h-4 w-4" />,
+  },
+  {
+    id: "scheduled-tasks",
+    label: "Scheduled Tasks",
+    description: "Replicated Hermes background cron jobs",
+    icon: <AlarmClock className="h-4 w-4" />,
   },
   {
     id: "tools",

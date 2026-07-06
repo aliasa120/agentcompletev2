@@ -19,6 +19,7 @@ const BUILTIN_TOOLS = [
   { key: "list_tools", label: "List Tools", desc: "Discover tools via semantic search" },
   { key: "load_tools", label: "Load Tools", desc: "Load parameters and schemas on demand" },
   { key: "call_tool", label: "Call Tool", desc: "Execute dynamically routed tools" },
+  { key: "cronjob", label: "Cron Scheduler", desc: "Manage scheduled tasks and background ticks" },
 ];
 
 export function BuiltinToolsPanel({ onReloadAgent }: { onReloadAgent?: () => void }) {

@@ -24,6 +24,7 @@ import { ProviderOrderingSection } from "@/app/components/settings/ProviderOrder
 import { WorkflowsSection } from "@/app/components/settings/WorkflowsSection";
 import { MemoriesSection } from "@/app/components/settings/MemoriesSection";
 import { TelegramBotsSection } from "@/app/components/settings/TelegramBotsSection";
+import { ScheduledTasksSection } from "@/app/components/settings/ScheduledTasksSection";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Article { id: string; title: string; description: string; url: string; source_domain: string; status: string; created_at: string; }
@@ -917,6 +918,7 @@ export default function AgentSettingsPage() {
         />
       );
       case "telegram-bots": return <TelegramBotsSection />;
+      case "scheduled-tasks": return <ScheduledTasksSection />;
       case "gateway":
       case "gateway-dashboard": return renderGatewayIframe("/dashboard");
       case "gateway-providers": return renderGatewayIframe("/dashboard/providers");

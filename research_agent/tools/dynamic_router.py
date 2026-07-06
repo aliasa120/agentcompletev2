@@ -798,7 +798,12 @@ def load_tools(tool_names: List[str], agent_id: Optional[str] = None) -> str:
 
 
 @tool(parse_docstring=True)
-def call_tool(tool_name: str, arguments: Dict[str, Any], agent_id: Optional[str] = None) -> str:
+def call_tool(
+    tool_name: str,
+    arguments: Dict[str, Any],
+    agent_id: Optional[str] = None,
+    config: Optional[Any] = None,
+) -> str:
     """Execute a dynamically loaded tool with the specified arguments.
 
     Use this tool to execute any tool from the <available_tools> index or found via list_tools
@@ -809,6 +814,7 @@ def call_tool(tool_name: str, arguments: Dict[str, Any], agent_id: Optional[str]
         tool_name: The name of the tool to execute (e.g. 'publish_to_wordpress')
         arguments: A dictionary of arguments to pass to the tool (e.g. {'blog_post_markdown': '...', 'category_id': 1})
     """
+    from langchain_core.runnables import RunnableConfig
     tool_name = tool_name.strip()
     
     # Security/Access check: if agent_id is passed, the tool MUST be in the allowed list
@@ -835,7 +841,7 @@ def call_tool(tool_name: str, arguments: Dict[str, Any], agent_id: Optional[str]
     tool_obj = TOOL_OBJECTS.get(tool_name)
     if tool_obj:
         try:
-            res = tool_obj.invoke(arguments)
+            res = tool_obj.invoke(arguments, config=config)
             return str(res)
         except Exception as e:
             logger.error(f"Error executing built-in tool '{tool_name}': {e}")
