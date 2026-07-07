@@ -284,7 +284,7 @@ function mapConfigSchema(configSchema: any) {
         format: prop.format ?? ""
       };
       
-      if (xFrom.headers) {
+      if (xFrom.header || xFrom.headers) {
         headers[key] = fieldSpec;
       } else if (xFrom.query) {
         query[key] = fieldSpec;
