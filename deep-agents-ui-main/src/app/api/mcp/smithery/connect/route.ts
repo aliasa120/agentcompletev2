@@ -284,18 +284,13 @@ function mapConfigSchema(configSchema: any) {
         format: prop.format ?? ""
       };
       
-      if (xFrom.headers) {
+      if (xFrom.header || xFrom.headers) {
         headers[key] = fieldSpec;
       } else if (xFrom.query) {
         query[key] = fieldSpec;
       } else {
-        // Fallback guess
-        const k = key.toLowerCase();
-        if (k.includes("key") || k.includes("token") || k.includes("auth") || k.includes("password") || k.includes("secret")) {
-          headers[key] = fieldSpec;
-        } else {
-          query[key] = fieldSpec;
-        }
+        // Fallback guess: default to query parameters to prevent Smithery "does not accept manual headers" restriction
+        query[key] = fieldSpec;
       }
     }
   }
@@ -339,7 +334,14 @@ async function handleRemoteConnect(body: {
         "Authorization": `Bearer ${smitheryApiKey.trim()}`,
       }
     });
-    if (!nsRes.ok) throw new Error(`Namespace lookup returned ${nsRes.status}`);
+    if (!nsRes.ok) {
+      let errMsg = `Namespace lookup returned ${nsRes.status}`;
+      try {
+        const errText = await nsRes.text();
+        errMsg = `${errMsg}: ${errText}`;
+      } catch {}
+      throw new Error(errMsg);
+    }
     const nsData = await nsRes.json();
     namespace = nsData.namespaces?.[0]?.name;
   } catch (e: any) {
@@ -413,6 +415,16 @@ async function handleRemoteConnect(body: {
   // 3. Create the remote connection on Smithery via POST
   let connectionResult: any;
   try {
+    const postBody = {
+      mcpUrl: mcpServerUrl,
+      name: displayName,
+      ...(Object.keys(headersToSend).length > 0 ? { headers: headersToSend } : {})
+    };
+    console.log("[Smithery Connect] namespace:", namespace);
+    console.log("[Smithery Connect] mcpUrl:", mcpServerUrl);
+    console.log("[Smithery Connect] headersToSend:", headersToSend);
+    console.log("[Smithery Connect] POST body:", JSON.stringify(postBody));
+
     const connRes = await fetch(`https://smithery.run/${namespace}`, {
       method: "POST",
       headers: {
@@ -421,13 +433,16 @@ async function handleRemoteConnect(body: {
         "User-Agent": "Mozilla/5.0",
         "Authorization": `Bearer ${smitheryApiKey.trim()}`,
       },
-      body: JSON.stringify({
-        mcpUrl: mcpServerUrl,
-        name: displayName,
-        headers: headersToSend
-      })
+      body: JSON.stringify(postBody)
     });
-    if (!connRes.ok) throw new Error(`Connection creation returned ${connRes.status}`);
+    if (!connRes.ok) {
+      let errMsg = `Connection creation returned ${connRes.status}`;
+      try {
+        const errText = await connRes.text();
+        errMsg = `${errMsg}: ${errText}`;
+      } catch {}
+      throw new Error(errMsg);
+    }
     connectionResult = await connRes.json();
   } catch (e: any) {
     return NextResponse.json({ success: false, error: `Failed to create Smithery connection: ${e.message}` });
