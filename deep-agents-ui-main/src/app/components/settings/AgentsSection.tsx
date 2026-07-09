@@ -4,7 +4,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Plus, Trash2, Save, RotateCcw, Loader2, CheckCircle2,
   XCircle, Bot, Users, ChevronDown, ChevronUp, GripVertical,
-  Sparkles, Code2, BookOpen, Puzzle, Wrench, X, ImageIcon, Images, Sliders
+  Sparkles, Code2, BookOpen, Puzzle, Wrench, X, ImageIcon, Images, Sliders,
+  ToggleLeft, ToggleRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,7 @@ interface AgentConfig {
   sort_order: number;
   is_builtin: boolean;
   agent_tool_assignments: ToolAssignment[];
+  attach_all_skills?: boolean;
 }
 
 interface Skill {
@@ -59,6 +61,7 @@ const BUILTIN_TOOLS = [
   { tool_key: "unified_search",          tool_label: "Web Search",           category: "Search" },
   { tool_key: "unified_extract",         tool_label: "URL Extractor",        category: "Search" },
   { tool_key: "youtube_transcript",      tool_label: "YouTube Transcript",    category: "Search" },
+  { tool_key: "search_conversation_history", tool_label: "Search History",    category: "Search" },
   { tool_key: "think_tool",             tool_label: "Think Tool",            category: "Reasoning" },
   { tool_key: "fetch_images_brave",      tool_label: "Brave Image Search",   category: "Images" },
   { tool_key: "view_candidate_images",   tool_label: "View Candidate Images", category: "Images" },
@@ -763,6 +766,7 @@ function AgentEditorCard({
   const [systemPrompt, setSystemPrompt] = useState(agent.system_prompt);
   const [provider, setProvider] = useState(agent.provider || "vercel");
   const [model, setModel] = useState(agent.model || "xiaomi/mimo-v2.5-pro");
+  const [attachAllSkills, setAttachAllSkills] = useState(agent.attach_all_skills ?? false);
   const initialWorkflowIds = React.useMemo(() => {
     const list = (agent.workflow_agent_assignments ?? []).map((w: any) => w.workflow_id).filter(Boolean);
     if (agent.workflow_id && !list.includes(agent.workflow_id)) {
@@ -847,6 +851,7 @@ function AgentEditorCard({
     systemPrompt !== agent.system_prompt ||
     provider !== (agent.provider || "vercel") ||
     model !== (agent.model || "xiaomi/mimo-v2.5-pro") ||
+    attachAllSkills !== (agent.attach_all_skills ?? false) ||
     JSON.stringify([...workflowIds].sort()) !== JSON.stringify([...initialWorkflowIds].sort()) ||
     JSON.stringify(tools.map(t => t.tool_key).sort()) !==
     JSON.stringify((agent.agent_tool_assignments ?? []).map(t => t.tool_key).sort());
@@ -862,6 +867,7 @@ function AgentEditorCard({
         model,
         workflow_ids: workflowIds,
         tool_keys: tools,
+        attach_all_skills: attachAllSkills,
       });
       setSavedOk(true);
       setTimeout(() => setSavedOk(false), 3000);
@@ -876,6 +882,7 @@ function AgentEditorCard({
     setSystemPrompt(agent.system_prompt);
     setProvider(agent.provider || "vercel");
     setModel(agent.model || "xiaomi/mimo-v2.5-pro");
+    setAttachAllSkills(agent.attach_all_skills ?? false);
     setWorkflowIds(initialWorkflowIds);
     setTools(agent.agent_tool_assignments ?? []);
   };
@@ -948,7 +955,7 @@ function AgentEditorCard({
 
       <div className="p-5 space-y-4">
         {/* Description & Workflow */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Description</label>
             <Input
@@ -982,6 +989,19 @@ function AgentEditorCard({
                 );
               })}
               {workflows.length === 0 && <span className="text-xs text-muted-foreground italic">No workflows created yet</span>}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Skills Auto-Attachment</label>
+            <div className="flex items-center justify-between border rounded-md p-2 bg-background h-8">
+              <span className="text-[11px] font-medium text-muted-foreground">Attach General & Self Skills</span>
+              <button
+                type="button"
+                onClick={() => setAttachAllSkills(!attachAllSkills)}
+                className="text-primary hover:opacity-85 focus:outline-none"
+              >
+                {attachAllSkills ? <ToggleRight className="h-6 w-6 text-primary" /> : <ToggleLeft className="h-6 w-6 text-muted-foreground" />}
+              </button>
             </div>
           </div>
         </div>

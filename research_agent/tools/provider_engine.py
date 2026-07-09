@@ -62,9 +62,29 @@ logger = logging.getLogger("provider_engine")
 
 # ── Settings Cache ─────────────────────────────────────────────────────────────
 
+import redis
+import json
+
+_CACHE_TTL_SECONDS = 60  # refresh from Supabase every 60 s
 _settings_cache: dict[str, str] = {}
 _cache_loaded_at: float = 0.0
-_CACHE_TTL_SECONDS = 60  # refresh from Supabase every 60 s
+_redis_client: Optional[Any] = None
+
+def get_redis_client() -> Optional[Any]:
+    global _redis_client
+    if _redis_client is None:
+        redis_url = os.environ.get("REDIS_URL")
+        if not redis_url:
+            _redis_client = False
+            return None
+        try:
+            _redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
+            _redis_client.ping()
+            logger.debug(f"[provider_engine] Connected to Redis successfully at {redis_url}")
+        except Exception as e:
+            logger.warning(f"[provider_engine] Failed to connect to Redis at {redis_url}: {e}")
+            _redis_client = False  # Disable Redis to prevent repeating errors
+    return _redis_client if _redis_client is not False else None
 
 
 def _fetch_settings_from_supabase() -> dict[str, str]:
@@ -117,22 +137,55 @@ def run_in_thread(func, *args, **kwargs):
 
 
 def get_settings() -> dict[str, str]:
-    """Return provider settings, using in-process cache (refreshes every 60 s)."""
+    """Return provider settings. Checks local Redis cache first.
+    If Redis is down or cache misses, falls back to Supabase and seeds Redis.
+    """
     global _settings_cache, _cache_loaded_at
+    
+    r_client = get_redis_client()
+    if r_client:
+        try:
+            cached = r_client.get("agent_settings:all")
+            if cached:
+                try:
+                    data = json.loads(cached)
+                    if isinstance(data, dict):
+                        return data
+                except Exception:
+                    pass
+            
+            fresh = run_in_thread(_fetch_settings_from_supabase)
+            if fresh:
+                try:
+                    r_client.setex("agent_settings:all", 3600, json.dumps(fresh))
+                except Exception as e:
+                    logger.warning(f"[provider_engine] Failed to write settings to Redis: {e}")
+                return fresh
+        except Exception as e:
+            logger.warning(f"[provider_engine] Redis operation failed: {e}")
+
     now = time.time()
-    if now - _cache_loaded_at >= _CACHE_TTL_SECONDS or not _settings_cache:
+    if now - _cache_loaded_at >= 10 or not _settings_cache:
         fresh = run_in_thread(_fetch_settings_from_supabase)
         if fresh:
             _settings_cache = fresh
             _cache_loaded_at = now
-            logger.debug("[provider_engine] Settings cache refreshed from Supabase.")
+            logger.debug("[provider_engine] Settings cache refreshed from Supabase (fallback).")
     return _settings_cache
 
 
 def invalidate_settings_cache() -> None:
-    """Force next call to get_settings() to re-fetch from Supabase."""
+    """Force next call to get_settings() to re-fetch from Supabase and update Redis."""
     global _cache_loaded_at
     _cache_loaded_at = 0.0
+    r_client = get_redis_client()
+    if r_client:
+        try:
+            r_client.delete("agent_settings:all")
+            logger.debug("[provider_engine] Redis settings cache invalidated.")
+        except Exception as e:
+            logger.warning(f"[provider_engine] Failed to delete settings cache in Redis: {e}")
+
 
 
 def get_retry_delay() -> int:

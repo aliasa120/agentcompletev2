@@ -16,6 +16,7 @@ const BUILTIN_TOOLS = [
   { key: "get_wordpress_categories", label: "WP Categories", desc: "Fetch WordPress categories" },
   { key: "publish_to_wordpress", label: "WordPress Publish", desc: "WP REST API" },
   { key: "youtube_transcript", label: "YouTube Transcript", desc: "Get video transcripts without keys via youtube-transcript.ai" },
+  { key: "search_conversation_history", label: "Search History", desc: "Retrieve memories and history via Postgres FTS" },
   { key: "list_tools", label: "List Tools", desc: "Discover tools via semantic search" },
   { key: "load_tools", label: "Load Tools", desc: "Load parameters and schemas on demand" },
   { key: "call_tool", label: "Call Tool", desc: "Execute dynamically routed tools" },

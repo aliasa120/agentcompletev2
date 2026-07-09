@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Plus, Trash2, Loader2, CheckCircle2,
-  Bot, AlertTriangle, ToggleLeft, ToggleRight, Workflow
+  Bot, AlertTriangle, ToggleLeft, ToggleRight, Workflow,
+  MessageSquare, Mail, Layers, Server
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,119 +16,343 @@ interface TelegramBot {
   created_at: string;
 }
 
+interface SlackConnection {
+  id: string;
+  bot_token: string;
+  app_token: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+interface DiscordConnection {
+  id: string;
+  bot_token: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+interface EmailConnection {
+  id: string;
+  smtp_host: string;
+  smtp_port: number;
+  username: string;
+  imap_host: string;
+  imap_port: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+type PlatformTab = "telegram" | "slack" | "discord" | "email";
+
 export function TelegramBotsSection() {
-  const [bots, setBots] = useState<TelegramBot[]>([]);
+  const [activeTab, setActiveTab] = useState<PlatformTab>("telegram");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  // Form State
-  const [tokenInput, setTokenInput] = useState("");
-  const [isActive, setIsActive] = useState(true);
-
-  // Alert/Status State
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const fetchBots = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/telegram-bots");
-      const data = await res.json();
-      setBots(data.bots ?? []);
-    } catch (e) {
-      console.error("Failed to load telegram bots:", e);
-      showStatus("error", "Failed to load bot configuration.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Connection Lists
+  const [tgBots, setTgBots] = useState<TelegramBot[]>([]);
+  const [slackConns, setSlackConns] = useState<SlackConnection[]>([]);
+  const [discordConns, setDiscordConns] = useState<DiscordConnection[]>([]);
+  const [emailConns, setEmailConns] = useState<EmailConnection[]>([]);
 
-  useEffect(() => {
-    fetchBots();
-  }, [fetchBots]);
+  // Form inputs
+  const [tgToken, setTgToken] = useState("");
+  const [slackBotToken, setSlackBotToken] = useState("");
+  const [slackAppToken, setSlackAppToken] = useState("");
+  const [discordToken, setDiscordToken] = useState("");
+  
+  const [emailSmtpHost, setEmailSmtpHost] = useState("");
+  const [emailSmtpPort, setEmailSmtpPort] = useState("587");
+  const [emailImapHost, setEmailImapHost] = useState("");
+  const [emailImapPort, setEmailImapPort] = useState("993");
+  const [emailUsername, setEmailUsername] = useState("");
+  const [emailPassword, setEmailPassword] = useState("");
 
   const showStatus = (type: "success" | "error", text: string) => {
     setStatusMessage({ type, text });
     setTimeout(() => setStatusMessage(null), 3500);
   };
 
-  const handleRegisterBot = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!tokenInput.trim()) {
-      showStatus("error", "Bot Token is required.");
-      return;
+  // ── Fetch Data ─────────────────────────────────────────────────────────────
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      if (activeTab === "telegram") {
+        const res = await fetch("/api/telegram-bots");
+        const data = await res.json();
+        setTgBots(data.bots ?? []);
+      } else if (activeTab === "slack") {
+        const res = await fetch("/api/slack-connections");
+        const data = await res.json();
+        setSlackConns(data.connections ?? []);
+      } else if (activeTab === "discord") {
+        const res = await fetch("/api/discord-connections");
+        const data = await res.json();
+        setDiscordConns(data.connections ?? []);
+      } else if (activeTab === "email") {
+        const res = await fetch("/api/email-connections");
+        const data = await res.json();
+        setEmailConns(data.connections ?? []);
+      }
+    } catch (e) {
+      console.error(`Failed to load connections for ${activeTab}:`, e);
+      showStatus("error", `Failed to load ${activeTab} configurations.`);
+    } finally {
+      setLoading(false);
     }
+  }, [activeTab]);
 
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // ── Telegram Handlers ──────────────────────────────────────────────────────
+  const handleRegisterTelegram = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tgToken.trim()) return showStatus("error", "Bot Token is required.");
     setSaving(true);
     try {
       const res = await fetch("/api/telegram-bots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bot_token: tokenInput.trim(),
-          is_active: isActive
-        })
+        body: JSON.stringify({ bot_token: tgToken.trim(), is_active: true })
       });
-
       const data = await res.json();
       if (res.ok && data.success) {
         showStatus("success", "Telegram Bot registered successfully!");
-        setTokenInput("");
-        fetchBots();
+        setTgToken("");
+        fetchData();
       } else {
         showStatus("error", data.error || "Failed to register bot.");
       }
     } catch (err) {
-      console.error("Error registering bot:", err);
       showStatus("error", "Network error registering bot.");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleToggleActive = async (bot: TelegramBot) => {
+  const handleToggleTgActive = async (bot: TelegramBot) => {
     try {
       const res = await fetch("/api/telegram-bots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: bot.id,
-          bot_token: bot.bot_token,
-          is_active: !bot.is_active
-        })
+        body: JSON.stringify({ id: bot.id, bot_token: bot.bot_token, is_active: !bot.is_active })
       });
-
       if (res.ok) {
-        setBots(prev => prev.map(b => b.id === bot.id ? { ...b, is_active: !b.is_active } : b));
+        setTgBots(prev => prev.map(b => b.id === bot.id ? { ...b, is_active: !b.is_active } : b));
         showStatus("success", `Bot ${!bot.is_active ? "enabled" : "disabled"}`);
-      } else {
-        showStatus("error", "Failed to update bot status.");
       }
     } catch (err) {
-      console.error("Error toggling bot status:", err);
       showStatus("error", "Network error updating status.");
     }
   };
 
-  const handleDeleteBot = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this bot? This will stop all its active listeners.")) {
-      return;
-    }
-
+  const handleDeleteTg = async (id: string) => {
+    if (!confirm("Delete this Telegram Bot?")) return;
     try {
-      const res = await fetch(`/api/telegram-bots?id=${id}`, {
-        method: "DELETE"
-      });
-
+      const res = await fetch(`/api/telegram-bots?id=${id}`, { method: "DELETE" });
       if (res.ok) {
-        setBots(prev => prev.filter(b => b.id !== id));
-        showStatus("success", "Bot deleted successfully.");
-      } else {
-        const data = await res.json();
-        showStatus("error", data.error || "Failed to delete bot.");
+        setTgBots(prev => prev.filter(b => b.id !== id));
+        showStatus("success", "Bot deleted.");
       }
     } catch (err) {
-      console.error("Error deleting bot:", err);
-      showStatus("error", "Network error deleting bot.");
+      showStatus("error", "Network error.");
+    }
+  };
+
+  // ── Slack Handlers ─────────────────────────────────────────────────────────
+  const handleRegisterSlack = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!slackBotToken.trim() || !slackAppToken.trim()) {
+      return showStatus("error", "Both OAuth Token and App Token are required.");
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/slack-connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bot_token: slackBotToken.trim(),
+          app_token: slackAppToken.trim(),
+          is_active: true
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showStatus("success", "Slack gateway registered successfully!");
+        setSlackBotToken("");
+        setSlackAppToken("");
+        fetchData();
+      } else {
+        showStatus("error", data.error || "Failed to register connection.");
+      }
+    } catch (err) {
+      showStatus("error", "Network error.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleSlackActive = async (conn: SlackConnection) => {
+    try {
+      const res = await fetch("/api/slack-connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: conn.id, bot_token: conn.bot_token, app_token: conn.app_token, is_active: !conn.is_active })
+      });
+      if (res.ok) {
+        setSlackConns(prev => prev.map(c => c.id === conn.id ? { ...c, is_active: !c.is_active } : c));
+        showStatus("success", `Slack connection ${!conn.is_active ? "enabled" : "disabled"}`);
+      }
+    } catch (err) {
+      showStatus("error", "Network error.");
+    }
+  };
+
+  const handleDeleteSlack = async (id: string) => {
+    if (!confirm("Delete this Slack Connection?")) return;
+    try {
+      const res = await fetch(`/api/slack-connections?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setSlackConns(prev => prev.filter(c => c.id !== id));
+        showStatus("success", "Slack connection deleted.");
+      }
+    } catch (err) {
+      showStatus("error", "Network error.");
+    }
+  };
+
+  // ── Discord Handlers ───────────────────────────────────────────────────────
+  const handleRegisterDiscord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!discordToken.trim()) return showStatus("error", "Discord Token is required.");
+    setSaving(true);
+    try {
+      const res = await fetch("/api/discord-connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bot_token: discordToken.trim(), is_active: true })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showStatus("success", "Discord bot registered successfully!");
+        setDiscordToken("");
+        fetchData();
+      } else {
+        showStatus("error", data.error || "Failed to register.");
+      }
+    } catch (err) {
+      showStatus("error", "Network error.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleDiscordActive = async (conn: DiscordConnection) => {
+    try {
+      const res = await fetch("/api/discord-connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: conn.id, bot_token: conn.bot_token, is_active: !conn.is_active })
+      });
+      if (res.ok) {
+        setDiscordConns(prev => prev.map(c => c.id === conn.id ? { ...c, is_active: !c.is_active } : c));
+        showStatus("success", `Discord connection ${!conn.is_active ? "enabled" : "disabled"}`);
+      }
+    } catch (err) {
+      showStatus("error", "Network error.");
+    }
+  };
+
+  const handleDeleteDiscord = async (id: string) => {
+    if (!confirm("Delete this Discord Connection?")) return;
+    try {
+      const res = await fetch(`/api/discord-connections?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setDiscordConns(prev => prev.filter(c => c.id !== id));
+        showStatus("success", "Discord connection deleted.");
+      }
+    } catch (err) {
+      showStatus("error", "Network error.");
+    }
+  };
+
+  // ── Email Handlers ─────────────────────────────────────────────────────────
+  const handleRegisterEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailSmtpHost.trim() || !emailUsername.trim() || !emailPassword.trim() || !emailImapHost.trim()) {
+      return showStatus("error", "All fields are required to register Email gateway.");
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/email-connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          smtp_host: emailSmtpHost.trim(),
+          smtp_port: emailSmtpPort.trim(),
+          username: emailUsername.trim(),
+          password: emailPassword.trim(),
+          imap_host: emailImapHost.trim(),
+          imap_port: emailImapPort.trim(),
+          is_active: true
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showStatus("success", "Email gateway registered successfully!");
+        setEmailSmtpHost("");
+        setEmailUsername("");
+        setEmailPassword("");
+        setEmailImapHost("");
+        fetchData();
+      } else {
+        showStatus("error", data.error || "Failed to register email gateway.");
+      }
+    } catch (err) {
+      showStatus("error", "Network error.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleEmailActive = async (conn: EmailConnection) => {
+    try {
+      const res = await fetch("/api/email-connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: conn.id,
+          smtp_host: conn.smtp_host,
+          smtp_port: conn.smtp_port,
+          username: conn.username,
+          password: "PRESERVED_PASSWORD_PLACEHOLDER",
+          imap_host: conn.imap_host,
+          imap_port: conn.imap_port,
+          is_active: !conn.is_active
+        })
+      });
+      if (res.ok) {
+        setEmailConns(prev => prev.map(c => c.id === conn.id ? { ...c, is_active: !c.is_active } : c));
+        showStatus("success", `Email gateway ${!conn.is_active ? "enabled" : "disabled"}`);
+      }
+    } catch (err) {
+      showStatus("error", "Network error.");
+    }
+  };
+
+  const handleDeleteEmail = async (id: string) => {
+    if (!confirm("Delete this Email Connection?")) return;
+    try {
+      const res = await fetch(`/api/email-connections?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setEmailConns(prev => prev.filter(c => c.id !== id));
+        showStatus("success", "Email connection deleted.");
+      }
+    } catch (err) {
+      showStatus("error", "Network error.");
     }
   };
 
@@ -139,31 +364,36 @@ export function TelegramBotsSection() {
 
   return (
     <div className="space-y-6">
-      {/* Header card */}
+      {/* Header Card */}
       <div className="rounded-xl border bg-card shadow-sm p-6">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-primary/10 text-primary rounded-lg">
-            <Bot className="h-6 w-6" />
+            <Layers className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="text-xl font-bold tracking-tight">Telegram Bots Integration</h2>
+            <h2 className="text-xl font-bold tracking-tight">Platforms Connection</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Register your Telegram bot token. Users can then type <code className="text-xs bg-muted px-1 py-0.5 rounded">/start</code> in Telegram to pick any of their enabled workflows and start chatting.
+              Connect external messaging platforms to enable conversational workflows on Telegram, Slack, Discord, or Email.
             </p>
           </div>
         </div>
       </div>
 
-      {/* How it works banner */}
-      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex gap-3 items-start">
-        <Workflow className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-        <div className="text-sm text-muted-foreground space-y-1">
-          <p className="font-semibold text-foreground">How it works</p>
-          <p>1. Register your bot token below and enable it.</p>
-          <p>2. Open Telegram and send <code className="text-xs bg-muted px-1 py-0.5 rounded">/start</code> to your bot.</p>
-          <p>3. All your enabled workflows appear as buttons — tap one to begin a <strong>new conversation</strong>.</p>
-          <p>4. Send <code className="text-xs bg-muted px-1 py-0.5 rounded">/start</code> again anytime to switch workflows or start a fresh thread.</p>
-        </div>
+      {/* Tabs */}
+      <div className="flex border-b gap-2">
+        {(["telegram", "slack", "discord", "email"] as PlatformTab[]).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-sm font-semibold border-b-2 capitalize transition-all ${
+              activeTab === tab
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
       </div>
 
       {statusMessage && (
@@ -177,110 +407,260 @@ export function TelegramBotsSection() {
         </div>
       )}
 
+      {/* Dynamic Content Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Register bot form */}
-        <div className="md:col-span-1 space-y-6">
+        
+        {/* Form Column */}
+        <div className="md:col-span-1">
           <div className="rounded-xl border bg-card shadow-sm p-5 space-y-4">
-            <h3 className="font-semibold text-sm">Register New Bot</h3>
+            <h3 className="font-semibold text-sm">Register {activeTab.toUpperCase()} Gateway</h3>
+            
+            {activeTab === "telegram" && (
+              <form onSubmit={handleRegisterTelegram} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Bot API Token</label>
+                  <Input
+                    type="password"
+                    placeholder="8802642908:AAEd5X..."
+                    value={tgToken}
+                    onChange={e => setTgToken(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Obtained from <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="text-primary underline">@BotFather</a>.
+                  </p>
+                </div>
+                <Button type="submit" disabled={saving} className="w-full h-9 text-xs">
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                  Add Telegram Bot
+                </Button>
+              </form>
+            )}
 
-            <form onSubmit={handleRegisterBot} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground">Bot API Token</label>
-                <Input
-                  type="password"
-                  placeholder="8802642908:AAEd5X..."
-                  value={tokenInput}
-                  onChange={e => setTokenInput(e.target.value)}
-                  className="h-9 text-sm"
-                  autoComplete="off"
-                />
-                <p className="text-[10px] text-muted-foreground">
-                  Get this from <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="text-primary underline">@BotFather</a> on Telegram.
-                </p>
-              </div>
+            {activeTab === "slack" && (
+              <form onSubmit={handleRegisterSlack} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Bot User OAuth Token</label>
+                  <Input
+                    type="password"
+                    placeholder="xoxb-..."
+                    value={slackBotToken}
+                    onChange={e => setSlackBotToken(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">App-Level Token (Socket Mode)</label>
+                  <Input
+                    type="password"
+                    placeholder="xapp-..."
+                    value={slackAppToken}
+                    onChange={e => setSlackAppToken(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Required for Slack Socket Mode communication.
+                  </p>
+                </div>
+                <Button type="submit" disabled={saving} className="w-full h-9 text-xs">
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                  Add Slack Gateway
+                </Button>
+              </form>
+            )}
 
-              <div className="flex items-center justify-between py-1">
-                <span className="text-xs font-semibold text-muted-foreground">Enable Bot Listener</span>
-                <button
-                  type="button"
-                  onClick={() => setIsActive(!isActive)}
-                  className="text-primary hover:opacity-85 focus:outline-none"
-                >
-                  {isActive ? <ToggleRight className="h-7 w-7 text-primary" /> : <ToggleLeft className="h-7 w-7 text-muted-foreground" />}
-                </button>
-              </div>
+            {activeTab === "discord" && (
+              <form onSubmit={handleRegisterDiscord} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Discord Bot Token</label>
+                  <Input
+                    type="password"
+                    placeholder="MTY3..."
+                    value={discordToken}
+                    onChange={e => setDiscordToken(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Get from the Discord Developer Portal (enable Message Content Intent).
+                  </p>
+                </div>
+                <Button type="submit" disabled={saving} className="w-full h-9 text-xs">
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                  Add Discord Bot
+                </Button>
+              </form>
+            )}
 
-              <Button
-                type="submit"
-                disabled={saving}
-                className="w-full h-9 gap-1.5 text-xs mt-2"
-              >
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                Register Bot
-              </Button>
-            </form>
+            {activeTab === "email" && (
+              <form onSubmit={handleRegisterEmail} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Username / Email Address</label>
+                  <Input
+                    placeholder="agent@company.com"
+                    value={emailUsername}
+                    onChange={e => setEmailUsername(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Password / App Password</label>
+                  <Input
+                    type="password"
+                    placeholder="••••••••••••"
+                    value={emailPassword}
+                    onChange={e => setEmailPassword(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-semibold text-muted-foreground">SMTP Host</label>
+                    <Input
+                      placeholder="smtp.gmail.com"
+                      value={emailSmtpHost}
+                      onChange={e => setEmailSmtpHost(e.target.value)}
+                      className="h-9 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-semibold text-muted-foreground">SMTP Port</label>
+                    <Input
+                      placeholder="587"
+                      value={emailSmtpPort}
+                      onChange={e => setEmailSmtpPort(e.target.value)}
+                      className="h-9 text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-semibold text-muted-foreground">IMAP Host</label>
+                    <Input
+                      placeholder="imap.gmail.com"
+                      value={emailImapHost}
+                      onChange={e => setEmailImapHost(e.target.value)}
+                      className="h-9 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-semibold text-muted-foreground">IMAP Port</label>
+                    <Input
+                      placeholder="993"
+                      value={emailImapPort}
+                      onChange={e => setEmailImapPort(e.target.value)}
+                      className="h-9 text-xs"
+                    />
+                  </div>
+                </div>
+                <Button type="submit" disabled={saving} className="w-full h-9 text-xs">
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                  Add Email Gateway
+                </Button>
+              </form>
+            )}
           </div>
         </div>
 
-        {/* Bots List */}
+        {/* Listing Column */}
         <div className="md:col-span-2 space-y-4">
           <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
             <div className="p-4 border-b bg-muted/20">
-              <h3 className="font-semibold text-sm">Active Telegram Bot Connections</h3>
+              <h3 className="font-semibold text-sm capitalize">Active {activeTab} Connections</h3>
             </div>
 
             <div className="divide-y">
               {loading ? (
                 <div className="p-12 flex items-center justify-center text-muted-foreground text-sm gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" /> Loading configuration...
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" /> Loading connection logs...
                 </div>
-              ) : bots.length === 0 ? (
+              ) : activeTab === "telegram" && tgBots.length === 0 ? (
                 <div className="p-8 text-center text-muted-foreground text-sm">
-                  No bots registered. Use the form to link your first Telegram bot.
+                  No Telegram bots registered.
+                </div>
+              ) : activeTab === "slack" && slackConns.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground text-sm">
+                  No Slack connections registered.
+                </div>
+              ) : activeTab === "discord" && discordConns.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground text-sm">
+                  No Discord bots registered.
+                </div>
+              ) : activeTab === "email" && emailConns.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground text-sm">
+                  No Email gateways registered.
                 </div>
               ) : (
-                bots.map(bot => (
-                  <div key={bot.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-1">
+                <>
+                  {activeTab === "telegram" && tgBots.map(bot => (
+                    <div key={bot.id} className="p-4 flex items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <span className="font-mono text-sm block font-semibold">{maskToken(bot.bot_token)}</span>
+                        <span className="text-[10px] text-muted-foreground">Telegram Bot API Integration</span>
+                      </div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm font-mono">{maskToken(bot.bot_token)}</span>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                          bot.is_active
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30"
-                            : "bg-muted text-muted-foreground border-border"
-                        }`}>
-                          {bot.is_active ? "Active Listener" : "Disabled"}
+                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleToggleTgActive(bot)}>
+                          {bot.is_active ? "Pause" : "Resume"}
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 text-destructive hover:bg-destructive/10" onClick={() => handleDeleteTg(bot.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {activeTab === "slack" && slackConns.map(conn => (
+                    <div key={conn.id} className="p-4 flex items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <span className="font-mono text-sm block font-semibold">Bot: {maskToken(conn.bot_token)}</span>
+                        <span className="font-mono text-xs block text-muted-foreground">App: {maskToken(conn.app_token)}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleToggleSlackActive(conn)}>
+                          {conn.is_active ? "Pause" : "Resume"}
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 text-destructive hover:bg-destructive/10" onClick={() => handleDeleteSlack(conn.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {activeTab === "discord" && discordConns.map(conn => (
+                    <div key={conn.id} className="p-4 flex items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <span className="font-mono text-sm block font-semibold">{maskToken(conn.bot_token)}</span>
+                        <span className="text-[10px] text-muted-foreground">Discord Gate Client Listener</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleToggleDiscordActive(conn)}>
+                          {conn.is_active ? "Pause" : "Resume"}
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 text-destructive hover:bg-destructive/10" onClick={() => handleDeleteDiscord(conn.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {activeTab === "email" && emailConns.map(conn => (
+                    <div key={conn.id} className="p-4 flex items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <span className="text-sm font-semibold block">{conn.username}</span>
+                        <span className="text-xs text-muted-foreground block">
+                          IMAP: {conn.imap_host}:{conn.imap_port} | SMTP: {conn.smtp_host}:{conn.smtp_port}
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Workflow className="h-3 w-3" />
-                        <span>Routes to <strong className="text-foreground">all enabled workflows</strong> via /start menu</span>
-                      </p>
-                      <p className="text-[10px] text-muted-foreground/75">
-                        Added: {new Date(bot.created_at).toLocaleString()}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleToggleEmailActive(conn)}>
+                          {conn.is_active ? "Pause" : "Resume"}
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 text-destructive hover:bg-destructive/10" onClick={() => handleDeleteEmail(conn.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
-
-                    <div className="flex items-center gap-3">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-xs gap-1.5"
-                        onClick={() => handleToggleActive(bot)}
-                      >
-                        {bot.is_active ? "Pause" : "Resume"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 text-destructive hover:bg-destructive/10"
-                        onClick={() => handleDeleteBot(bot.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                ))
+                  ))}
+                </>
               )}
             </div>
           </div>

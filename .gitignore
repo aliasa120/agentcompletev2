@@ -32,3 +32,27 @@ agent_load.log
 
 # External reference code
 hermes-agent-main/
+
+# Local temporary/scratch files
+*.png
+*.pdf
+scratch/
+tmp/
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!components.json
+!composio_toolkits_cache.json
+!pyproject.toml
+!langgraph.json
+logs/
+*.webp
+scratch_*.js
+scratch_*.py
+output.css
+inspect_db.py
+query_disabled_models.py
+yarn.lock
+*scratch*
+

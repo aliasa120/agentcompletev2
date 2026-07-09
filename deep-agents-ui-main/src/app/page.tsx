@@ -4,27 +4,45 @@ import React, { useState, useEffect, useCallback, Suspense, useRef, useMemo } fr
 import Link from "next/link";
 import { useQueryState } from "nuqs";
 import { supabase } from "@/lib/supabase";
-import { v4 as uuidv4 } from "uuid";
 import { getConfig, saveConfig, StandaloneConfig } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Assistant } from "@langchain/langgraph-sdk";
 import { ClientProvider, useClient } from "@/providers/ClientProvider";
-import { Settings, MessagesSquare, SquarePen, LayoutGrid, ListOrdered, Play, Database, Zap, Menu, Trash2, ChevronDown, ChevronRight, RefreshCcw, Check, Plus } from "lucide-react";
+import {
+  Settings,
+  Zap,
+  ChevronDown,
+  ChevronRight,
+  Check,
+  PanelLeft,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useThreads } from "@/app/hooks/useThreads";
 import { Client } from "@langchain/langgraph-sdk";
-import { ChatProvider } from "@/providers/ChatProvider";
-import { ChatInterface } from "@/app/components/ChatInterface";
-import { ThemeToggle } from "@/app/components/ThemeToggle";
+import { LangGraphRuntimeProvider } from "@/providers/LangGraphRuntimeProvider";
+import { Thread } from "@/components/assistant-ui/BaseChat";
+import { LangGraphAttachmentAdapter } from "@/lib/attachment-adapter";
 import { toast } from "sonner";
+import { v4 as uuidv4 } from "uuid";
+import {
+  ThreadListRoot,
+  ThreadListNew,
+  ThreadListItems,
+} from "@/components/assistant-ui/thread-list";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface HomePageInnerProps {
   config: StandaloneConfig;
 }
 
-function HomePageInner({
-  config,
-}: HomePageInnerProps) {
+function HomePageInner({ config }: HomePageInnerProps) {
   const [userEmail, setUserEmail] = useState<string>("");
   const [userId, setUserId] = useState<string>("");
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
@@ -37,6 +55,7 @@ function HomePageInner({
       }
     });
   }, []);
+
   const client = useClient();
   const [threadId, setThreadId] = useQueryState("threadId");
 
@@ -46,19 +65,35 @@ function HomePageInner({
   const [workflows, setWorkflows] = useState<any[]>([]);
   const [activeWorkflowId, setActiveWorkflowId] = useState<string | null>(null);
 
-  // SWR threads query
+  // SWR threads — filtered by active workflow so only that workflow's history shows
   const threads = useThreads({
-    workflowId: activeWorkflowId,
     limit: 30,
     userId: userId || undefined,
+    workflowId: activeWorkflowId,
   });
 
-  const threadItems = useMemo(() => {
-    return threads.data?.flat() ?? [];
-  }, [threads.data]);
+  const threadItems = useMemo(() => threads.data?.flat() ?? [], [threads.data]);
 
-  const interruptCount = useMemo(() => {
-    return threadItems.filter((t) => t.status === "interrupted").length;
+  const threadGroups = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    ).getTime();
+    const DAY_IN_MS = 86_400_000;
+    const groups: { label: string; items: typeof threadItems }[] = [
+      { label: "Today", items: [] },
+      { label: "Yesterday", items: [] },
+      { label: "Earlier", items: [] },
+    ];
+    for (const thread of threadItems) {
+      const time = new Date(thread.updatedAt).getTime();
+      if (time >= startOfToday) groups[0].items.push(thread);
+      else if (time >= startOfToday - DAY_IN_MS) groups[1].items.push(thread);
+      else groups[2].items.push(thread);
+    }
+    return groups.filter((g) => g.items.length > 0);
   }, [threadItems]);
 
   useEffect(() => {
@@ -112,9 +147,7 @@ function HomePageInner({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "feeder_articles" },
-        () => {
-          fetchQueueForSidebar();
-        }
+        () => fetchQueueForSidebar()
       )
       .subscribe();
     return () => {
@@ -125,12 +158,12 @@ function HomePageInner({
   const handleDeleteThread = useCallback(
     async (threadIdToDelete: string, status: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      const apiKey = config.langsmithApiKey || process.env.NEXT_PUBLIC_LANGSMITH_API_KEY || "";
+      const apiKey =
+        config.langsmithApiKey || process.env.NEXT_PUBLIC_LANGSMITH_API_KEY || "";
       const clientObj = new Client({
         apiUrl: config.deploymentUrl,
         defaultHeaders: apiKey ? { "X-Api-Key": apiKey } : {},
       });
-
       if (confirm("Are you sure you want to delete this chat thread?")) {
         try {
           if (status === "busy") {
@@ -143,11 +176,13 @@ function HomePageInner({
             }
           }
           await clientObj.threads.delete(threadIdToDelete);
-          if (threadIdToDelete === threadId) {
-            await setThreadId(null);
-          }
+          if (threadIdToDelete === threadId) await setThreadId(null);
           toast.success("Thread deleted successfully");
-          threads.mutate();
+          // Optimistically mutate thread list cache so it updates instantly in sidebar
+          await threads.mutate(
+            (prev: any) => prev?.map((page: any) => page.filter((t: any) => t.id !== threadIdToDelete)),
+            { revalidate: true }
+          );
         } catch (err: any) {
           console.error("Failed to delete thread:", err);
           toast.error("Failed to delete thread: " + (err?.message ?? "unknown error"));
@@ -157,12 +192,10 @@ function HomePageInner({
     [threadId, setThreadId, config, threads]
   );
 
-
-  // Ref to stream.submit — populated by ChatProvider once the hook is ready
+  // ── Refs for programmatic article batch submission ────────────────────────────
+  // streamSubmitRef is populated by LangGraphRuntimeProvider with the real stream.submit
   const streamSubmitRef = useRef<((input: any, options?: any) => void) | null>(null);
-  // Track which article is currently being streamed (for status updates)
   const streamingArticleIdRef = useRef<string | null>(null);
-  // Pending article for stream.submit — set in handleStartAgent, consumed by useEffect after threadId clears
   const pendingArticleRef = useRef<{ message: string; articleId: string } | null>(null);
 
   const fetchAssistant = useCallback(async () => {
@@ -170,14 +203,11 @@ function HomePageInner({
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
         config.assistantId
       );
-
     if (isUUID) {
-      // We should try to fetch the assistant directly with this UUID
       try {
         const data = await client.assistants.get(config.assistantId);
         setAssistant(data);
-      } catch (error) {
-        console.error("Failed to fetch assistant:", error);
+      } catch {
         setAssistant({
           assistant_id: config.assistantId,
           graph_id: config.assistantId,
@@ -192,24 +222,16 @@ function HomePageInner({
       }
     } else {
       try {
-        // We should try to list out the assistants for this graph, and then use the default one.
-        // TODO: Paginate this search, but 100 should be enough for graph name
         const assistants = await client.assistants.search({
           graphId: config.assistantId,
           limit: 100,
         });
         const defaultAssistant = assistants.find(
-          (assistant) => assistant.metadata?.["created_by"] === "system"
+          (a) => a.metadata?.["created_by"] === "system"
         );
-        if (defaultAssistant === undefined) {
-          throw new Error("No default assistant found");
-        }
+        if (!defaultAssistant) throw new Error("No default assistant found");
         setAssistant(defaultAssistant);
-      } catch (error) {
-        console.error(
-          "Failed to find default assistant from graph_id: try setting the assistant_id directly:",
-          error
-        );
+      } catch {
         setAssistant({
           assistant_id: config.assistantId,
           graph_id: config.assistantId,
@@ -229,7 +251,7 @@ function HomePageInner({
     fetchAssistant();
   }, [fetchAssistant]);
 
-  // Fetch workflows and default to the first one
+  // Fetch workflows
   useEffect(() => {
     fetch("/api/workflows")
       .then((res) => res.json())
@@ -244,30 +266,26 @@ function HomePageInner({
       .catch((e) => console.error("Failed to load workflows:", e));
   }, []);
 
-  // Update batch size when active workflow changes
   useEffect(() => {
     if (!activeWorkflowId) return;
     const activeWf = workflows.find((w) => w.id === activeWorkflowId);
-    if (activeWf) {
-      setQueueBatchSize(activeWf.batch_size ?? 2);
-    }
+    if (activeWf) setQueueBatchSize(activeWf.batch_size ?? 2);
   }, [activeWorkflowId, workflows]);
 
-  // Reset threadId when active workflow changes (excluding initial load)
+  // Reset thread on workflow change
   const prevWorkflowIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (activeWorkflowId && prevWorkflowIdRef.current !== null && prevWorkflowIdRef.current !== activeWorkflowId) {
+    if (
+      activeWorkflowId &&
+      prevWorkflowIdRef.current !== null &&
+      prevWorkflowIdRef.current !== activeWorkflowId
+    ) {
       setThreadId(null);
     }
     prevWorkflowIdRef.current = activeWorkflowId;
   }, [activeWorkflowId, setThreadId]);
 
-  // NOTE: Auto-trigger is handled server-side by /api/cron (pinged every 60s by CronHeartbeat in layout.tsx)
-
-
-  // ── Effect: submit article 1 after threadId clears ──
-  // When handleStartAgent sets pendingArticleRef and clears threadId,
-  // useStream reinitializes with no thread → submit() creates a fresh thread.
+  // Submit pending article after threadId clears
   useEffect(() => {
     if (pendingArticleRef.current && !threadId && streamSubmitRef.current) {
       const { message, articleId } = pendingArticleRef.current;
@@ -280,66 +298,47 @@ function HomePageInner({
           optimisticValues: (prev: any) => ({
             messages: [...(prev.messages ?? []), newMessage],
           }),
-          config: {
-            ...(assistant?.config ?? {}),
-            recursion_limit: 200,
-            configurable: {
-              workflow_id: activeWorkflowId,
-              user_id: userId || undefined,
-            },
-          },
-          streamSubgraphs: true,
         }
       );
-      mutateThreads?.();
+      threads.mutate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId, activeWorkflowId]);
 
-  // When stream.submit() finishes for article 1 → mark as Done
+  // Stream finish/error → update article status
   const handleStreamFinish = useCallback(async () => {
     const articleId = streamingArticleIdRef.current;
     if (!articleId) return;
     streamingArticleIdRef.current = null;
     await supabase.from("feeder_articles").update({ status: "Done" }).eq("id", articleId);
-    mutateThreads?.();
-  }, [mutateThreads]);
+    threads.mutate();
+  }, [threads]);
 
-  // When stream.submit() errors for article 1 → revert to Pending for retry
   const handleStreamError = useCallback(async () => {
     const articleId = streamingArticleIdRef.current;
     if (!articleId) return;
     streamingArticleIdRef.current = null;
     await supabase.from("feeder_articles").update({ status: "Pending" }).eq("id", articleId);
-    mutateThreads?.();
-  }, [mutateThreads]);
+    threads.mutate();
+  }, [threads]);
 
-  // Strips all HTML tags and decodes basic HTML entities from a string
-  const stripHtml = (html: string): string => {
-    return html
-      .replace(/<[^>]*>/g, " ")            // remove all tags
+  const stripHtml = (html: string): string =>
+    html
+      .replace(/<[^>]*>/g, " ")
       .replace(/&amp;/g, "&")
       .replace(/&lt;/g, "<")
       .replace(/&gt;/g, ">")
       .replace(/&quot;/g, '"')
       .replace(/&nbsp;/g, " ")
-      .replace(/&#[0-9]+;/g, "")           // remove numeric entities
-      .replace(/\s+/g, " ")                // collapse whitespace
+      .replace(/&#[0-9]+;/g, "")
+      .replace(/\s+/g, " ")
       .trim();
-  };
 
   const handleStartAgent = async () => {
-    if (!assistant) {
-      alert("Assistant not loaded yet.");
-      return;
-    }
-    if (!activeWorkflowId) {
-      alert("Please select a workflow first.");
-      return;
-    }
+    if (!assistant) { alert("Assistant not loaded yet."); return; }
+    if (!activeWorkflowId) { alert("Please select a workflow first."); return; }
 
     try {
-      // FIFO: fetch oldest Pending articles up to batch size, filtered by workflow_id
       const { data: pendingArticles, error } = await supabase
         .from("feeder_articles")
         .select("id, title, description")
@@ -348,7 +347,6 @@ function HomePageInner({
         .order("created_at", { ascending: true })
         .limit(queueBatchSize);
 
-      // Stamp trigger timestamp on the workflow
       await supabase
         .from("workflows")
         .update({ last_trigger_at: new Date().toISOString() })
@@ -362,21 +360,20 @@ function HomePageInner({
 
       for (let i = 0; i < pendingArticles.length; i++) {
         const article = pendingArticles[i];
-
-        // Mark as Processing before firing
         await supabase
           .from("feeder_articles")
           .update({ status: "Processing" })
           .eq("id", article.id);
 
-        const cleanTitle = stripHtml(article.title ?? "");
-        const cleanDescription = stripHtml(article.description ?? "");
-        const message = `Title: ${cleanTitle}\nDescription: ${cleanDescription}`;
+        const message = `Title: ${stripHtml(article.title ?? "")}\nDescription: ${stripHtml(article.description ?? "")}`;
 
         if (i === 0) {
-          // ── Article 1: LIVE streaming via stream.submit() ──
+          // Article 1 — LIVE streaming via streamSubmitRef (real stream.submit)
           const submitArticle = () => {
-            if (!streamSubmitRef.current) return;
+            if (!streamSubmitRef.current) {
+              console.warn("[handleStartAgent] streamSubmitRef not ready");
+              return;
+            }
             streamingArticleIdRef.current = article.id;
             const newMessage = { id: uuidv4(), type: "human" as const, content: message };
             streamSubmitRef.current(
@@ -385,32 +382,18 @@ function HomePageInner({
                 optimisticValues: (prev: any) => ({
                   messages: [...(prev.messages ?? []), newMessage],
                 }),
-                config: {
-                  ...(assistant.config ?? {}),
-                  recursion_limit: 200,
-                  configurable: {
-                    workflow_id: activeWorkflowId,
-                    user_id: userId || undefined,
-                  },
-                },
-                streamSubgraphs: true,
               }
             );
           };
 
           if (!threadId) {
-            // threadId is already null → useStream has no thread → submit immediately
             submitArticle();
           } else {
-            // threadId exists → need to clear it first so useStream creates a fresh thread
             pendingArticleRef.current = { message, articleId: article.id };
             await setThreadId(null);
-            // useEffect([threadId]) will fire on re-render and call stream.submit()
           }
-          // Article 1 status handled by handleStreamFinish / handleStreamError callbacks
         } else {
-          // ── Articles 2-N: background parallel runs ──
-          // These run silently. Click their thread in ThreadList to view progress.
+          // Articles 2-N — background runs
           const thread = await client.threads.create({
             metadata: {
               workflow_id: activeWorkflowId,
@@ -418,9 +401,7 @@ function HomePageInner({
             },
           });
           const run = await client.runs.create(thread.thread_id, assistant.assistant_id, {
-            input: {
-              messages: [{ role: "user", content: message }],
-            },
+            input: { messages: [{ role: "user", content: message }] },
             config: {
               configurable: {
                 workflow_id: activeWorkflowId,
@@ -431,7 +412,6 @@ function HomePageInner({
           pollRunStatus(thread.thread_id, run.run_id, article.id);
         }
       }
-
       mutateThreads?.();
     } catch (err) {
       console.error("Error starting agent batch:", err);
@@ -439,211 +419,151 @@ function HomePageInner({
     }
   };
 
-
-  /**
-   * Polls a LangGraph run until it finishes, then updates feeder_articles:
-   *   success   → status = 'Done'
-   *   error/interrupted/timeout → status = 'Pending'  (back in queue for retry)
-   */
   const pollRunStatus = async (threadId: string, runId: string, articleId: string) => {
-    const MAX_POLLS = 120;   // 120 × 10s = 20 minutes max
-    const POLL_MS = 10_000; // check every 10 seconds
+    const MAX_POLLS = 120;
+    const POLL_MS = 10_000;
     let polls = 0;
-
     const tick = async () => {
       try {
         const run = await client.runs.get(threadId, runId);
         const status: string = (run as any).status ?? "";
-
         if (status === "success") {
-          // Agent finished successfully → mark Done
-          await supabase
-            .from("feeder_articles")
-            .update({ status: "Done" })
-            .eq("id", articleId);
+          await supabase.from("feeder_articles").update({ status: "Done" }).eq("id", articleId);
           mutateThreads?.();
-          return; // stop polling
+          return;
         }
-
         if (["error", "failed", "interrupted", "timeout", "cancelled"].includes(status)) {
-          // Agent failed or was interrupted → revert to Pending for reprocessing
-          await supabase
-            .from("feeder_articles")
-            .update({ status: "Pending" })
-            .eq("id", articleId);
-          console.warn(`[pollRunStatus] Run ${runId} ended with '${status}' → article reverted to Pending`);
+          await supabase.from("feeder_articles").update({ status: "Pending" }).eq("id", articleId);
           mutateThreads?.();
-          return; // stop polling
+          return;
         }
-
-        // Still running — keep polling if under limit
         polls++;
-        if (polls < MAX_POLLS) {
-          setTimeout(tick, POLL_MS);
-        } else {
-          // Timeout: revert to Pending so it can be retried
-          await supabase
-            .from("feeder_articles")
-            .update({ status: "Pending" })
-            .eq("id", articleId);
-          console.warn(`[pollRunStatus] Run ${runId} timed out after 20min → article reverted to Pending`);
-        }
-      } catch (e) {
-        console.error("[pollRunStatus] error:", e);
-        // On poll error, revert to Pending to be safe
-        await supabase
-          .from("feeder_articles")
-          .update({ status: "Pending" })
-          .eq("id", articleId);
+        if (polls < MAX_POLLS) setTimeout(tick, POLL_MS);
+        else await supabase.from("feeder_articles").update({ status: "Pending" }).eq("id", articleId);
+      } catch {
+        await supabase.from("feeder_articles").update({ status: "Pending" }).eq("id", articleId);
       }
     };
-
-    // Start first check after 10s (give agent time to begin)
     setTimeout(tick, POLL_MS);
   };
 
-
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Sleek left sidebar styled like Gemini */}
-      <aside className={cn(
-        "bg-sidebar flex flex-col justify-between shrink-0 transition-all duration-300",
-        isSidebarExpanded ? "w-52" : "w-11"
-      )}>
-        <div className="flex flex-col gap-2 p-2 overflow-hidden flex-1">
-          {/* Logo / Branding */}
-          <div className={cn(
-            "flex items-center gap-1.5 h-10 relative",
-            isSidebarExpanded ? "px-1.5" : "justify-center"
-          )}>
-            <button
-              onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-              className="flex items-center justify-center h-7 w-7 rounded-lg hover:bg-accent text-foreground shrink-0 transition-colors"
-              title="Toggle Sidebar"
-            >
-              <Menu className="h-4 w-4 text-muted-foreground hover:text-foreground shrink-0" />
-            </button>
-            {isSidebarExpanded && (
-              <span className="font-semibold text-sm tracking-tight truncate text-foreground animate-fade-in font-serif">
-                Deep Agent UI
-              </span>
+    // LangGraphRuntimeProvider replaces useStreamRuntime.
+    // It uses @langchain/langgraph-sdk/react's proven useStream internally,
+    // bridged into AssistantRuntimeProvider via useExternalStoreRuntime.
+    // The Thread component from BaseChat.tsx works unchanged.
+    <LangGraphRuntimeProvider
+      assistantId={assistant?.assistant_id || config.assistantId}
+      workflowId={activeWorkflowId}
+      userId={userId}
+      assistantConfig={assistant?.config as any}
+      submitRef={streamSubmitRef}
+      onStreamFinish={handleStreamFinish}
+      onStreamError={handleStreamError}
+      onHistoryRevalidate={() => mutateThreads?.()}
+      threads={threads}
+      threadId={threadId}
+      setThreadId={setThreadId}
+      handleDeleteThread={handleDeleteThread}
+    >
+      <div className="bg-background flex h-screen w-full overflow-hidden">
+        {/* ── LEFT SIDEBAR ── */}
+        <aside
+          className={cn(
+            "bg-background flex flex-col shrink-0 transition-all duration-200 h-full",
+            isSidebarExpanded ? "w-64" : "w-12"
+          )}
+        >
+          {/* Logo */}
+          <div
+            className={cn(
+              "flex items-center shrink-0 h-12 transition-[padding] duration-200",
+              isSidebarExpanded ? "px-6" : "px-3.5"
             )}
+          >
+            <Zap className="h-5 w-5 shrink-0 text-primary" />
+            <span
+              className={cn(
+                "text-foreground/90 ml-2 text-sm font-semibold tracking-tight whitespace-nowrap font-serif transition-opacity duration-200",
+                !isSidebarExpanded && "opacity-0 pointer-events-none"
+              )}
+            >
+              Deep Agent UI
+            </span>
           </div>
 
-          {/* New Thread Button */}
-          <button
-            onClick={() => setThreadId(null)}
-            disabled={!threadId}
+          {/* Thread list */}
+          <ThreadListRoot
             className={cn(
-              "flex items-center justify-start gap-2 rounded-lg bg-accent/40 transition-all duration-200 hover:bg-accent/70 text-foreground",
-              isSidebarExpanded
-                ? "h-8 w-full px-2.5 text-xs font-semibold"
-                : "h-7 w-7 p-0 justify-center"
+              "relative flex-1 overflow-y-auto transition-[padding,width] duration-200 min-h-0",
+              isSidebarExpanded ? "w-64 p-3" : "w-12 px-2 pt-1"
             )}
-            title="New chat"
           >
-            <Plus className="h-4 w-4 shrink-0" />
-            {isSidebarExpanded && <span className="truncate">New chat</span>}
-          </button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <ThreadListNew
+                    className={cn(
+                      "overflow-hidden transition-all duration-200 w-full mb-1",
+                      !isSidebarExpanded && "w-8 gap-0 px-2 has-[>svg]:px-2"
+                    )}
+                    labelClassName={cn(
+                      "overflow-hidden transition-all duration-200",
+                      !isSidebarExpanded ? "max-w-0 opacity-0" : "max-w-24 opacity-100"
+                    )}
+                  />
+                </TooltipTrigger>
+                {!isSidebarExpanded && (
+                  <TooltipContent side="right">New Thread</TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
 
-          {/* Nav Items */}
-          <nav className="flex flex-col gap-1 mt-1.5">
-            {/* Posts Page */}
-            <Link
-              href="/posts"
+            <ThreadListItems
+              aria-hidden={!isSidebarExpanded}
+              inert={!isSidebarExpanded ? true : undefined}
               className={cn(
-                "flex items-center transition-all duration-200 text-muted-foreground hover:bg-accent hover:text-foreground",
-                isSidebarExpanded 
-                  ? "gap-2 rounded-lg h-8 px-2.5 text-xs font-semibold" 
-                  : "h-7 w-7 justify-center rounded-lg p-0"
+                "transition-[opacity,transform] duration-150",
+                !isSidebarExpanded
+                  ? "pointer-events-none opacity-0 delay-50"
+                  : "translate-x-0 opacity-100"
               )}
-              title="Posts"
-            >
-              <LayoutGrid className="h-4 w-4 shrink-0" />
-              {isSidebarExpanded && <span className="truncate">Posts</span>}
-            </Link>
-          </nav>
+            />
+          </ThreadListRoot>
 
-          {/* Gemini Recents Thread History */}
-          {isSidebarExpanded && (
-            <div className="flex flex-col gap-1 mt-1 px-0.5 overflow-hidden flex-1 min-h-0">
-              <div className="text-[9px] font-bold text-muted-foreground/80 uppercase tracking-wider px-1.5 mb-1 select-none">
-                Recents
-              </div>
-              <div className="overflow-y-auto flex-1 custom-scrollbar pr-1 max-h-[300px] flex flex-col gap-0.5 scrollbar-pretty">
-                {threadItems.length === 0 ? (
-                  <div className="text-[11px] text-muted-foreground/60 px-1.5 py-1 italic">
-                    No recent chats
-                  </div>
-                ) : (
-                  threadItems.slice(0, 30).map((thread) => {
-                    const isActive = threadId === thread.id;
-                    return (
-                      <div
-                        key={thread.id}
-                        className={cn(
-                          "group relative flex items-center justify-between rounded-lg px-2 py-1.5 text-[11px] font-medium transition-all duration-200 cursor-pointer select-none",
-                          isActive
-                            ? "bg-primary/15 text-primary font-semibold"
-                            : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
-                        )}
-                        onClick={() => setThreadId(thread.id)}
-                      >
-                        <span className="truncate pr-3 w-full">
-                          {thread.title}
-                        </span>
-                        {/* Delete button on hover */}
-                        <button
-                          onClick={(e) => handleDeleteThread(thread.id, thread.status, e)}
-                          className="absolute right-1 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent hover:text-destructive transition-all duration-150"
-                          title="Delete chat"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Collapsible Queue inside Sidebar */}
-          {isSidebarExpanded && (
-            <div className="flex flex-col mt-1.5 pt-1.5 px-0.5 flex-shrink-0">
-              <button
-                onClick={() => setIsQueueCollapsed(!isQueueCollapsed)}
-                className="flex items-center justify-between px-1.5 py-1 hover:bg-accent/30 rounded-md text-[11px] font-semibold text-muted-foreground/90 w-full transition-colors"
-              >
-                <span className="flex items-center gap-1 uppercase tracking-wider text-[9px]">
-                  Queue ({queueTotalPending})
-                </span>
-                {isQueueCollapsed ? (
-                  <ChevronRight className="h-3 w-3" />
-                ) : (
-                  <ChevronDown className="h-3 w-3" />
-                )}
-              </button>
-
-              {!isQueueCollapsed && (
-                <div className="mt-1 flex flex-col gap-1 max-h-[150px] overflow-y-auto px-1 py-0.5 text-[11px] scrollbar-pretty">
-                  {queueArticles.length === 0 ? (
-                    <div className="text-[10px] text-muted-foreground/60 italic py-0.5 pl-0.5">
-                      Queue is empty
-                    </div>
+          {/* Bottom: Queue + profile */}
+          <div className="flex flex-col shrink-0">
+            {isSidebarExpanded ? (
+              <div className="px-3 py-2">
+                <button
+                  onClick={() => setIsQueueCollapsed(!isQueueCollapsed)}
+                  className="flex items-center justify-between w-full py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors uppercase tracking-wider"
+                >
+                  <span>Queue ({queueTotalPending})</span>
+                  {isQueueCollapsed ? (
+                    <ChevronRight className="h-3.5 w-3.5" />
                   ) : (
-                    <>
-                      <div className="flex flex-col gap-1">
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  )}
+                </button>
+                {!isQueueCollapsed && (
+                  <div className="mt-1 flex flex-col gap-1 max-h-[140px] overflow-y-auto">
+                    {queueArticles.length === 0 ? (
+                      <div className="text-[11px] text-muted-foreground/50 italic py-1">
+                        Queue is empty
+                      </div>
+                    ) : (
+                      <>
                         {queueArticles.map((article, index) => (
                           <div
                             key={article.id}
-                            className="p-1.5 rounded-md border border-border/50 bg-card/30 flex flex-col gap-0.5 text-[10px] leading-tight"
+                            className="p-2 rounded-lg bg-muted/40 flex flex-col gap-0.5 text-[10px]"
                             title={article.title}
                           >
                             <div className="font-medium text-foreground line-clamp-1">
                               {index + 1}. {article.title}
                             </div>
-                            <div className="text-[9px] text-muted-foreground/80 flex justify-between">
+                            <div className="text-[9px] text-muted-foreground/60 flex justify-between">
                               <span>{article.source_domain}</span>
                               <span>
                                 {new Date(article.created_at).toLocaleDateString("en-PK", {
@@ -653,132 +573,126 @@ function HomePageInner({
                             </div>
                           </div>
                         ))}
-                      </div>
-                      {queueTotalPending > queueBatchSize && (
-                        <div className="text-[9px] text-muted-foreground/60 text-center py-0.5 border-t border-border/20 mt-0.5">
-                          +{queueTotalPending - queueBatchSize} more pending
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Bottom Panel */}
-        <div className="flex flex-col gap-1.5 p-2 border-t border-border/10">
-          {/* User Info / Assistant ID */}
-          {isSidebarExpanded && (
-            <div className="px-1.5 py-1 rounded-md bg-accent/20 text-[9px] text-muted-foreground truncate font-mono select-text" title={`Assistant ID: ${config.assistantId}`}>
-              Assistant: {config.assistantId.substring(0, 12)}...
-            </div>
-          )}
-
-          {isSidebarExpanded ? (
-            /* Horizontal expanded footer */
-            <div className="flex items-center justify-between gap-1 h-8 px-0.5">
-              <div className="flex items-center gap-1.5 overflow-hidden shrink min-w-0">
-                <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-[10px] shrink-0 select-none">
-                  {userEmail ? userEmail[0].toUpperCase() : "U"}
-                </div>
-                <span className="text-[11px] font-semibold truncate text-foreground select-text">
-                  {userEmail || "User"}
-                </span>
+                        {queueTotalPending > queueBatchSize && (
+                          <div className="text-[10px] text-muted-foreground/50 text-center py-1 mt-0.5">
+                            +{queueTotalPending - queueBatchSize} more pending
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
+            ) : (
+              <div className="flex justify-center py-1">
+                <button
+                  onClick={() => setIsQueueCollapsed(!isQueueCollapsed)}
+                  className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  title={`Queue (${queueTotalPending})`}
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
+            )}
 
-              <div className="flex items-center gap-0.5 shrink-0 scale-90 origin-right">
-                <ThemeToggle />
+            {isSidebarExpanded ? (
+              <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+                <div className="flex items-center gap-2 overflow-hidden shrink min-w-0">
+                  <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-foreground font-bold text-xs shrink-0 select-none">
+                    {userEmail ? userEmail[0].toUpperCase() : "U"}
+                  </div>
+                  <span className="text-xs font-medium truncate text-foreground select-text">
+                    {userEmail || "User"}
+                  </span>
+                </div>
                 <Link href="/agent-settings" title="Agent Settings">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
                     <Settings className="h-4 w-4" />
                   </div>
                 </Link>
               </div>
-            </div>
-          ) : (
-            /* Vertical stacked collapsed footer */
-            <div className="flex flex-col items-center gap-2 py-0.5 scale-90">
-              <ThemeToggle />
-              <Link href="/agent-settings" title="Agent Settings">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                  <Settings className="h-4 w-4" />
-                </div>
-              </Link>
-              <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-[10px] select-none">
-                {userEmail ? userEmail[0].toUpperCase() : "U"}
-              </div>
-            </div>
-          )}
-        </div>
-      </aside>
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-background">
-        {/* ChatGPT-style top header */}
-        <header className="flex h-14 items-center justify-between px-6 bg-background flex-shrink-0 select-none">
-          <div className="flex items-center gap-3">
-            {/* ChatGPT-style dropdown for Agent Selector */}
-            <div className="relative">
-              <button
-                onClick={() => setIsWfDropdownOpen(!isWfDropdownOpen)}
-                className="flex items-center gap-1 text-base font-semibold text-foreground hover:bg-accent/50 px-2.5 py-1.5 rounded-xl transition-all duration-200 cursor-pointer select-none outline-none font-sans"
-              >
-                <span>
-                  {workflows.find(w => w.id === activeWorkflowId)?.name ?? "Select Agent"}
-                </span>
-                <ChevronDown className="h-4 w-4 text-muted-foreground/60" />
-              </button>
-
-              {isWfDropdownOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setIsWfDropdownOpen(false)}
-                  />
-                  <div className="absolute top-full left-0 mt-1.5 w-56 rounded-2xl border border-border/30 bg-popover/95 backdrop-blur-md text-popover-foreground shadow-xl p-1.5 z-50 animate-fade-in origin-top-left">
-                    {workflows.map((wf) => (
-                      <button
-                        key={wf.id}
-                        onClick={() => {
-                          setActiveWorkflowId(wf.id);
-                          setIsWfDropdownOpen(false);
-                        }}
-                        className={cn(
-                          "w-full text-left px-3 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center justify-between hover:bg-accent",
-                          activeWorkflowId === wf.id ? "text-primary bg-primary/5" : "text-foreground"
-                        )}
-                      >
-                        <span>{wf.name}</span>
-                        {activeWorkflowId === wf.id && (
-                          <Check className="h-4 w-4 text-primary" />
-                        )}
-                      </button>
-                    ))}
+            ) : (
+              <div className="flex flex-col items-center gap-1 py-2">
+                <Link href="/agent-settings" title="Agent Settings">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                    <Settings className="h-4 w-4" />
                   </div>
-                </>
-              )}
-            </div>
+                </Link>
+                <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-foreground font-bold text-xs select-none">
+                  {userEmail ? userEmail[0].toUpperCase() : "U"}
+                </div>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            {/* Right side items */}
-          </div>
-        </header>
+        </aside>
 
-        <ChatProvider
-          activeAssistant={assistant}
-          onHistoryRevalidate={() => mutateThreads?.()}
-          submitRef={streamSubmitRef}
-          onStreamFinish={handleStreamFinish}
-          onStreamError={handleStreamError}
-          workflowId={activeWorkflowId}
-          userId={userId || undefined}
-        >
-          <ChatInterface assistant={assistant} onStartAgent={handleStartAgent} />
-        </ChatProvider>
+        {/* ── MAIN CONTENT ── */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <header className="flex h-12 shrink-0 items-center gap-2 px-4">
+            <button
+              onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
+              className="hidden size-8 md:flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              title={isSidebarExpanded ? "Hide sidebar" : "Show sidebar"}
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
+
+            {threadId && threadItems.find((t) => t.id === threadId)?.title ? (
+              <span className="text-sm font-medium text-foreground truncate max-w-[240px]">
+                {threadItems.find((t) => t.id === threadId)?.title}
+              </span>
+            ) : (
+              <div className="relative">
+                <button
+                  onClick={() => setIsWfDropdownOpen(!isWfDropdownOpen)}
+                  className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:bg-muted px-2 py-1.5 rounded-md transition-colors cursor-pointer select-none"
+                >
+                  <span>
+                    {workflows.find((w) => w.id === activeWorkflowId)?.name ?? "Select Agent"}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60" />
+                </button>
+                {isWfDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setIsWfDropdownOpen(false)}
+                    />
+                    <div className="absolute top-full left-0 mt-1.5 w-56 rounded-xl border border-border/40 bg-popover/95 backdrop-blur-md text-popover-foreground shadow-lg p-1.5 z-50">
+                      {workflows.map((wf) => (
+                        <button
+                          key={wf.id}
+                          onClick={() => {
+                            setActiveWorkflowId(wf.id);
+                            setIsWfDropdownOpen(false);
+                          }}
+                          className={cn(
+                            "w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between hover:bg-muted",
+                            activeWorkflowId === wf.id
+                              ? "text-primary font-semibold"
+                              : "text-foreground"
+                          )}
+                        >
+                          <span>{wf.name}</span>
+                          {activeWorkflowId === wf.id && (
+                            <Check className="h-4 w-4 text-primary" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </header>
+
+          {/* Thread — new UI design, now backed by proven @langchain/langgraph-sdk/react */}
+          <main className="flex flex-1 flex-col overflow-hidden h-full w-full min-h-0">
+            <Thread onStartAgent={handleStartAgent} />
+          </main>
+        </div>
       </div>
-    </div>
+    </LangGraphRuntimeProvider>
   );
 }
 
@@ -786,16 +700,12 @@ function HomePageContent() {
   const [config, setConfig] = useState<StandaloneConfig | null>(null);
   const [assistantId, setAssistantId] = useQueryState("assistantId");
 
-  // On mount, check for saved config, otherwise auto-fill from env vars or show dialog
   useEffect(() => {
     const savedConfig = getConfig();
     if (savedConfig) {
       setConfig(savedConfig);
-      if (!assistantId) {
-        setAssistantId(savedConfig.assistantId);
-      }
+      if (!assistantId) setAssistantId(savedConfig.assistantId);
     } else {
-      // Auto-populate from NEXT_PUBLIC_ env vars if available
       const envUrl = process.env.NEXT_PUBLIC_LANGGRAPH_API_URL;
       const envAssistant = process.env.NEXT_PUBLIC_ASSISTANT_ID;
       const envKey = process.env.NEXT_PUBLIC_LANGSMITH_API_KEY;
@@ -810,14 +720,11 @@ function HomePageContent() {
         if (!assistantId) setAssistantId(envAssistant);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // If config changes, update the assistantId
   useEffect(() => {
-    if (config && !assistantId) {
-      setAssistantId(config.assistantId);
-    }
+    if (config && !assistantId) setAssistantId(config.assistantId);
   }, [config, assistantId, setAssistantId]);
 
   const langsmithApiKey =
@@ -833,9 +740,7 @@ function HomePageContent() {
             Please configure your LangGraph deployment settings in Agent Settings to get started.
           </p>
           <Link href="/agent-settings">
-            <Button
-              className="mt-6 w-full shadow-sm bg-primary text-primary-foreground hover:bg-primary/95"
-            >
+            <Button className="mt-6 w-full shadow-sm bg-primary text-primary-foreground hover:bg-primary/95">
               Open Agent Settings
             </Button>
           </Link>
@@ -845,10 +750,7 @@ function HomePageContent() {
   }
 
   return (
-    <ClientProvider
-      deploymentUrl={config.deploymentUrl}
-      apiKey={langsmithApiKey}
-    >
+    <ClientProvider deploymentUrl={config.deploymentUrl} apiKey={langsmithApiKey}>
       <HomePageInner config={config} />
     </ClientProvider>
   );

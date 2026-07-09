@@ -50,6 +50,7 @@ from research_agent.tools import (
     manage_skill,
     get_wordpress_categories,
     publish_to_wordpress,
+    search_conversation_history,
     # ── Dynamic Tool Routing ─────────────────────────────────────────────────
     list_tools,
     load_tools,
@@ -80,6 +81,128 @@ class ResilientChatModel(ChatOpenAI):
     """
 
     max_retries: int = 0  # Disable built-in tenacity retries — we handle it ourselves
+    agent_type: str = "main_agent"
+    agent_config_id: str = ""  # UUID from agent_configs table; when set, dynamic reload reads per-workflow settings
+
+    def _resolve_dynamic_fields(self):
+        """Dynamic resolution of settings from Supabase.
+
+        Priority:
+          - If agent_config_id is set → re-read provider/model from agent_configs (per-workflow).
+            This is the correct source of truth when the user configures models per-workflow in the UI.
+          - Otherwise → fall back to agent_settings (global settings) via get_llm_config().
+
+        This ensures the workflow-specific model (e.g. novita/deepseek) is always respected
+        and never overridden by stale global settings (e.g. oc/auto from agent_settings).
+        """
+        try:
+            if self.agent_config_id:
+                # ── Per-workflow model: read from agent_configs ────────────────
+                base_url, api_key, model_name = self._get_llm_config_from_agent_configs()
+            else:
+                # ── Global fallback model: read from agent_settings ────────────
+                from research_agent.tools.provider_engine import invalidate_settings_cache, get_llm_config
+                invalidate_settings_cache()
+                base_url, api_key, model_name = get_llm_config(self.agent_type)
+            
+            current_model = getattr(self, "model_name", None) or getattr(self, "model", "")
+            current_base_url = getattr(self, "openai_api_base", None) or getattr(self, "base_url", "")
+            current_api_key = getattr(self, "openai_api_key", None) or getattr(self, "api_key", "")
+            
+            if current_model != model_name or current_base_url != base_url or current_api_key != api_key:
+                print(f"[ResilientChatModel] [CHANGE] Settings changed for '{self.agent_type}'!")
+                print(f"  Old model: {current_model} -> New model: {model_name}")
+                print(f"  Old base_url: {current_base_url} -> New base_url: {base_url}")
+                
+                object.__setattr__(self, "model_name", model_name)
+                object.__setattr__(self, "model", model_name)
+                
+                object.__setattr__(self, "openai_api_base", base_url)
+                if hasattr(self, "base_url"):
+                    object.__setattr__(self, "base_url", base_url)
+                    
+                from pydantic import SecretStr
+                object.__setattr__(self, "openai_api_key", SecretStr(api_key) if api_key is not None else None)
+                if hasattr(self, "api_key"):
+                    object.__setattr__(self, "api_key", api_key)
+                    
+                # Reset underlying clients to force recreation with new config
+                for attr in ["client", "async_client", "_client", "_async_client"]:
+                    if hasattr(self, attr):
+                        object.__setattr__(self, attr, None)
+                
+                # Re-validate environment to rebuild OpenAI client with new credentials/base_url
+                self.validate_environment()
+        except Exception as e:
+            print(f"[ResilientChatModel] Error resolving dynamic settings: {e}")
+
+    def _get_llm_config_from_agent_configs(self) -> tuple[str, str, str]:
+        """Read (base_url, api_key, model) from agent_configs row by self.agent_config_id.
+
+        This is the correct dynamic source for per-workflow models — it reflects exactly
+        what the user configured in the Agents Settings UI (provider + model per workflow).
+        """
+        try:
+            import os
+            from supabase import create_client
+            from research_agent.tools.provider_engine import (
+                get_provider_base_url, get_provider_api_key, get_provider_config,
+                get_all_provider_names, get_settings
+            )
+
+            url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+            key = os.environ.get("SUPABASE_ANON_KEY", "")
+            if not url or not key:
+                raise RuntimeError("SUPABASE_URL/SUPABASE_ANON_KEY not set")
+
+            client = create_client(url, key)
+            resp = client.table("agent_configs").select("provider,model").eq("id", self.agent_config_id).single().execute()
+            if not resp.data:
+                raise RuntimeError(f"agent_config_id {self.agent_config_id} not found")
+
+            provider = (resp.data.get("provider") or "ninerouter").strip().lower()
+            model_name = (resp.data.get("model") or "").strip()
+
+            # Resolve base_url and api_key using provider registry (same logic as build_workflows_from_db)
+            db_settings = get_settings()
+            is_gateway_sub = provider not in get_all_provider_names()
+
+            if is_gateway_sub:
+                base_url = get_provider_base_url("ninerouter")
+                api_key = db_settings.get("ninerouter_client_api_key", "").strip()
+                if not api_key:
+                    api_key = get_provider_api_key("ninerouter")
+            else:
+                base_url = get_provider_base_url(provider)
+                cfg = get_provider_config(provider)
+                if cfg and "base_url_env" in cfg and not base_url.endswith("/v1"):
+                    base_url = base_url + "/v1"
+                if provider == "ninerouter":
+                    api_key = db_settings.get("ninerouter_client_api_key", "").strip()
+                    if not api_key:
+                        api_key = get_provider_api_key(provider)
+                else:
+                    api_key = get_provider_api_key(provider)
+
+            if not model_name:
+                model_name = "oc/auto"
+
+            print(f"[ResilientChatModel] [INFO] agent_configs reload: provider={provider}, model={model_name}")
+            return base_url, api_key, model_name
+
+        except Exception as e:
+            print(f"[ResilientChatModel] [WARN] _get_llm_config_from_agent_configs failed ({e}), keeping current settings")
+            # Return current values so nothing changes on error
+            current_model = getattr(self, "model_name", None) or getattr(self, "model", "oc/auto")
+            current_base_url = getattr(self, "openai_api_base", None) or ""
+            from pydantic import SecretStr
+            raw_key = getattr(self, "openai_api_key", None)
+            if isinstance(raw_key, SecretStr):
+                current_api_key = raw_key.get_secret_value()
+            else:
+                current_api_key = str(raw_key) if raw_key else ""
+            return current_base_url, current_api_key, current_model
+
 
     def _filter_messages_by_capability(self, messages: list) -> list:
         """Filter message content blocks based on the model's capabilities to avoid API errors."""
@@ -266,6 +389,7 @@ class ResilientChatModel(ChatOpenAI):
         Guard: if streaming already started (tokens sent), do NOT retry — that would
         send duplicate content to the frontend. Only retry before first token.
         """
+        self._resolve_dynamic_fields()
         args_list = list(args)
         if len(args_list) > 0:
             args_list[0] = self._filter_input(args_list[0])
@@ -281,29 +405,30 @@ class ResilientChatModel(ChatOpenAI):
             except Exception as e:
                 if stream_started:
                     # Mid-stream failure — cannot restart without sending duplicates.
-                    print(f"[LLM] ⚠️ Stream failed AFTER first token on attempt {attempt}. "
+                    print(f"[LLM] [WARN] Stream failed AFTER first token on attempt {attempt}. "
                           f"Not retrying to avoid duplicate content. Error: {e}")
                     raise
 
                 if self._is_fatal_error(e):
-                    print(f"[LLM] ⛔ Fatal error on stream attempt {attempt}/{_LLM_MAX_ATTEMPTS}: {e}")
+                    print(f"[LLM] [FATAL] Fatal error on stream attempt {attempt}/{_LLM_MAX_ATTEMPTS}: {e}")
                     raise
 
                 if attempt == _LLM_MAX_ATTEMPTS:
-                    print(f"[LLM] ❌ All {_LLM_MAX_ATTEMPTS} async stream attempts exhausted. Last error: {e}")
+                    print(f"[LLM] [ERROR] All {_LLM_MAX_ATTEMPTS} async stream attempts exhausted. Last error: {e}")
                     raise
 
                 if self._is_rate_limit(e):
-                    print(f"[LLM] ⏳ Rate limit (429) on stream attempt {attempt}/{_LLM_MAX_ATTEMPTS}. "
+                    print(f"[LLM] [WAIT] Rate limit (429) on stream attempt {attempt}/{_LLM_MAX_ATTEMPTS}. "
                           f"Waiting {_LLM_RATE_LIMIT_DELAY:.0f}s...")
                     await asyncio.sleep(_LLM_RATE_LIMIT_DELAY)
                 else:
                     delay = self._get_backoff_delay(attempt)
-                    print(f"[LLM] ⚠️  Stream attempt {attempt}/{_LLM_MAX_ATTEMPTS} failed: {e}. "
+                    print(f"[LLM] [WARN] Stream attempt {attempt}/{_LLM_MAX_ATTEMPTS} failed: {e}. "
                           f"Retrying in {delay:.1f}s...")
                     await asyncio.sleep(delay)
 
     async def ainvoke(self, *args, **kwargs):
+        self._resolve_dynamic_fields()
         args_list = list(args)
         if len(args_list) > 0:
             args_list[0] = self._filter_input(args_list[0])
@@ -314,24 +439,25 @@ class ResilientChatModel(ChatOpenAI):
                 return await super().ainvoke(*args, **kwargs)
             except Exception as e:
                 if self._is_fatal_error(e):
-                    print(f"[LLM] ⛔ Fatal error on attempt {attempt}/{_LLM_MAX_ATTEMPTS}: {e}")
+                    print(f"[LLM] [FATAL] Fatal error on attempt {attempt}/{_LLM_MAX_ATTEMPTS}: {e}")
                     raise
 
                 if attempt == _LLM_MAX_ATTEMPTS:
-                    print(f"[LLM] ❌ All {_LLM_MAX_ATTEMPTS} async attempts exhausted. Last error: {e}")
+                    print(f"[LLM] [ERROR] All {_LLM_MAX_ATTEMPTS} async attempts exhausted. Last error: {e}")
                     raise
 
                 if self._is_rate_limit(e):
-                    print(f"[LLM] ⏳ Rate limit (429) on attempt {attempt}/{_LLM_MAX_ATTEMPTS}. "
+                    print(f"[LLM] [WAIT] Rate limit (429) on attempt {attempt}/{_LLM_MAX_ATTEMPTS}. "
                           f"Waiting {_LLM_RATE_LIMIT_DELAY:.0f}s for provider reset...")
                     await asyncio.sleep(_LLM_RATE_LIMIT_DELAY)
                 else:
                     delay = self._get_backoff_delay(attempt)
-                    print(f"[LLM] ⚠️  Attempt {attempt}/{_LLM_MAX_ATTEMPTS} failed: {e}. "
+                    print(f"[LLM] [WARN] Attempt {attempt}/{_LLM_MAX_ATTEMPTS} failed: {e}. "
                           f"Retrying in {delay:.1f}s...")
                     await asyncio.sleep(delay)
 
     def invoke(self, *args, **kwargs):
+        self._resolve_dynamic_fields()
         args_list = list(args)
         if len(args_list) > 0:
             args_list[0] = self._filter_input(args_list[0])
@@ -342,20 +468,20 @@ class ResilientChatModel(ChatOpenAI):
                 return super().invoke(*args, **kwargs)
             except Exception as e:
                 if self._is_fatal_error(e):
-                    print(f"[LLM] ⛔ Fatal error on attempt {attempt}/{_LLM_MAX_ATTEMPTS}: {e}")
+                    print(f"[LLM] [FATAL] Fatal error on attempt {attempt}/{_LLM_MAX_ATTEMPTS}: {e}")
                     raise
 
                 if attempt == _LLM_MAX_ATTEMPTS:
-                    print(f"[LLM] ❌ All {_LLM_MAX_ATTEMPTS} sync attempts exhausted. Last error: {e}")
+                    print(f"[LLM] [ERROR] All {_LLM_MAX_ATTEMPTS} sync attempts exhausted. Last error: {e}")
                     raise
 
                 if self._is_rate_limit(e):
-                    print(f"[LLM] ⏳ Rate limit (429) on attempt {attempt}/{_LLM_MAX_ATTEMPTS}. "
+                    print(f"[LLM] [WAIT] Rate limit (429) on attempt {attempt}/{_LLM_MAX_ATTEMPTS}. "
                     f"Waiting {_LLM_RATE_LIMIT_DELAY:.0f}s for provider reset...")
                     time.sleep(_LLM_RATE_LIMIT_DELAY)
                 else:
                     delay = self._get_backoff_delay(attempt)
-                    print(f"[LLM] ⚠️  Attempt {attempt}/{_LLM_MAX_ATTEMPTS} failed: {e}. "
+                    print(f"[LLM] [WARN] Attempt {attempt}/{_LLM_MAX_ATTEMPTS} failed: {e}. "
                           f"Retrying in {delay:.1f}s...")
                     time.sleep(delay)
 
@@ -377,6 +503,7 @@ _key_preview = (
 print(f"[agent] Resolved API key: {_key_preview}")
 
 model = ResilientChatModel(
+    agent_type="main_agent",
     model=_main_model,
     api_key=_main_api_key,
     base_url=_main_base_url,
@@ -393,6 +520,7 @@ _research_base_url, _research_api_key, _research_model = get_llm_config("researc
 print(f"[agent] Research subagent model={_research_model} via {_research_base_url[:40]}...")
 
 research_model = ResilientChatModel(
+    agent_type="research_subagent",
     model=_research_model,
     api_key=_research_api_key,
     base_url=_research_base_url,
@@ -404,6 +532,7 @@ _content_base_url, _content_api_key, _content_model = get_llm_config("content_su
 print(f"[agent] Content subagent model={_content_model} via {_content_base_url[:40]}...")
 
 content_model = ResilientChatModel(
+    agent_type="content_subagent",
     model=_content_model,
     api_key=_content_api_key,
     base_url=_content_base_url,
@@ -527,6 +656,47 @@ def _bind_agent_id_to_read_skill(read_skill_tool, agent_id: str):
         """
         return read_skill_tool.func(skill_name=skill_name, agent_id=agent_id)
     return read_skill_bound
+
+
+def _bind_agent_id_to_manage_skill(manage_skill_tool, agent_id: str):
+    from langchain_core.tools import tool
+    from typing import Optional
+    
+    @tool("manage_skill")
+    def manage_skill_bound(
+        action: str,
+        skill_key: str,
+        label: Optional[str] = None,
+        description: Optional[str] = None,
+        content: Optional[str] = None,
+        category: Optional[str] = "general",
+    ) -> str:
+        """Create, update, or archive a skill in the skills library.
+
+        Use this tool after completing complex tasks (5+ tool calls) to save
+        your approach as a reusable skill. Also use it to fix/improve existing
+        skills that you found to be outdated or incomplete during a task.
+
+        Args:
+            action: One of 'create', 'update', or 'archive'.
+            skill_key: Unique identifier for the skill (snake_case, e.g. 'web_research').
+            label: Human-readable name (e.g. 'Web Research'). Required for 'create'.
+            description: Short description (max 120 chars). Used in the skills index.
+                         Required for 'create'.
+            content: Full skill content in Markdown with optional YAML frontmatter.
+                     Required for 'create', optional for 'update'.
+            category: Skill category (e.g. 'research', 'content', 'publishing', 'general').
+        """
+        return manage_skill_tool.func(
+            action=action,
+            skill_key=skill_key,
+            label=label,
+            description=description,
+            content=content,
+            category=category,
+            agent_id=agent_id,
+        )
+    return manage_skill_bound
 
 
 def _bind_agent_id_to_list_tools(list_tools_tool, agent_id: str):
@@ -693,6 +863,7 @@ def load_dynamic_agents_by_workflow():
             manage_skill,
             build_skills_index,
             cronjob,
+            search_conversation_history,
         )
 
         tool_lookup = {
@@ -715,6 +886,7 @@ def load_dynamic_agents_by_workflow():
             "call_tool": call_tool,
             "youtube_transcript": youtube_transcript,
             "cronjob": cronjob,
+            "search_conversation_history": search_conversation_history,
         }
 
         tool_assignments_by_agent = {}
@@ -829,6 +1001,8 @@ def load_dynamic_agents_by_workflow():
                     main_api_key = get_provider_api_key(main_provider)
 
             main_model = ResilientChatModel(
+                agent_type="main_agent",
+                agent_config_id=main_id,
                 model=main_model_name,
                 api_key=main_api_key,
                 base_url=main_base_url,
@@ -873,6 +1047,8 @@ def load_dynamic_agents_by_workflow():
                             tool_func = _bind_agent_id_to_list_skills(list_skills, main_id)
                         elif t_key == "read_skill":
                             tool_func = _bind_agent_id_to_read_skill(read_skill, main_id)
+                        elif t_key == "manage_skill":
+                            tool_func = _bind_agent_id_to_manage_skill(manage_skill, main_id)
                         elif t_key == "list_tools":
                             tool_func = _bind_agent_id_to_list_tools(list_tools, main_id)
                         elif t_key == "load_tools":
@@ -952,7 +1128,10 @@ def load_dynamic_agents_by_workflow():
                     else:
                         sub_api_key = get_provider_api_key(sub_provider)
 
+                sub_agent_type = "research_subagent" if "research" in sub["name"].lower() else "content_subagent"
                 sub_model = ResilientChatModel(
+                    agent_type=sub_agent_type,
+                    agent_config_id=sub_id,
                     model=sub_model_name,
                     api_key=sub_api_key,
                     base_url=sub_base_url,
@@ -997,6 +1176,8 @@ def load_dynamic_agents_by_workflow():
                                 tool_func = _bind_agent_id_to_list_skills(list_skills, sub_id)
                             elif t_key == "read_skill":
                                 tool_func = _bind_agent_id_to_read_skill(read_skill, sub_id)
+                            elif t_key == "manage_skill":
+                                tool_func = _bind_agent_id_to_manage_skill(manage_skill, sub_id)
                             elif t_key == "list_tools":
                                 tool_func = _bind_agent_id_to_list_tools(list_tools, sub_id)
                             elif t_key == "load_tools":
@@ -1375,6 +1556,7 @@ else:
             get_wordpress_categories,
             publish_to_wordpress,
             youtube_transcript,
+            search_conversation_history,
         ],
         subagents=[research_subagent, content_subagent],
         system_prompt=INSTRUCTIONS,

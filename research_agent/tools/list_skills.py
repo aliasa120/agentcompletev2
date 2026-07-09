@@ -49,9 +49,20 @@ def build_skills_index(agent_id: Optional[str] = None) -> str:
         client = _get_supabase_client()
 
         # ── Step 1: Check which skills are assigned to this agent ─────────
+        attach_all_skills = False
         assigned_skill_keys: Optional[list[str]] = None
 
         if agent_id:
+            try:
+                agent_resp = client.table("agent_configs") \
+                    .select("attach_all_skills") \
+                    .eq("id", agent_id) \
+                    .execute()
+                if agent_resp.data and len(agent_resp.data) > 0:
+                    attach_all_skills = bool(agent_resp.data[0].get("attach_all_skills", False))
+            except Exception as e:
+                logger.warning(f"[build_skills_index] Failed to fetch agent config: {e}")
+
             try:
                 resp = client.table("agent_tool_assignments") \
                     .select("tool_key") \
@@ -60,7 +71,7 @@ def build_skills_index(agent_id: Optional[str] = None) -> str:
                     .eq("enabled", True) \
                     .execute()
 
-                if resp.data and len(resp.data) > 0:
+                if resp.data is not None:
                     assigned_skill_keys = [r["tool_key"] for r in resp.data]
                     logger.info(
                         f"[build_skills_index] Agent {agent_id[:8]}... has "
@@ -70,23 +81,29 @@ def build_skills_index(agent_id: Optional[str] = None) -> str:
                 logger.warning(f"[build_skills_index] Failed to check skill assignments: {e}")
 
         # ── Step 2: Load skill metadata ───────────────────────────────────
-        if assigned_skill_keys is not None and len(assigned_skill_keys) > 0:
-            # Only load skills that are assigned to this agent
-            resp = client.table("skills_library") \
-                .select("skill_key, label, description, category") \
-                .eq("state", "active") \
-                .in_("skill_key", assigned_skill_keys) \
-                .order("category") \
-                .execute()
-        else:
-            # Fallback: load ALL active skills (no per-agent filtering)
-            resp = client.table("skills_library") \
-                .select("skill_key, label, description, category") \
-                .eq("state", "active") \
-                .order("category") \
-                .execute()
+        resp = client.table("skills_library") \
+            .select("skill_key, label, description, category, created_by_agent_id") \
+            .eq("state", "active") \
+            .order("category") \
+            .execute()
+        all_active_skills = resp.data or []
 
-        skills = resp.data or []
+        if agent_id:
+            skills = []
+            for s in all_active_skills:
+                s_key = s.get("skill_key")
+                created_by = s.get("created_by_agent_id")
+                
+                is_general_or_self = False
+                if attach_all_skills:
+                    is_general_or_self = (created_by is None or str(created_by) == str(agent_id))
+                
+                is_manually_assigned = assigned_skill_keys is not None and s_key in assigned_skill_keys
+                
+                if is_general_or_self or is_manually_assigned:
+                    skills.append(s)
+        else:
+            skills = all_active_skills
         if not skills:
             return ""
 
@@ -161,34 +178,63 @@ def list_skills(category: Optional[str] = None, agent_id: Optional[str] = None) 
     try:
         client = _get_supabase_client()
         
-        assigned_skill_keys: Optional[list[str]] = None
+        attach_all_skills = False
+        assigned_skill_keys = []
         if agent_id:
             try:
-                resp = client.table("agent_tool_assignments") \
+                agent_resp = client.table("agent_configs") \
+                    .select("attach_all_skills") \
+                    .eq("id", agent_id) \
+                    .execute()
+                if agent_resp.data and len(agent_resp.data) > 0:
+                    attach_all_skills = bool(agent_resp.data[0].get("attach_all_skills", False))
+            except Exception as e:
+                logger.warning(f"[list_skills] Failed to fetch agent config: {e}")
+
+            try:
+                assign_resp = client.table("agent_tool_assignments") \
                     .select("tool_key") \
                     .eq("agent_id", agent_id) \
                     .eq("tool_type", "skill") \
                     .eq("enabled", True) \
                     .execute()
-                if resp.data:
-                    assigned_skill_keys = [r["tool_key"] for r in resp.data]
+                if assign_resp.data:
+                    assigned_skill_keys = [r["tool_key"] for r in assign_resp.data]
             except Exception as e:
                 logger.warning(f"[list_skills] Failed to check skill assignments: {e}")
 
         query = client.table("skills_library") \
-            .select("skill_key, label, description, category, use_count, state, created_by") \
+            .select("skill_key, label, description, category, use_count, state, created_by, created_by_agent_id") \
             .eq("state", "active")
 
         if category:
             query = query.eq("category", category)
 
-        if assigned_skill_keys is not None:
-            if len(assigned_skill_keys) == 0:
-                return "No skills are assigned to you in the Settings UI. Please attach skills first."
-            query = query.in_("skill_key", assigned_skill_keys)
-
         resp = query.order("category").execute()
-        skills = resp.data or []
+        all_active_skills = resp.data or []
+
+        if agent_id:
+            skills = []
+            for s in all_active_skills:
+                s_key = s.get("skill_key")
+                created_by = s.get("created_by_agent_id")
+                
+                is_general_or_self = False
+                if attach_all_skills:
+                    is_general_or_self = (created_by is None or str(created_by) == str(agent_id))
+                
+                is_manually_assigned = s_key in assigned_skill_keys
+                
+                if is_general_or_self or is_manually_assigned:
+                    skills.append(s)
+            
+            if not skills:
+                if attach_all_skills:
+                    return "No skills are available (either general or self-created) for you."
+                else:
+                    return "No skills are assigned to you in the Settings UI. Please attach skills first."
+        else:
+            skills = all_active_skills
 
         if not skills:
             if category:

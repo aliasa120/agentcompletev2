@@ -151,14 +151,49 @@ def read_skill(skill_name: str, agent_id: Optional[str] = None) -> str:
 
             # Check if assigned to this agent
             if agent_id:
-                resp = client.table("agent_tool_assignments") \
-                    .select("id") \
-                    .eq("agent_id", agent_id) \
-                    .eq("tool_key", skill_name) \
-                    .eq("tool_type", "skill") \
-                    .eq("enabled", True) \
-                    .execute()
-                if not resp.data or len(resp.data) == 0:
+                # 1. Fetch attach_all_skills toggle for this agent
+                attach_all_skills = False
+                try:
+                    agent_resp = client.table("agent_configs") \
+                        .select("attach_all_skills") \
+                        .eq("id", agent_id) \
+                        .execute()
+                    if agent_resp.data and len(agent_resp.data) > 0:
+                        attach_all_skills = bool(agent_resp.data[0].get("attach_all_skills", False))
+                except Exception as e:
+                    print(f"[read_skill] Failed to fetch agent config: {e}")
+
+                # 2. Check manual assignment
+                is_manually_assigned = False
+                try:
+                    assign_resp = client.table("agent_tool_assignments") \
+                        .select("id") \
+                        .eq("agent_id", agent_id) \
+                        .eq("tool_key", skill_name) \
+                        .eq("tool_type", "skill") \
+                        .eq("enabled", True) \
+                        .execute()
+                    is_manually_assigned = bool(assign_resp.data and len(assign_resp.data) > 0)
+                except Exception as e:
+                    print(f"[read_skill] Failed to check manual assignment: {e}")
+
+                # 3. If not manually assigned, check if we can auto-attach
+                is_allowed = is_manually_assigned
+                if not is_allowed and attach_all_skills:
+                    try:
+                        skill_meta = client.table("skills_library") \
+                            .select("created_by_agent_id") \
+                            .eq("skill_key", skill_name) \
+                            .eq("state", "active") \
+                            .execute()
+                        if skill_meta.data and len(skill_meta.data) > 0:
+                            created_by = skill_meta.data[0].get("created_by_agent_id")
+                            if created_by is None or str(created_by) == str(agent_id):
+                                is_allowed = True
+                    except Exception as e:
+                        print(f"[read_skill] Failed to check skill creator: {e}")
+
+                if not is_allowed:
                     return f"⚠️ Access Denied: Skill '{skill_name}' is not assigned to you in the Settings UI. You can only read skills that are attached to you."
 
             resp = client.table("skills_library").select("content, use_count").eq("skill_key", skill_name).eq("state", "active").execute()

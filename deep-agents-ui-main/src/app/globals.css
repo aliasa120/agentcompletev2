@@ -15,40 +15,47 @@
     outline-color: var(--primary);
   }
 
+  /* Set default border color back to theme-aware var(--border) (Tailwind v4 defaults to currentColor) */
+  *, ::after, ::before, ::backdrop, ::file-selector-button {
+    border-color: var(--border);
+  }
+
   :root {
-    --card: #faf9f5;
-    --ring: #c96442;
-    --input: #b4b2a7;
-    --muted: #ede9de;
-    --accent: #e9e6dc;
-    --border: #dad9d4;
-    --radius: 0.5rem;
-    --chart-1: #b05730;
-    --chart-2: #9c87f5;
-    --chart-3: #ded8c4;
-    --chart-4: #dbd3f0;
-    --chart-5: #b4552d;
+    --background: #ffffff;
+    --foreground: #18181b;
+    --card: #ffffff;
+    --card-foreground: #18181b;
     --popover: #ffffff;
-    --primary: #c96442;
-    --sidebar: #f5f4ee;
-    --secondary: #e9e6dc;
-    --background: #faf9f5;
-    --foreground: #3d3929;
-    --destructive: #141413;
-    --sidebar-ring: #b5b5b5;
-    --sidebar-accent: #e9e6dc;
-    --sidebar-border: #ebebeb;
-    --card-foreground: #141413;
-    --sidebar-primary: #c96442;
-    --muted-foreground: #83827d;
-    --accent-foreground: #28261b;
-    --popover-foreground: #28261b;
-    --primary-foreground: #ffffff;
-    --sidebar-foreground: #3d3d3a;
-    --secondary-foreground: #535146;
-    --destructive-foreground: #ffffff;
-    --sidebar-accent-foreground: #343434;
-    --sidebar-primary-foreground: #fbfbfb;
+    --popover-foreground: #18181b;
+    --primary: #18181b;
+    --primary-foreground: #fafafa;
+    --secondary: #f4f4f5;
+    --secondary-foreground: #18181b;
+    --muted: #f4f4f5;
+    --muted-foreground: #71717a;
+    --accent: #f4f4f5;
+    --accent-foreground: #18181b;
+    --destructive: #ef4444;
+    --destructive-foreground: #fafafa;
+    --border: #e4e4e7;
+    --input: #e4e4e7;
+    --ring: #18181b;
+    --radius: 0.75rem;
+
+    --sidebar: #fafafa;
+    --sidebar-foreground: #18181b;
+    --sidebar-primary: #18181b;
+    --sidebar-primary-foreground: #fafafa;
+    --sidebar-accent: #f4f4f5;
+    --sidebar-accent-foreground: #18181b;
+    --sidebar-border: #e4e4e7;
+    --sidebar-ring: #18181b;
+
+    --chart-1: #e11d48;
+    --chart-2: #f97316;
+    --chart-3: #2563eb;
+    --chart-4: #22c55e;
+    --chart-5: #eab308;
 
     --bg-0: #FAF9F5;
     --bg-000: #FAF9F5;
@@ -60,8 +67,14 @@
     --text-300: #73726C;
     --text-400: #888888;
     --text-500: #999999;
-    --accent-hover: #C6613F;
+    --accent-hover: #18181b;
     --ease-silk: cubic-bezier(0.2, 0.0, 0, 1.0);
+
+    --success: #10b981;
+    --warning: #f59e0b;
+    --error: #ef4444;
+
+    --card-accent: var(--primary);
 
     /* App-specific color variables mapped to theme tokens */
     --color-primary: var(--primary);
@@ -69,9 +82,9 @@
     --color-user-message-bg: var(--muted);
     --color-avatar-bg: var(--accent);
     --color-secondary: var(--secondary);
-    --color-success: #10b981;
-    --color-warning: #f59e0b;
-    --color-error: #ef4444;
+    --color-success: var(--success);
+    --color-warning: var(--warning);
+    --color-error: var(--error);
     --color-background: var(--background);
     --color-subagent-hover: var(--accent);
     --color-surface: var(--card);
@@ -82,8 +95,6 @@
     --color-text-tertiary: var(--input);
     --color-file-button: var(--card);
     --color-file-button-hover: var(--accent);
-
-    --card-accent: var(--primary);
 
     /* Tailwind config aliases — required for bg-primary, text-primary etc. utilities */
     --bg-primary: var(--background);
@@ -205,50 +216,59 @@
   }
 
   .dark {
-    --card: #262624;
-    --ring: #d97757;
-    --input: #52514a;
-    --muted: #1b1b19;
-    --accent: #1a1915;
-    --border: #3e3e38;
-    --chart-1: #b05730;
-    --chart-2: #9c87f5;
-    --chart-3: #1a1915;
-    --chart-4: #2f2b48;
-    --chart-5: #b4552d;
-    --popover: #30302e;
-    --primary: #d97757;
-    --sidebar: #1f1e1d;
-    --secondary: #faf9f5;
-    --background: #262624;
-    --foreground: #c3c0b6;
+    --background: #09090b;
+    --foreground: #fafafa;
+    --card: #09090b;
+    --card-foreground: #fafafa;
+    --popover: #09090b;
+    --popover-foreground: #fafafa;
+    --primary: #fafafa;
+    --primary-foreground: #18181b;
+    --secondary: #27272a;
+    --secondary-foreground: #fafafa;
+    --muted: #27272a;
+    --muted-foreground: #a1a1aa;
+    --accent: #27272a;
+    --accent-foreground: #fafafa;
     --destructive: #ef4444;
-    --sidebar-ring: #b5b5b5;
-    --sidebar-accent: #0f0f0e;
-    --sidebar-border: #ebebeb;
-    --card-foreground: #faf9f5;
-    --sidebar-primary: #343434;
-    --muted-foreground: #b7b5a9;
-    --accent-foreground: #f5f4ee;
-    --popover-foreground: #e5e5e2;
-    --primary-foreground: #ffffff;
-    --sidebar-foreground: #c3c0b6;
-    --secondary-foreground: #30302e;
-    --destructive-foreground: #ffffff;
-    --sidebar-accent-foreground: #c3c0b6;
-    --sidebar-primary-foreground: #fbfbfb;
+    --destructive-foreground: #fafafa;
+    --border: #27272a;
+    --input: #27272a;
+    --ring: #fafafa;
+    --radius: 0.75rem;
 
-    --bg-0: #212121;
-    --bg-000: #212121;
-    --bg-100: #262624;
-    --bg-200: #30302E;
-    --bg-300: #454540;
-    --text-100: #ECECEC;
-    --text-200: #E1E1E0;
-    --text-300: #B4B4B4;
-    --text-400: #8A8A88;
-    --text-500: #6B6B65;
-    --accent-hover: #E5AA7F;
+    --sidebar: #09090b;
+    --sidebar-foreground: #fafafa;
+    --sidebar-primary: #fafafa;
+    --sidebar-primary-foreground: #18181b;
+    --sidebar-accent: #27272a;
+    --sidebar-accent-foreground: #fafafa;
+    --sidebar-border: #27272a;
+    --sidebar-ring: #fafafa;
+
+    --chart-1: #3b82f6;
+    --chart-2: #10b981;
+    --chart-3: #f59e0b;
+    --chart-4: #8b5cf6;
+    --chart-5: #ec4899;
+
+    --bg-0: #09090b;
+    --bg-000: #09090b;
+    --bg-100: #09090b;
+    --bg-200: #18181b;
+    --bg-300: #27272a;
+    --text-100: #fafafa;
+    --text-200: #a1a1aa;
+    --text-300: #71717a;
+    --text-400: #52525b;
+    --text-500: #3f3f46;
+    --accent-hover: #fafafa;
+
+    --success: #34d399;
+    --warning: #fbbf24;
+    --error: #f87171;
+
+    --card-accent: var(--primary);
 
     /* App-specific color variables mapped to theme tokens */
     --color-primary: var(--primary);
@@ -256,9 +276,9 @@
     --color-user-message-bg: var(--muted);
     --color-avatar-bg: var(--accent);
     --color-secondary: var(--secondary);
-    --color-success: #34d399;
-    --color-warning: #fbbf24;
-    --color-error: #f87171;
+    --color-success: var(--success);
+    --color-warning: var(--warning);
+    --color-error: var(--error);
     --color-background: var(--background);
     --color-subagent-hover: var(--accent);
     --color-surface: var(--card);
@@ -269,8 +289,6 @@
     --color-text-tertiary: var(--input);
     --color-file-button: var(--card);
     --color-file-button-hover: var(--accent);
-
-    --card-accent: var(--primary);
 
     /* Tailwind config aliases — required for bg-primary, text-primary etc. utilities */
     --bg-primary: var(--background);
@@ -506,7 +524,8 @@ button {
 .scrollbar-pretty {
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
+  /* color-mix() works correctly with hex/rgb CSS variables (hsl() does not) */
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent) transparent;
 }
 
 .scrollbar-pretty::-webkit-scrollbar {
@@ -515,19 +534,19 @@ button {
 }
 
 .scrollbar-pretty::-webkit-scrollbar-track {
-  background: hsl(var(--border) / 0.08);
+  background: color-mix(in srgb, var(--border) 8%, transparent);
   border-radius: 9999px;
 }
 
 .scrollbar-pretty::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--muted-foreground) / 0.35);
+  background-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
   border-radius: 9999px;
   border: 1px solid transparent;
   background-clip: padding-box;
 }
 
 .scrollbar-pretty::-webkit-scrollbar-thumb:hover {
-  background-color: hsl(var(--muted-foreground) / 0.6);
+  background-color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

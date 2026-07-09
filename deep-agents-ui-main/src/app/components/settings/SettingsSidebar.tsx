@@ -3,7 +3,7 @@
 import React from "react";
 import {
   Wrench, Cpu, Bot, Users, LayoutList, BookOpen, Image as ImageIcon,
-  ChevronRight, Database, Settings, Menu, Brain, Route, AlarmClock
+  ChevronRight, Database, Settings, Menu, Brain, Route, AlarmClock, LayoutGrid
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +32,8 @@ export type SettingsSection =
   | "gateway-quota"
   | "gateway-token-saver"
   | "gateway-usage"
-  | "gateway-console-log";
+  | "gateway-console-log"
+  | "additional-features";
 
 interface NavItem {
   id: SettingsSection;
@@ -123,9 +124,15 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "telegram-bots",
-    label: "Telegram Bots",
-    description: "Link and manage Telegram bot tokens",
+    label: "Platforms Connection",
+    description: "Connect Telegram, Slack, Discord, & Email",
     icon: <Bot className="h-4 w-4" />,
+  },
+  {
+    id: "additional-features",
+    label: "Additional Features",
+    description: "Manage content, posts, and publishing",
+    icon: <LayoutGrid className="h-4 w-4" />,
   },
 ];
 

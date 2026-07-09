@@ -16,16 +16,19 @@ interface Skill {
   content: string;
   source: string;
   created_at: string;
+  created_by_agent_id?: string | null;
 }
 
 function SkillCard({
   skill,
   onUpdate,
   onDelete,
+  agents,
 }: {
   skill: Skill;
   onUpdate: (id: string, data: Partial<Skill>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  agents: any[];
 }) {
   const [label, setLabel] = useState(skill.label);
   const [description, setDescription] = useState(skill.description);
@@ -58,6 +61,26 @@ function SkillCard({
     await onDelete(skill.id);
   };
 
+  // Determine Creator
+  const creatorAgent = skill.created_by_agent_id
+    ? agents.find(a => a.id === skill.created_by_agent_id)?.name || "Agent"
+    : skill.source === "builtin"
+    ? "System"
+    : "User";
+
+  // Determine Attached Agents
+  const attachedAgents = agents.filter(agent => {
+    const isAutoAttached =
+      agent.attach_all_skills &&
+      (skill.created_by_agent_id === null ||
+        skill.created_by_agent_id === undefined ||
+        skill.created_by_agent_id === agent.id);
+    const isManuallyAssigned = agent.agent_tool_assignments?.some(
+      (tool: any) => tool.tool_type === "skill" && tool.tool_key === skill.skill_key && tool.enabled
+    );
+    return isAutoAttached || isManuallyAssigned;
+  }).map(a => a.name);
+
   return (
     <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
       <div className="flex items-center gap-3 px-5 py-3 border-b bg-muted/20">
@@ -69,6 +92,20 @@ function SkillCard({
             className="h-7 text-sm font-semibold bg-transparent border-0 p-0 focus-visible:ring-0"
             placeholder="Skill name..."
           />
+          <div className="flex flex-wrap items-center gap-2 mt-0.5">
+            <span className="text-[10px] text-muted-foreground">
+              Created by: <span className="font-semibold text-foreground">{creatorAgent}</span>
+            </span>
+            <span className="text-muted-foreground/30">•</span>
+            <span className="text-[10px] text-muted-foreground">
+              Attached to:{" "}
+              {attachedAgents.length === 0 ? (
+                <span className="italic">none</span>
+              ) : (
+                <span className="font-semibold text-primary">{attachedAgents.join(", ")}</span>
+              )}
+            </span>
+          </div>
         </div>
         {skill.source === "builtin" && (
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
@@ -78,7 +115,7 @@ function SkillCard({
         <div className="flex items-center gap-1.5">
           {savedOk && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
           <Button size="sm" onClick={handleSave} disabled={saving || !isDirty} className="h-7 px-2.5 text-xs gap-1">
-            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3 w-3" />}
             Save
           </Button>
           <Button size="sm" variant={confirmDelete ? "destructive" : "ghost"}
@@ -121,6 +158,7 @@ function SkillCard({
 
 export function SkillsSection() {
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -134,6 +172,12 @@ export function SkillsSection() {
       const res = await fetch("/api/skills");
       const data = await res.json();
       setSkills(data.skills ?? []);
+
+      const resAgents = await fetch("/api/agents");
+      const dataAgents = await resAgents.json();
+      setAgents(dataAgents.agents ?? []);
+    } catch (e) {
+      console.error("Failed to load skills and agents details:", e);
     } finally {
       setLoading(false);
     }
@@ -271,7 +315,7 @@ export function SkillsSection() {
 
       <div className="space-y-3">
         {skills.map(skill => (
-          <SkillCard key={skill.id} skill={skill} onUpdate={handleUpdate} onDelete={handleDelete} />
+          <SkillCard key={skill.id} skill={skill} onUpdate={handleUpdate} onDelete={handleDelete} agents={agents} />
         ))}
       </div>
 

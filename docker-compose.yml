@@ -16,7 +16,9 @@ services:
       - LANGGRAPH_HOST=0.0.0.0
       - LANGGRAPH_PORT=2024
       - NINE_ROUTER_URL=http://ninerouter:20128/v1
-
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
     volumes:
       - shared-node-modules:/app/deep-agents-ui-main/node_modules
       - shared-npm-cache:/app/shared_npm_cache
@@ -35,8 +37,10 @@ services:
       - .env
     environment:
       - NINE_ROUTER_URL=http://ninerouter:20128/v1
+      - REDIS_URL=redis://redis:6379
     depends_on:
       - backend
+      - redis
 
   # ── Cron scheduler (no exposed ports — internal only) ──────────────────
   cron:
@@ -53,9 +57,11 @@ services:
       - LANGGRAPH_URL=http://backend:2024
       - NEXT_PUBLIC_APP_URL=http://frontend:3000
       - NINE_ROUTER_URL=http://ninerouter:20128/v1
+      - REDIS_URL=redis://redis:6379
     depends_on:
       - backend
       - feeder_svc
+      - redis
 
   # ── Telegram Bot (long polling — internal only) ──────────────────────────
   telegram:
@@ -70,8 +76,29 @@ services:
     environment:
       - LANGGRAPH_API_URL=http://backend:2024
       - NINE_ROUTER_URL=http://ninerouter:20128/v1
+      - REDIS_URL=redis://redis:6379
     depends_on:
       - backend
+      - redis
+
+  # ── Slack Bot (Socket Mode — internal only) ──────────────────────────────
+  slack:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent-slack
+    restart: unless-stopped
+    command: python slack_server.py
+    env_file:
+      - .env
+    environment:
+      - LANGGRAPH_API_URL=http://backend:2024
+      - NINE_ROUTER_URL=http://ninerouter:20128/v1
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - backend
+      - redis
+
 
   # ── Next.js frontend (port 3000, public) ───────────────────────────────
   frontend:
@@ -92,12 +119,14 @@ services:
       - FEEDER_SERVER_URL=http://feeder_svc:8080
       - NEXT_PUBLIC_API_URL=http://backend:2024
       - NINE_ROUTER_INTERNAL_URL=http://ninerouter:20128
+      - REDIS_URL=redis://redis:6379
     volumes:
       - shared-node-modules:/app/node_modules
       - shared-npm-cache:/app/shared_npm_cache
     depends_on:
       - backend
       - feeder_svc
+      - redis
 
   # ── 9Router AI Gateway (port 20128, public) ─────────────────────────────
   ninerouter:
@@ -128,6 +157,14 @@ services:
     restart: unless-stopped
     ports:
       - "8787:8787"
+
+  # ── Redis Cache Server (port 6379, internal/public) ──────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: agent-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
 
 volumes:
   shared-node-modules:

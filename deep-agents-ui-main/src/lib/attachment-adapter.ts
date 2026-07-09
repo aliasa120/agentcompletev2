@@ -1,0 +1,103 @@
+import { AttachmentAdapter, PendingAttachment, CompleteAttachment } from "@assistant-ui/react";
+
+export class LangGraphAttachmentAdapter implements AttachmentAdapter {
+  accept = "*";
+
+  async add({ file }: { file: File }): Promise<PendingAttachment> {
+    const isImage = file.type.startsWith("image/");
+    const isAudio = file.type.startsWith("audio/");
+    const isVideo = file.type.startsWith("video/");
+    
+    return {
+      id: crypto.randomUUID(),
+      type: isImage ? "image" : isAudio ? "audio" : isVideo ? "video" : "document",
+      name: file.name,
+      file,
+      status: { type: "requires-action", reason: "composer-send" },
+    };
+  }
+
+  async send(attachment: PendingAttachment): Promise<CompleteAttachment> {
+    const file = attachment.file;
+    let mimeType = file.type;
+    if (!mimeType) {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (ext === "pdf") mimeType = "application/pdf";
+      else if (["mp3", "wav", "ogg", "m4a", "aac"].includes(ext || "")) mimeType = `audio/${ext === "mp3" ? "mpeg" : ext}`;
+      else if (["mp4", "webm", "mov", "avi"].includes(ext || "")) mimeType = `video/${ext === "mov" ? "quicktime" : ext}`;
+      else mimeType = "application/octet-stream";
+    }
+
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(",")[1];
+        resolve(base64);
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+
+    const dataUrl = `data:${mimeType};base64,${base64Data}`;
+
+    // Upload to local workspace so Python agent tools (like ls, glob) can see the file
+    try {
+      await fetch("/api/upload-workspace", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          base64: base64Data,
+        }),
+      });
+    } catch (err) {
+      console.warn("Failed to write uploaded file to local workspace:", err);
+    }
+
+    const content: any[] = [];
+    if (mimeType.startsWith("image/")) {
+      content.push({
+        type: "image_url",
+        image_url: { url: dataUrl }
+      });
+    } else if (mimeType.startsWith("audio/")) {
+      const format = file.name.split(".").pop()?.toLowerCase() || "mp3";
+      content.push({
+        type: "input_audio",
+        input_audio: {
+          data: base64Data,
+          format: format === "mp3" ? "mp3" : "wav"
+        }
+      });
+      content.push({
+        type: "image_url",
+        image_url: { url: dataUrl }
+      });
+    } else if (mimeType.startsWith("video/")) {
+      content.push({
+        type: "image_url",
+        image_url: { url: dataUrl }
+      });
+    } else {
+      content.push({
+        type: "file",
+        filename: file.name,
+        mimeType: mimeType,
+        data: dataUrl
+      });
+    }
+
+    return {
+      id: attachment.id,
+      type: attachment.type as any,
+      name: file.name,
+      content,
+      status: { type: "complete" },
+    };
+  }
+
+  async remove(attachment: PendingAttachment): Promise<void> {}
+}
