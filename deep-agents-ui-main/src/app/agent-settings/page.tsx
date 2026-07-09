@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import useSWR from "swr";
 import { supabase } from "@/lib/supabase";
 import { signOut } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import {
   Zap, Home, Play, List, Activity, AlarmClock, CheckCircle2, XCircle,
   Search, FileText, ImageIcon, FlaskConical, Loader2, Bot, Cpu,
-  KeyRound, ChevronDown, ChevronUp, LogOut, User, Database, Settings
+  KeyRound, ChevronDown, ChevronUp, LogOut, User, Database, Settings, LayoutGrid
 } from "lucide-react";
 import { getConfig, saveConfig } from "@/lib/config";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
@@ -187,11 +188,32 @@ export default function AgentSettingsPage() {
   const [queue, setQueue] = useState<Article[]>([]);
   const [allArticles, setAllArticles] = useState<Article[]>([]);
   const [batchSize, setBatchSizeState] = useState(2);
-  const [skills, setSkills] = useState<{ id: string; skill_key: string; label: string; description: string }[]>([]);
-  const [mcpConnections, setMcpConnections] = useState<{ id: string; label: string; toolkit_slug: string; connection_type: string; status: string; available_tools: { tool_key: string; tool_name: string }[] }[]>([]);
-  const [toolSettings, setToolSettings] = useState<{ id: string; connection_id: string; tool_key: string; tool_name: string; enabled: boolean }[]>([]);
   const [userEmail, setUserEmail] = useState<string>("");
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+
+  // ── SWR Data Fetching ──
+  const fetcher = useCallback((url: string) => fetch(url).then(res => res.json()), []);
+
+  const { data: settingsData, mutate: mutateSettings } = useSWR("/api/agent-settings", fetcher);
+  const { data: skillsData, mutate: mutateSkills } = useSWR("/api/skills", fetcher);
+  const { data: composioData, mutate: mutateComposio } = useSWR("/api/mcp/composio/connections", fetcher);
+  const { data: manualData, mutate: mutateManual } = useSWR("/api/mcp/manual", fetcher);
+  const { data: toolSettingsData, mutate: mutateToolSettings } = useSWR("/api/mcp/tool-settings", fetcher);
+
+  const skills = useMemo(() => skillsData?.skills ?? [], [skillsData]);
+  const mcpConnections = useMemo(() => [
+    ...(composioData?.connections ?? []),
+    ...(manualData?.connections ?? []),
+  ], [composioData, manualData]);
+  const toolSettings = useMemo(() => toolSettingsData?.settings ?? [], [toolSettingsData]);
+
+  const refreshSettingsAndTools = useCallback(() => {
+    mutateSettings();
+    mutateSkills();
+    mutateComposio();
+    mutateManual();
+    mutateToolSettings();
+  }, [mutateSettings, mutateSkills, mutateComposio, mutateManual, mutateToolSettings]);
 
   // ── Configuration settings logic ──
   const [configUrl, setConfigUrl] = useState("");
@@ -465,38 +487,6 @@ export default function AgentSettingsPage() {
     });
   }, []);
 
-  // Load settings
-  const loadSettings = useCallback(async () => {
-    try {
-      let { data, error } = await supabase.from("agent_settings").select("key,value");
-      if (error) {
-        if (error.code === "PGRST303" || error.message?.includes("JWT expired")) {
-          console.warn("JWT expired. Cleaning session and retrying loadSettings...");
-          await supabase.auth.signOut().catch(() => {});
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.includes("-auth-token")) {
-              localStorage.removeItem(key);
-            }
-          }
-          const retry = await supabase.from("agent_settings").select("key,value");
-          data = retry.data;
-          if (retry.error) {
-            console.error("Error loading settings after retry:", retry.error);
-          }
-        } else {
-          console.error("Error loading settings:", error);
-        }
-      }
-      if (data?.length) {
-        const m: Record<string, string> = { ...DEFAULTS };
-        for (const { key, value } of data) m[key] = value;
-        setSettings(m);
-        setInitialSettings(m);
-      }
-    } catch { /* use defaults */ }
-  }, []);
-
   // Load queue
   const loadQueue = useCallback(async () => {
     let { data, error } = await supabase.from("feeder_articles").select("*").eq("status", "Pending")
@@ -535,35 +525,24 @@ export default function AgentSettingsPage() {
     setAllArticles(all ?? []);
   }, []);
 
-  // Load skills and MCP connections for agents section
-  const loadSkillsAndMCP = useCallback(async () => {
-    try {
-      const [skillsRes, composioRes, manualRes, toolSettingsRes] = await Promise.all([
-        fetch("/api/skills"),
-        fetch("/api/mcp/composio/connections"),
-        fetch("/api/mcp/manual"),
-        fetch("/api/mcp/tool-settings"),
-      ]);
-      const skillsData = await skillsRes.json();
-      const composioData = await composioRes.json();
-      const manualData = await manualRes.json();
-      const toolSettingsData = await toolSettingsRes.json();
-
-      setSkills(skillsData.skills ?? []);
-      const merged = [
-        ...(composioData.connections ?? []),
-        ...(manualData.connections ?? []),
-      ];
-      setMcpConnections(merged);
-      setToolSettings(toolSettingsData.settings ?? []);
-    } catch { /* skip */ }
-  }, []);
-
   useEffect(() => {
-    loadSettings();
     loadQueue();
-    loadSkillsAndMCP();
-  }, [loadSettings, loadQueue, loadSkillsAndMCP]);
+  }, [loadQueue]);
+
+  // Sync SWR settingsData to state
+  useEffect(() => {
+    if (settingsData?.settings) {
+      const m: Record<string, string> = { ...DEFAULTS };
+      for (const { key, value } of settingsData.settings) m[key] = value;
+      if (JSON.stringify(m) !== JSON.stringify(initialSettings)) {
+        setSettings(prev => {
+          const isDirtyVal = JSON.stringify(prev) !== JSON.stringify(initialSettings);
+          return isDirtyVal ? prev : m;
+        });
+        setInitialSettings(m);
+      }
+    }
+  }, [settingsData, initialSettings]);
 
   useEffect(() => {
     setIsDirty(JSON.stringify(settings) !== JSON.stringify(initialSettings));
@@ -586,35 +565,24 @@ export default function AgentSettingsPage() {
     setSaveStatus("saving");
     try {
       const rows = AGENT_SETTING_KEYS.map(key => ({ key, value: settings[key] ?? "" }));
-      let { error } = await supabase.from("agent_settings").upsert(rows, { onConflict: "key" });
-      if (error) {
-        if (error.code === "PGRST303" || error.message?.includes("JWT expired")) {
-          console.warn("JWT expired. Cleaning session and retrying saveSettings...");
-          await supabase.auth.signOut().catch(() => {});
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.includes("-auth-token")) {
-              localStorage.removeItem(key);
-            }
-          }
-          const retry = await supabase.from("agent_settings").upsert(rows, { onConflict: "key" });
-          error = retry.error;
-          if (error) {
-            console.error("Error saving settings after retry:", error);
-          }
-        } else {
-          console.error("Error saving settings:", error);
-        }
-      }
-      if (error) {
+      const res = await fetch("/api/agent-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows })
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        console.error("Error saving settings:", data.error || "Network error");
         setSaveStatus("error");
       } else {
         setInitialSettings({ ...settings });
         setIsDirty(false);
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 3000);
+        mutateSettings();
       }
-    } catch {
+    } catch (e: any) {
+      console.error("Error saving settings:", e);
       setSaveStatus("error");
     }
   };
@@ -889,11 +857,11 @@ export default function AgentSettingsPage() {
   const renderSection = () => {
     switch (section) {
       case "workflows": return <WorkflowsSection />;
-      case "tools":     return <ToolsSection initialTab="tools" />;
-      case "tools-composio": return <ToolsSection initialTab="composio" />;
-      case "tools-manual": return <ToolsSection initialTab="manual" />;
-      case "tools-zapier": return <ToolsSection initialTab="zapier" />;
-      case "tools-smithery": return <ToolsSection initialTab="smithery" />;
+      case "tools":     return <ToolsSection initialTab="tools" onRefresh={refreshSettingsAndTools} />;
+      case "tools-composio": return <ToolsSection initialTab="composio" onRefresh={refreshSettingsAndTools} />;
+      case "tools-manual": return <ToolsSection initialTab="manual" onRefresh={refreshSettingsAndTools} />;
+      case "tools-zapier": return <ToolsSection initialTab="zapier" onRefresh={refreshSettingsAndTools} />;
+      case "tools-smithery": return <ToolsSection initialTab="smithery" onRefresh={refreshSettingsAndTools} />;
       case "providers": return (
         <ProviderOrderingSection
           globalSettings={settings}
@@ -927,6 +895,7 @@ export default function AgentSettingsPage() {
       case "gateway-token-saver": return renderGatewayIframe("/dashboard/token-saver");
       case "gateway-usage": return renderGatewayIframe("/dashboard/usage");
       case "gateway-console-log": return renderGatewayIframe("/dashboard/console-log");
+      case "additional-features": return <AdditionalFeaturesSection />;
       default:          return null;
     }
   };
@@ -972,6 +941,36 @@ export default function AgentSettingsPage() {
             {renderSection()}
           </div>
         </main>
+      </div>
+    </div>
+  );
+}
+
+function AdditionalFeaturesSection() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold font-serif text-foreground">Additional Features</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Access additional modules and custom content creation tools.
+        </p>
+      </div>
+
+      <div className="border border-border rounded-2xl bg-card p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+            <LayoutGrid className="h-4 w-4 text-primary" />
+            Posts Editor & Publisher
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Manage generated articles, edit drafts, and publish them to WordPress or download them.
+          </p>
+        </div>
+        <Link href="/posts">
+          <Button className="shrink-0 gap-1.5 text-xs font-semibold">
+            Open Posts Editor
+          </Button>
+        </Link>
       </div>
     </div>
   );

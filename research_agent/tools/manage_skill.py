@@ -39,6 +39,7 @@ def manage_skill(
     description: Optional[str] = None,
     content: Optional[str] = None,
     category: Optional[str] = "general",
+    agent_id: Optional[str] = None,
 ) -> str:
     """Create, update, or archive a skill in the skills library.
 
@@ -65,6 +66,7 @@ def manage_skill(
         content: Full skill content in Markdown with optional YAML frontmatter.
                  Required for 'create', optional for 'update'.
         category: Skill category (e.g. 'research', 'content', 'publishing', 'general').
+        agent_id: Optional agent ID (bound internally).
 
     Returns:
         Confirmation message with the action taken.
@@ -100,6 +102,7 @@ def manage_skill(
             "source": "agent",
             "state": "active",
             "created_by": "agent",
+            "created_by_agent_id": agent_id,
             "use_count": 0,
         }
 

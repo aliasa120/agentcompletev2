@@ -29,6 +29,7 @@ from .wordpress_publisher import get_wordpress_categories, publish_to_wordpress
 from .list_skills import list_skills, build_skills_index
 from .manage_skill import manage_skill
 from .cronjob import cronjob
+from .search_conversation_history import search_conversation_history
 
 # ── Dynamic Tool Routing ──────────────────────────────────────────────────
 from .dynamic_router import list_tools, load_tools, unload_unused_tools, build_tools_index, call_tool
@@ -61,6 +62,7 @@ __all__ = [
     "list_skills",
     "manage_skill",
     "cronjob",
+    "search_conversation_history",
     "build_skills_index",
     # ── Raw providers (not exposed to agent directly) ─────────────────────────
     "linkup_search",

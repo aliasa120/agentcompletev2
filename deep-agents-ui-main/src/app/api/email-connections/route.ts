@@ -1,0 +1,160 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
+    }
+  );
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { data: connections, error } = await supabase
+      .from("email_connections")
+      .select("id, smtp_host, smtp_port, username, password, imap_host, imap_port, is_active, created_at")
+      .eq("user_id", user.id);
+
+    if (error) {
+      console.error("Error fetching Email connections:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ connections: connections || [] });
+  } catch (e: unknown) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Unknown error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const {
+      id,
+      smtp_host,
+      smtp_port,
+      username,
+      password,
+      imap_host,
+      imap_port,
+      is_active
+    } = await request.json();
+
+    if (!smtp_host || !smtp_port || !username || !password || !imap_host || !imap_port) {
+      return NextResponse.json({ error: "All SMTP and IMAP configuration fields are required" }, { status: 400 });
+    }
+
+    const payload = {
+      smtp_host,
+      smtp_port: parseInt(smtp_port),
+      username,
+      password,
+      imap_host,
+      imap_port: parseInt(imap_port),
+      is_active: is_active ?? true,
+      updated_at: new Date().toISOString()
+    };
+
+    if (id) {
+      const { data, error } = await supabase
+        .from("email_connections")
+        .update(payload)
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .select();
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, connection: data[0] });
+    } else {
+      const { data, error } = await supabase
+        .from("email_connections")
+        .insert({
+          user_id: user.id,
+          ...payload,
+          updated_at: undefined
+        })
+        .select();
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, connection: data[0] });
+    }
+  } catch (e: unknown) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Unknown error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = request.nextUrl;
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+
+    const { error } = await supabase
+      .from("email_connections")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (e: unknown) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Unknown error" },
+      { status: 500 }
+    );
+  }
+}

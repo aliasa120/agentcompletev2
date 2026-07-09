@@ -230,7 +230,7 @@ function ZapierSection({ onRefresh, onReloadAgent }: { onRefresh?: () => void; o
 
 // ── Tools Section Main ────────────────────────────────────────────────────────
 
-export function ToolsSection({ initialTab = "tools" }: { initialTab?: "composio" | "manual" | "tools" | "zapier" | "smithery" }) {
+export function ToolsSection({ initialTab = "tools", onRefresh }: { initialTab?: "composio" | "manual" | "tools" | "zapier" | "smithery"; onRefresh?: () => void }) {
   const [connections, setConnections] = useState<MCPConnection[]>([]);
   const [loadingConn, setLoadingConn] = useState(true);
   const [activeTab, setActiveTab] = useState<"composio" | "manual" | "tools" | "zapier" | "smithery">(initialTab);
@@ -238,7 +238,10 @@ export function ToolsSection({ initialTab = "tools" }: { initialTab?: "composio"
   useEffect(() => { setActiveTab(initialTab); }, [initialTab]);
 
   const reloadAgent = async () => {
-    try { await fetch("/api/reload-agent", { method: "POST" }); } catch (e) { console.error("Failed to reload agent settings", e); }
+    try { 
+      await fetch("/api/reload-agent", { method: "POST" }); 
+      onRefresh?.();
+    } catch (e) { console.error("Failed to reload agent settings", e); }
   };
 
   const fetchConnections = async (forceSync = false) => {
@@ -251,6 +254,7 @@ export function ToolsSection({ initialTab = "tools" }: { initialTab?: "composio"
       const cData = await cRes.json();
       const mData = await mRes.json();
       setConnections([...(cData.connections ?? []), ...(mData.connections ?? [])]);
+      onRefresh?.();
     } finally { setLoadingConn(false); }
   };
 
