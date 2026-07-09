@@ -77,6 +77,12 @@ def get_redis_client() -> Optional[Any]:
         if not redis_url:
             _redis_client = False
             return None
+        
+        # If running inside Docker and REDIS_URL is local, point to docker service name 'redis'
+        if os.path.exists("/.dockerenv"):
+            if "127.0.0.1" in redis_url or "localhost" in redis_url:
+                redis_url = "redis://redis:6379"
+
         try:
             _redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
             _redis_client.ping()

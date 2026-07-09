@@ -147,9 +147,17 @@ export async function GET() {
   // Query 9Router SQLite DB for disabled & custom models list
   let dbData = { disabled: {} as Record<string, string[]>, custom: {} as Record<string, { id: string, name: string }[]> };
   try {
-    const scriptPath = path.join(process.cwd(), "query_disabled_models.py");
-    const output = execSync("python " + JSON.stringify(scriptPath), { encoding: "utf8" });
-    dbData = JSON.parse(output.trim());
+    let hasPython = false;
+    try {
+      execSync("python --version", { stdio: "ignore" });
+      hasPython = true;
+    } catch (_) {}
+
+    if (hasPython) {
+      const scriptPath = path.join(process.cwd(), "query_disabled_models.py");
+      const output = execSync("python " + JSON.stringify(scriptPath), { encoding: "utf8" });
+      dbData = JSON.parse(output.trim());
+    }
   } catch (err) {
     console.error("Failed to query 9Router SQLite DB:", err);
   }

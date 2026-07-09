@@ -7,14 +7,24 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+import fs from "fs";
+
 let redisClient: Redis | null = null;
 
 function getRedisClient(): Redis | null {
   if (redisClient === null) {
-    const redisUrl = process.env.REDIS_URL;
+    let redisUrl = process.env.REDIS_URL;
     if (!redisUrl) {
       return null;
     }
+    
+    // If running inside Docker and REDIS_URL is local, point to docker service name 'redis'
+    if (fs.existsSync("/.dockerenv")) {
+      if (redisUrl.includes("127.0.0.1") || redisUrl.includes("localhost")) {
+        redisUrl = "redis://redis:6379";
+      }
+    }
+
     try {
       redisClient = new Redis(redisUrl, {
         maxRetriesPerRequest: 1,
