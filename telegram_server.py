@@ -44,7 +44,7 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from supabase import create_client, Client
+    from supabase import create_client, Client, ClientOptions
 except ImportError:
     logger.error("supabase is not installed. Run: uv pip install supabase")
     sys.exit(1)
@@ -66,8 +66,12 @@ if not SUPABASE_URL or not SUPABASE_ANON_KEY:
 
 # Initialize Supabase
 try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-    logger.info("Supabase client initialized successfully.")
+    supabase_options = ClientOptions(
+        storage_client_timeout=300,
+        postgrest_client_timeout=300
+    )
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY, options=supabase_options)
+    logger.info("Supabase client initialized successfully with 300s timeout options.")
 except Exception as e:
     logger.error(f"Failed to initialize Supabase client: {e}")
     sys.exit(1)
@@ -227,10 +231,101 @@ def format_markdown_tables(text: str) -> str:
     return "\n".join(processed_lines)
 
 
+def convert_markdown_to_html(text: str) -> str:
+    import html
+    import re
+    
+    # 1. Extract code blocks (```...```) to protect them
+    code_blocks = []
+    def save_code_block(match):
+        code_blocks.append(match.group(1))
+        return f"PLACEHOLDERCODEBLOCK{len(code_blocks)-1}"
+    
+    # Protect block code
+    text = re.sub(r'```(.*?)```', save_code_block, text, flags=re.DOTALL)
+    
+    # Protect inline code (`...`)
+    inline_codes = []
+    def save_inline_code(match):
+        inline_codes.append(match.group(1))
+        return f"PLACEHOLDERINLINECODE{len(inline_codes)-1}"
+    text = re.sub(r'`(.*?)`', save_inline_code, text)
+    
+    # 2. Escape HTML special characters for the rest of the text
+    text = html.escape(text)
+    
+    # 3. Format blockquotes & callouts line-by-line
+    lines = text.split("\n")
+    formatted_lines = []
+    in_quote = False
+    quote_content = []
+    
+    # Callout patterns
+    callout_map = {
+        "[!info]": "<b>ℹ️ Info:</b>",
+        "[!note]": "<b>📝 Note:</b>",
+        "[!tip]": "<b>💡 Tip:</b>",
+        "[!warning]": "<b>⚠️ Warning:</b>",
+        "[!important]": "<b>🚨 Important:</b>",
+        "[!caution]": "<b>🛑 Caution:</b>"
+    }
+    
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("&gt;"):  # Escaped ">" is "&gt;"
+            if not in_quote:
+                in_quote = True
+            quote_line = stripped[4:].strip()
+            # Check for callout tag
+            for tag, replacement in callout_map.items():
+                escaped_tag = html.escape(tag)
+                if quote_line.startswith(escaped_tag):
+                    quote_line = quote_line.replace(escaped_tag, replacement, 1)
+                    break
+            quote_content.append(quote_line)
+        else:
+            if in_quote:
+                formatted_lines.append(f"<blockquote>" + "\n".join(quote_content) + "</blockquote>")
+                quote_content = []
+                in_quote = False
+            formatted_lines.append(line)
+            
+    if in_quote:
+        formatted_lines.append(f"<blockquote>" + "\n".join(quote_content) + "</blockquote>")
+        
+    text = "\n".join(formatted_lines)
+    
+    # 4. Format other markdown elements:
+    # Bold
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r'__(.*?)__', r'<b>\1</b>', text)
+    # Italics
+    text = re.sub(r'(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)', r'<i>\1</i>', text)
+    text = re.sub(r'(?<!_)_(?!_)(.*?)(?<!_)_(?!_)', r'<i>\1</i>', text)
+    # Links
+    def replace_link(match):
+        link_text = match.group(1)
+        link_url = html.unescape(match.group(2))
+        return f'<a href="{link_url}">{link_text}</a>'
+    text = re.sub(r'\[(.*?)\]\((.*?)\)', replace_link, text)
+    
+    # 5. Restore Protected Code Blocks with HTML wrapping & escape
+    for i, code_content in enumerate(code_blocks):
+        escaped_code = html.escape(code_content)
+        text = text.replace(f"PLACEHOLDERCODEBLOCK{i}", f"<pre>{escaped_code}</pre>")
+        
+    for i, code_content in enumerate(inline_codes):
+        escaped_code = html.escape(code_content)
+        text = text.replace(f"PLACEHOLDERINLINECODE{i}", f"<code>{escaped_code}</code>")
+        
+    return text
+
+
 def format_agent_response(text: str) -> str:
     if not text:
         return ""
-    return format_markdown_tables(text)
+    tables_formatted = format_markdown_tables(text)
+    return convert_markdown_to_html(tables_formatted)
 
 
 # ── Telegram Bot Instance Wrapper ─────────────────────────────────────────────
@@ -273,7 +368,9 @@ class TelegramBotInstance:
 
     async def start(self):
         """Build and asynchronously run the bot polling."""
-        builder = Application.builder().token(self.token)
+        from telegram.request import HTTPXRequest
+        request_obj = HTTPXRequest(connect_timeout=300.0, read_timeout=300.0, write_timeout=300.0)
+        builder = Application.builder().token(self.token).request(request_obj)
 
         telegram_proxy = os.environ.get("TELEGRAM_PROXY", "").strip()
         if telegram_proxy:
@@ -286,7 +383,10 @@ class TelegramBotInstance:
         self.application.add_handler(CommandHandler("status", self.status_command))
         self.application.add_handler(CommandHandler("workflows", self.start_command))  # alias
         self.application.add_handler(CallbackQueryHandler(self.handle_workflow_selection, pattern=r"^select_wf:"))
-        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        self.application.add_handler(MessageHandler(
+            (filters.TEXT | filters.PHOTO | filters.VOICE | filters.AUDIO | filters.VIDEO | filters.Document.ALL) & ~filters.COMMAND,
+            self.handle_message
+        ))
 
         await self.application.initialize()
         await self.application.start()
@@ -460,7 +560,7 @@ class TelegramBotInstance:
             return
 
         chat_id = update.effective_chat.id
-        user_text = update.message.text
+        user_text = update.message.text or update.message.caption or ""
         session = self.active_sessions.get(chat_id)
 
         if not session:
@@ -493,6 +593,92 @@ class TelegramBotInstance:
         )
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
+        # Handle file downloads and uploads to Supabase
+        attachments = []
+        tg_file = None
+        mimetype = ""
+        filename = "file"
+        
+        if update.message.photo:
+            tg_file = await update.message.photo[-1].get_file(read_timeout=300, write_timeout=300, connect_timeout=300)
+            mimetype = "image/jpeg"
+            filename = "photo.jpg"
+        elif update.message.voice:
+            tg_file = await update.message.voice.get_file(read_timeout=300, write_timeout=300, connect_timeout=300)
+            mimetype = update.message.voice.mime_type or "audio/ogg"
+            filename = "voice.ogg"
+        elif update.message.audio:
+            tg_file = await update.message.audio.get_file(read_timeout=300, write_timeout=300, connect_timeout=300)
+            mimetype = update.message.audio.mime_type or "audio/mpeg"
+            filename = update.message.audio.file_name or "audio.mp3"
+        elif update.message.video:
+            tg_file = await update.message.video.get_file(read_timeout=300, write_timeout=300, connect_timeout=300)
+            mimetype = update.message.video.mime_type or "video/mp4"
+            filename = update.message.video.file_name or "video.mp4"
+        elif update.message.document:
+            tg_file = await update.message.document.get_file(read_timeout=300, write_timeout=300, connect_timeout=300)
+            mimetype = update.message.document.mime_type or "application/octet-stream"
+            filename = update.message.document.file_name or "document"
+            
+        if tg_file:
+            try:
+                logger.info(f"Downloading file {filename} from Telegram...")
+                file_bytes = await tg_file.download_as_bytearray(read_timeout=300, write_timeout=300, connect_timeout=300)
+                file_bytes = bytes(file_bytes)
+                logger.info(f"Downloaded {len(file_bytes)} bytes.")
+
+                # Upload to Supabase Storage
+                import uuid
+                file_ext = filename.split(".")[-1].lower() if "." in filename else ""
+                unique_filename = f"{uuid.uuid4()}.{file_ext}" if file_ext else str(uuid.uuid4())
+                
+                logger.info(f"Uploading file {filename} to Supabase as {unique_filename}...")
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    None,
+                    lambda: supabase.storage.from_("uploads").upload(
+                        path=unique_filename,
+                        file=file_bytes,
+                        file_options={"content-type": mimetype}
+                    )
+                )
+                
+                file_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/public/uploads/{unique_filename}"
+                logger.info(f"Uploaded to Supabase: {file_url}")
+                
+                # Map to correct attachment dictionary
+                lower_name = filename.lower()
+                if mimetype.startswith("image/") or lower_name.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+                    attachments.append({
+                        "type": "image_url",
+                        "image_url": {"url": file_url},
+                        "filename": filename
+                    })
+                elif mimetype.startswith("audio/") or lower_name.endswith((".mp3", ".wav", ".ogg", ".m4a", ".aac")):
+                    attachments.append({
+                        "type": "audio",
+                        "audio": file_url,
+                        "filename": filename,
+                        "mimeType": mimetype
+                    })
+                elif mimetype.startswith("video/") or lower_name.endswith((".mp4", ".webm", ".mov", ".avi")):
+                    attachments.append({
+                        "type": "video",
+                        "video": file_url,
+                        "filename": filename,
+                        "mimeType": mimetype
+                    })
+                else:
+                    attachments.append({
+                        "type": "file",
+                        "data": file_url,
+                        "filename": filename,
+                        "mimeType": mimetype
+                    })
+            except Exception as upload_err:
+                logger.error(f"Error handling Telegram attachment {filename}: {upload_err}")
+                await update.message.reply_text(f"⚠️ Failed to process file attachment `{filename}`: {upload_err}")
+
         # Verify thread still exists in LangGraph (recreate if missing)
         try:
             await langgraph_client.threads.get(thread_id)
@@ -513,7 +699,15 @@ class TelegramBotInstance:
                 except Exception as ce:
                     logger.error(f"Failed to recreate thread: {ce}")
 
-        input_data = {"messages": [{"role": "user", "content": user_text}]}
+        if attachments:
+            content_list = []
+            if user_text:
+                content_list.append({"type": "text", "text": user_text})
+            for att in attachments:
+                content_list.append(att)
+            input_data = {"messages": [{"role": "user", "content": content_list}]}
+        else:
+            input_data = {"messages": [{"role": "user", "content": user_text}]}
         config = {
             "configurable": {
                 "workflow_id": workflow_id,
@@ -524,27 +718,33 @@ class TelegramBotInstance:
         accumulated_text = ""
         last_edit_text = ""
         last_edit_time = 0.0
+        active_messages = {}
 
         try:
-            async for chunk in langgraph_client.runs.stream(
-                thread_id=thread_id,
-                assistant_id=RESOLVED_ASSISTANT_ID,
-                input=input_data,
-                config=config,
-                stream_mode="messages"
-            ):
-                if isinstance(chunk, dict):
-                    event_type = chunk.get("event")
-                    data = chunk.get("data", [])
-                else:
-                    event_type = getattr(chunk, "event", None)
-                    data = getattr(chunk, "data", [])
+            try:
+                async for chunk in langgraph_client.runs.stream(
+                    thread_id=thread_id,
+                    assistant_id=RESOLVED_ASSISTANT_ID,
+                    input=input_data,
+                    config=config,
+                    stream_mode="messages"
+                ):
+                    if isinstance(chunk, dict):
+                        event_type = chunk.get("event")
+                        data = chunk.get("data", [])
+                    else:
+                        event_type = getattr(chunk, "event", None)
+                        data = getattr(chunk, "data", [])
 
-                if event_type == "messages/partial":
-                    for msg in data:
-                        content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
-                        if content:
-                            accumulated_text += content
+                    if event_type == "messages/partial":
+                        for msg in data:
+                            msg_id = msg.get("id") if isinstance(msg, dict) else getattr(msg, "id", None)
+                            content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+                            if msg_id and content:
+                                active_messages[msg_id] = content
+                        
+                        accumulated_text = "".join(active_messages.values())
+                        if accumulated_text.strip():
                             now = time.time()
                             if now - last_edit_time > 1.5 and accumulated_text.strip() != last_edit_text.strip():
                                 try:
@@ -557,6 +757,67 @@ class TelegramBotInstance:
                                     last_edit_time = now
                                 except Exception:
                                     pass
+            except Exception as stream_err:
+                from langgraph_sdk.errors import NotFoundError
+                if isinstance(stream_err, NotFoundError) or "not found" in str(stream_err).lower():
+                    logger.warning("Thread not found on LangGraph. Creating a new thread and retrying...")
+                    new_thread = await langgraph_client.threads.create(
+                        metadata={
+                            "workflow_id": workflow_id,
+                            "user_id": self.user_id,
+                            "telegram_chat_id": chat_id
+                        }
+                    )
+                    thread_id = new_thread["thread_id"]
+                    session["thread_id"] = thread_id
+                    
+                    # Update binding in DB
+                    supabase.table("telegram_thread_bindings").upsert({
+                        "chat_id": chat_id,
+                        "workflow_id": workflow_id,
+                        "thread_id": thread_id,
+                        "updated_at": "now()"
+                    }, on_conflict="chat_id").execute()
+                    
+                    # Retry
+                    active_messages.clear()
+                    async for chunk in langgraph_client.runs.stream(
+                        thread_id=thread_id,
+                        assistant_id=RESOLVED_ASSISTANT_ID,
+                        input=input_data,
+                        config=config,
+                        stream_mode="messages"
+                    ):
+                        if isinstance(chunk, dict):
+                            event_type = chunk.get("event")
+                            data = chunk.get("data", [])
+                        else:
+                            event_type = getattr(chunk, "event", None)
+                            data = getattr(chunk, "data", [])
+
+                        if event_type == "messages/partial":
+                            for msg in data:
+                                msg_id = msg.get("id") if isinstance(msg, dict) else getattr(msg, "id", None)
+                                content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+                                if msg_id and content:
+                                    active_messages[msg_id] = content
+                            
+                            accumulated_text = "".join(active_messages.values())
+                            if accumulated_text.strip():
+                                now = time.time()
+                                if now - last_edit_time > 1.5 and accumulated_text.strip() != last_edit_text.strip():
+                                    try:
+                                        await context.bot.edit_message_text(
+                                            text=accumulated_text + " ▉",
+                                            chat_id=chat_id,
+                                            message_id=status_message.message_id
+                                        )
+                                        last_edit_text = accumulated_text
+                                        last_edit_time = now
+                                    except Exception:
+                                        pass
+                else:
+                    raise stream_err
 
             # Fallback: pull from thread state if no streaming content
             if not accumulated_text.strip():
@@ -580,11 +841,12 @@ class TelegramBotInstance:
                         text=formatted_response,
                         chat_id=chat_id,
                         message_id=status_message.message_id,
-                        parse_mode="Markdown"
+                        parse_mode="HTML"
                     )
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"Telegram HTML send failed: {e}. Retrying without format.")
                     await context.bot.edit_message_text(
-                        text=formatted_response,
+                        text=accumulated_text,
                         chat_id=chat_id,
                         message_id=status_message.message_id
                     )

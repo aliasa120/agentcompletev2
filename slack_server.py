@@ -31,7 +31,7 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from supabase import create_client, Client
+    from supabase import create_client, Client, ClientOptions
 except ImportError:
     logger.error("supabase is not installed. Run: uv pip install supabase")
     sys.exit(1)
@@ -51,8 +51,12 @@ if not SUPABASE_URL or not SUPABASE_ANON_KEY:
     sys.exit(1)
 
 try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-    logger.info("Supabase client initialized successfully.")
+    supabase_options = ClientOptions(
+        storage_client_timeout=300,
+        postgrest_client_timeout=300
+    )
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY, options=supabase_options)
+    logger.info("Supabase client initialized successfully with 300s timeout options.")
 except Exception as e:
     logger.error(f"Failed to initialize Supabase: {e}")
     sys.exit(1)
@@ -155,6 +159,72 @@ def format_markdown_tables(text: str) -> str:
     return "\n".join(processed_lines)
 
 
+def convert_markdown_to_slack(text: str) -> str:
+    import re
+    
+    # 1. Extract code blocks (```...```) to protect them
+    code_blocks = []
+    def save_code_block(match):
+        code_blocks.append(match.group(1))
+        return f"PLACEHOLDERCODEBLOCK{len(code_blocks)-1}"
+    
+    text = re.sub(r'```(.*?)```', save_code_block, text, flags=re.DOTALL)
+    
+    # Protect inline code (`...`)
+    inline_codes = []
+    def save_inline_code(match):
+        inline_codes.append(match.group(1))
+        return f"PLACEHOLDERINLINECODE{len(inline_codes)-1}"
+    text = re.sub(r'`(.*?)`', save_inline_code, text)
+    
+    # 2. Format blockquotes and callouts line-by-line
+    lines = text.split("\n")
+    formatted_lines = []
+    
+    callout_map = {
+        "[!info]": "ℹ️ *Info:*",
+        "[!note]": "📝 *Note:*",
+        "[!tip]": "💡 *Tip:*",
+        "[!warning]": "⚠️ *Warning:*",
+        "[!important]": "🚨 *Important:*",
+        "[!caution]": "🛑 *Caution:*"
+    }
+    
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith(">"):
+            quote_line = stripped[1:].strip()
+            # Check for callout tag
+            for tag, replacement in callout_map.items():
+                if quote_line.startswith(tag):
+                    quote_line = quote_line.replace(tag, replacement, 1)
+                    break
+            formatted_lines.append(f"> {quote_line}")
+        else:
+            formatted_lines.append(line)
+            
+    text = "\n".join(formatted_lines)
+    
+    # 3. Format other markdown elements:
+    # Bold
+    text = re.sub(r'\*\*(.*?)\*\*', r'*\1*', text)
+    text = re.sub(r'__(.*?)__', r'*\1*', text)
+    # Italics
+    text = re.sub(r'(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)', r'_\1_', text)
+    text = re.sub(r'(?<!_)_(?!_)(.*?)(?<!_)_(?!_)', r'_\1_', text)
+    # Links
+    text = re.sub(r'\[(.*?)\]\((.*?)\)', r'<\2|\1>', text)
+    
+    # 4. Restore Protected Code Blocks
+    for i, code_content in enumerate(code_blocks):
+        text = text.replace(f"PLACEHOLDERCODEBLOCK{i}", f"```{code_content}```")
+        
+    for i, code_content in enumerate(inline_codes):
+        text = text.replace(f"PLACEHOLDERINLINECODE{i}", f"`{code_content}`")
+        
+    return text
+
+
 class SlackBotInstance:
     def __init__(self, conn_id: str, bot_token: str, app_token: str, user_id: str):
         self.conn_id = conn_id
@@ -205,14 +275,17 @@ class SlackBotInstance:
             
             event = req.payload.get("event", {})
             event_type = event.get("type")
+            logger.info(f"Received Slack event: type={event_type}, subtype={event.get('subtype')}, bot_id={event.get('bot_id')}")
             
             # Filter out message edits, bot messages, etc.
-            if event_type == "message" and not event.get("bot_id") and not event.get("subtype"):
+            if event_type == "message" and not event.get("bot_id") and (not event.get("subtype") or event.get("subtype") == "file_share"):
                 channel_id = event.get("channel")
                 user_text = event.get("text", "").strip()
+                files = event.get("files", [])
+                thread_ts = event.get("thread_ts")
                 
-                if user_text:
-                    asyncio.create_task(self.process_message(channel_id, user_text))
+                if user_text or files:
+                    asyncio.create_task(self.process_message(channel_id, user_text, files, thread_ts=thread_ts))
 
         elif req.type == "interactive":
             # Acknowledge the request immediately
@@ -277,9 +350,10 @@ class SlackBotInstance:
             text=f"✅ *{workflow_name}* is ready!\nThread ID: `{thread_id}`"
         )
 
-    async def process_message(self, channel_id: str, text: str):
+    async def process_message(self, channel_id: str, text: str, files: list = None, thread_ts: str = None):
         global RESOLVED_ASSISTANT_ID
-        logger.info(f"Received text from channel {channel_id}: {repr(text)}")
+        text = text or ""
+        logger.info(f"Received text from channel {channel_id}: {repr(text)} (files: {len(files) if files else 0})")
         # 1. Handle commands
         if text.startswith("/start") or text.startswith("/workflows") or text.startswith("!start") or text.startswith("!workflows"):
             workflows = await self.get_enabled_workflows()
@@ -430,14 +504,101 @@ class SlackBotInstance:
         workflow_name = session["workflow_name"]
         thread_id = session["thread_id"]
 
+        # Handle file downloads and uploads to Supabase
+        attachments = []
+        if files:
+            import httpx
+            import uuid
+            async with httpx.AsyncClient(timeout=300.0) as http_client:
+                for f in files:
+                    url_private = f.get("url_private_download") or f.get("url_private")
+                    name = f.get("name", "file")
+                    mimetype = f.get("mimetype", "")
+                    if not url_private:
+                        continue
+                    
+                    try:
+                        logger.info(f"Downloading file {name} from Slack URL: {url_private}...")
+                        headers = {"Authorization": f"Bearer {self.bot_token}"}
+                        resp = await http_client.get(url_private, headers=headers, follow_redirects=True)
+                        resp.raise_for_status()
+                        file_bytes = resp.content
+                        logger.info(f"Downloaded {len(file_bytes)} bytes.")
+
+                        # Upload to Supabase Storage
+                        file_ext = name.split(".")[-1].lower() if "." in name else ""
+                        unique_filename = f"{uuid.uuid4()}.{file_ext}" if file_ext else str(uuid.uuid4())
+                        
+                        logger.info(f"Uploading file {name} to Supabase as {unique_filename}...")
+                        loop = asyncio.get_running_loop()
+                        await loop.run_in_executor(
+                            None,
+                            lambda: supabase.storage.from_("uploads").upload(
+                                path=unique_filename,
+                                file=file_bytes,
+                                file_options={"content-type": mimetype}
+                            )
+                        )
+                        
+                        file_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/public/uploads/{unique_filename}"
+                        logger.info(f"Uploaded to Supabase: {file_url}")
+                        
+                        # Map to correct attachment dictionary for preflight capability sniffer
+                        lower_name = name.lower()
+                        if mimetype.startswith("image/") or lower_name.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+                            attachments.append({
+                                "type": "image_url",
+                                "image_url": {"url": file_url},
+                                "filename": name
+                            })
+                        elif mimetype.startswith("audio/") or lower_name.endswith((".mp3", ".wav", ".ogg", ".m4a", ".aac")):
+                            attachments.append({
+                                "type": "audio",
+                                "audio": file_url,
+                                "filename": name,
+                                "mimeType": mimetype
+                            })
+                        elif mimetype.startswith("video/") or lower_name.endswith((".mp4", ".webm", ".mov", ".avi")):
+                            attachments.append({
+                                "type": "video",
+                                "video": file_url,
+                                "filename": name,
+                                "mimeType": mimetype
+                            })
+                        else:
+                            attachments.append({
+                                "type": "file",
+                                "data": file_url,
+                                "filename": name,
+                                "mimeType": mimetype
+                            })
+                    except Exception as upload_err:
+                        logger.error(f"Error handling Slack attachment {name}: {upload_err}")
+                        await self.web_client.chat_postMessage(
+                            channel=channel_id,
+                            text=f"⚠️ Failed to process file attachment `{name}`: {upload_err}"
+                        )
+
         # Post placeholder message
-        placeholder_resp = await self.web_client.chat_postMessage(
-            channel=channel_id,
-            text=f"🤖 _[{workflow_name}] Thinking..._"
-        )
+        post_args = {
+            "channel": channel_id,
+            "text": f"🤖 _[{workflow_name}] Thinking..._"
+        }
+        if thread_ts:
+            post_args["thread_ts"] = thread_ts
+            
+        placeholder_resp = await self.web_client.chat_postMessage(**post_args)
         msg_ts = placeholder_resp.get("ts")
 
-        input_data = {"messages": [{"role": "user", "content": text}]}
+        if attachments:
+            content_list = []
+            if text:
+                content_list.append({"type": "text", "text": text})
+            for att in attachments:
+                content_list.append(att)
+            input_data = {"messages": [{"role": "user", "content": content_list}]}
+        else:
+            input_data = {"messages": [{"role": "user", "content": text}]}
         config = {
             "configurable": {
                 "workflow_id": workflow_id,
@@ -448,41 +609,108 @@ class SlackBotInstance:
         accumulated_text = ""
         last_edit_text = ""
         last_edit_time = 0.0
+        active_messages = {}
 
         try:
-            async for chunk in langgraph_client.runs.stream(
-                thread_id=thread_id,
-                assistant_id=RESOLVED_ASSISTANT_ID,
-                input=input_data,
-                config=config,
-                stream_mode="messages"
-            ):
-                if isinstance(chunk, dict):
-                    event_type = chunk.get("event")
-                    data = chunk.get("data", [])
-                else:
-                    event_type = getattr(chunk, "event", None)
-                    data = getattr(chunk, "data", [])
+            try:
+                async for chunk in langgraph_client.runs.stream(
+                    thread_id=thread_id,
+                    assistant_id=RESOLVED_ASSISTANT_ID,
+                    input=input_data,
+                    config=config,
+                    stream_mode="messages"
+                ):
+                    if isinstance(chunk, dict):
+                        event_type = chunk.get("event")
+                        data = chunk.get("data", [])
+                    else:
+                        event_type = getattr(chunk, "event", None)
+                        data = getattr(chunk, "data", [])
 
-                logger.info(f"Stream event: {event_type}")
+                    logger.info(f"Stream event: {event_type}")
 
-                if event_type == "messages/partial":
-                    for msg in data:
-                        content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
-                        if content:
-                            accumulated_text += content
+                    if event_type == "messages/partial":
+                        for msg in data:
+                            msg_id = msg.get("id") if isinstance(msg, dict) else getattr(msg, "id", None)
+                            content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+                            if msg_id and content:
+                                active_messages[msg_id] = content
+                        
+                        accumulated_text = "".join(active_messages.values())
+                        if accumulated_text.strip():
                             now = time.time()
                             if now - last_edit_time > 2.0 and accumulated_text.strip() != last_edit_text.strip():
                                 try:
+                                    text_to_send = accumulated_text
+                                    if len(text_to_send) > 3000:
+                                        text_to_send = text_to_send[:3000] + "\n\n... (truncated)"
                                     await self.web_client.chat_update(
                                         channel=channel_id,
                                         ts=msg_ts,
-                                        text=accumulated_text + " ▉"
+                                        text=text_to_send + " ▉"
                                     )
                                     last_edit_text = accumulated_text
                                     last_edit_time = now
                                 except Exception as ue:
                                     logger.warning(f"Slack chat_update warning: {ue}")
+            except Exception as stream_err:
+                from langgraph_sdk.errors import NotFoundError
+                if isinstance(stream_err, NotFoundError) or "not found" in str(stream_err).lower():
+                    logger.warning("Thread not found on LangGraph. Creating a new thread and retrying...")
+                    new_thread = await langgraph_client.threads.create(
+                        metadata={
+                            "workflow_id": workflow_id,
+                            "user_id": self.user_id,
+                            "slack_channel_id": channel_id
+                        }
+                    )
+                    thread_id = new_thread["thread_id"]
+                    session["thread_id"] = thread_id
+                    
+                    # Retry
+                    active_messages.clear()
+                    async for chunk in langgraph_client.runs.stream(
+                        thread_id=thread_id,
+                        assistant_id=RESOLVED_ASSISTANT_ID,
+                        input=input_data,
+                        config=config,
+                        stream_mode="messages"
+                    ):
+                        if isinstance(chunk, dict):
+                            event_type = chunk.get("event")
+                            data = chunk.get("data", [])
+                        else:
+                            event_type = getattr(chunk, "event", None)
+                            data = getattr(chunk, "data", [])
+
+                        logger.info(f"Stream event: {event_type}")
+
+                        if event_type == "messages/partial":
+                            for msg in data:
+                                msg_id = msg.get("id") if isinstance(msg, dict) else getattr(msg, "id", None)
+                                content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+                                if msg_id and content:
+                                    active_messages[msg_id] = content
+                            
+                            accumulated_text = "".join(active_messages.values())
+                            if accumulated_text.strip():
+                                now = time.time()
+                                if now - last_edit_time > 2.0 and accumulated_text.strip() != last_edit_text.strip():
+                                    try:
+                                        text_to_send = accumulated_text
+                                        if len(text_to_send) > 3000:
+                                            text_to_send = text_to_send[:3000] + "\n\n... (truncated)"
+                                        await self.web_client.chat_update(
+                                            channel=channel_id,
+                                            ts=msg_ts,
+                                            text=text_to_send + " ▉"
+                                        )
+                                        last_edit_text = accumulated_text
+                                        last_edit_time = now
+                                    except Exception as ue:
+                                        logger.warning(f"Slack chat_update warning: {ue}")
+                else:
+                    raise stream_err
 
             # Fallback recovery
             if not accumulated_text.strip():
@@ -501,11 +729,36 @@ class SlackBotInstance:
 
             if accumulated_text.strip():
                 formatted_response = format_markdown_tables(accumulated_text)
-                await self.web_client.chat_update(
-                    channel=channel_id,
-                    ts=msg_ts,
-                    text=formatted_response
-                )
+                formatted_response = convert_markdown_to_slack(formatted_response)
+                if len(formatted_response) > 3000:
+                    parts = []
+                    temp = formatted_response
+                    while temp:
+                        parts.append(temp[:3000])
+                        temp = temp[3000:]
+                    
+                    # Update the main message with Part 1
+                    await self.web_client.chat_update(
+                        channel=channel_id,
+                        ts=msg_ts,
+                        text=parts[0] + f"\n\n*(Part 1/{len(parts)} - continued in thread)*"
+                    )
+                    
+                    # Post the rest of the parts as replies in the thread
+                    parent_ts = thread_ts or msg_ts
+                    for i, part in enumerate(parts[1:], start=2):
+                        suffix = f"\n\n*(Part {i}/{len(parts)} - continued in thread)*" if i < len(parts) else ""
+                        await self.web_client.chat_postMessage(
+                            channel=channel_id,
+                            thread_ts=parent_ts,
+                            text=part + suffix
+                        )
+                else:
+                    await self.web_client.chat_update(
+                        channel=channel_id,
+                        ts=msg_ts,
+                        text=formatted_response
+                    )
             else:
                 await self.web_client.chat_update(
                     channel=channel_id,
