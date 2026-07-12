@@ -42,19 +42,25 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
     const dataUrl = `data:${mimeType};base64,${base64Data}`;
 
     // Upload to local workspace so Python agent tools (like ls, glob) can see the file
-    try {
-      await fetch("/api/upload-workspace", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          filename: file.name,
-          base64: base64Data,
-        }),
-      });
-    } catch (err) {
-      console.warn("Failed to write uploaded file to local workspace:", err);
+    // Skip this for media files (images, audio, video) or files larger than 2MB to prevent HTTP 413 Payload Too Large errors
+    const isMedia = mimeType.startsWith("image/") || mimeType.startsWith("audio/") || mimeType.startsWith("video/");
+    const isLarge = file.size > 2 * 1024 * 1024;
+    
+    if (!isMedia && !isLarge) {
+      try {
+        await fetch("/api/upload-workspace", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            filename: file.name,
+            base64: base64Data,
+          }),
+        });
+      } catch (err) {
+        console.warn("Failed to write uploaded file to local workspace:", err);
+      }
     }
 
     // Upload to Supabase Storage Bucket ('uploads')
@@ -72,6 +78,7 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
 
       if (uploadError) {
         console.warn("Supabase Storage upload error:", uploadError);
+        throw new Error(uploadError.message);
       } else {
         const { data: { publicUrl } } = supabase.storage
           .from("uploads")
@@ -79,8 +86,13 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
         fileUrl = publicUrl;
         console.log("Successfully uploaded to Supabase Storage:", fileUrl);
       }
-    } catch (err) {
-      console.warn("Failed to upload file to Supabase Storage, using fallback dataUrl:", err);
+    } catch (err: any) {
+      console.warn("Failed to upload file to Supabase Storage:", err);
+      // If it's a media or large file, do NOT fall back to the giant base64 dataUrl, 
+      // as it will exceed request payload limits and crash/hang the chat interface.
+      if (isMedia || isLarge) {
+        throw new Error(`Failed to upload media file to storage: ${err?.message || err}`);
+      }
     }
 
     const content: any[] = [];
