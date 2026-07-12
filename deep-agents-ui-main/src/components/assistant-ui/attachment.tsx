@@ -113,15 +113,18 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
 };
 
 const AttachmentThumb: FC = () => {
+  const isImage = useAuiState((s) => s.attachment.type === "image");
   const src = useAttachmentSrc();
 
   return (
     <Avatar className="aui-attachment-tile-avatar h-full w-full rounded-none">
-      <AvatarImage
-        src={src}
-        alt="Attachment preview"
-        className="aui-attachment-tile-image object-cover"
-      />
+      {isImage && (
+        <AvatarImage
+          src={src}
+          alt="Attachment preview"
+          className="aui-attachment-tile-image object-cover"
+        />
+      )}
       <AvatarFallback>
         <FileText className="aui-attachment-tile-fallback-icon text-muted-foreground size-8" />
       </AvatarFallback>

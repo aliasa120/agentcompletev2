@@ -212,7 +212,7 @@ def cronjob(
         deliver: Where to send final outputs: 'local' (only logs, default), 'origin' (back to creation chat), or a platform:chat_id string.
         skills: List of skill names to load before running.
         model: Per-job LLM model override (e.g. 'google/gemini-2.5-flash').
-        provider: Per-job LLM provider override (e.g. 'vercel', 'ninerouter').
+        provider: Per-job LLM provider override (e.g. 'openrouter', 'gemini').
         base_url: Custom API endpoint URL override.
         script: Path to Python/Bash script for data retrieval or watchdog checks.
         no_agent: If True, execute the script directly and skip LLM agent execution entirely.

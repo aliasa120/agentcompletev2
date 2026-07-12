@@ -21,6 +21,7 @@ const BUILTIN_TOOLS = [
   { key: "load_tools", label: "Load Tools", desc: "Load parameters and schemas on demand" },
   { key: "call_tool", label: "Call Tool", desc: "Execute dynamically routed tools" },
   { key: "cronjob", label: "Cron Scheduler", desc: "Manage scheduled tasks and background ticks" },
+  { key: "analyze_attachment", label: "Analyze Attachment", desc: "Re-analyze previously uploaded audio, video, or PDF files" },
 ];
 
 export function BuiltinToolsPanel({ onReloadAgent }: { onReloadAgent?: () => void }) {

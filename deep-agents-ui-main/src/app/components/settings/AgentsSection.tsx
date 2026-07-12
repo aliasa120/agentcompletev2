@@ -76,6 +76,7 @@ const BUILTIN_TOOLS = [
   { tool_key: "load_tools",             tool_label: "Load Tools",            category: "Routing" },
   { tool_key: "call_tool",              tool_label: "Call Tool",             category: "Routing" },
   { tool_key: "cronjob",                tool_label: "Cron Scheduler",        category: "Routing" },
+  { tool_key: "analyze_attachment",      tool_label: "Analyze Attachment",    category: "Routing" },
 ];
 
 const TOOL_CATEGORIES = ["Search", "Reasoning", "Images", "Skills", "Output", "Routing"];
@@ -784,44 +785,8 @@ function AgentEditorCard({
   const [savedOk, setSavedOk] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const [dynamicModels, setDynamicModels] = useState<{ value: string; label: string; badge: string }[]>([]);
-  const [loadingModels, setLoadingModels] = useState(false);
-
-  useEffect(() => {
-    if (provider === "ninerouter") {
-      setLoadingModels(true);
-      fetch("/api/gateway/models")
-        .then(r => r.json())
-        .then(d => {
-          const fetched = (d.data || []).map((m: any) => ({
-            value: m.id,
-            label: m.name || m.id,
-            badge: "Dynamic"
-          }));
-          setDynamicModels(fetched.length ? fetched : [
-            { value: "kr/claude-sonnet-4.5", label: "Claude Sonnet 4.5 (Kiro)", badge: "Free" },
-            { value: "oc/auto", label: "OpenCode Auto", badge: "Free" }
-          ]);
-        })
-        .catch(err => {
-          console.error("Failed to load dynamic models:", err);
-          setDynamicModels([
-            { value: "kr/claude-sonnet-4.5", label: "Claude Sonnet 4.5 (Kiro)", badge: "Free" },
-            { value: "oc/auto", label: "OpenCode Auto", badge: "Free" }
-          ]);
-        })
-        .finally(() => setLoadingModels(false));
-    } else {
-      setDynamicModels([]);
-    }
-  }, [provider]);
-
-  const updatedProviderMetas = providerMetas.map(p => {
-    if (p.id === "ninerouter") {
-      return { ...p, defaultModels: dynamicModels, keySet: true };
-    }
-    return p;
-  });
+  const loadingModels = false;
+  const updatedProviderMetas = providerMetas;
 
   // Auto-correct provider & model selections if they are not in the loaded list
   useEffect(() => {

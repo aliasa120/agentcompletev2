@@ -57,36 +57,66 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
       console.warn("Failed to write uploaded file to local workspace:", err);
     }
 
+    // Upload to Supabase Storage Bucket ('uploads')
+    let fileUrl = dataUrl;
+    try {
+      const { supabase } = await import("@/lib/supabase");
+      const fileExt = file.name.split(".").pop();
+      const uniqueFilename = `${crypto.randomUUID()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from("uploads")
+        .upload(uniqueFilename, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.warn("Supabase Storage upload error:", uploadError);
+      } else {
+        const { data: { publicUrl } } = supabase.storage
+          .from("uploads")
+          .getPublicUrl(uniqueFilename);
+        fileUrl = publicUrl;
+        console.log("Successfully uploaded to Supabase Storage:", fileUrl);
+      }
+    } catch (err) {
+      console.warn("Failed to upload file to Supabase Storage, using fallback dataUrl:", err);
+    }
+
     const content: any[] = [];
     if (mimeType.startsWith("image/")) {
       content.push({
         type: "image_url",
-        image_url: { url: dataUrl }
+        image_url: { url: fileUrl }
       });
     } else if (mimeType.startsWith("audio/")) {
       const format = file.name.split(".").pop()?.toLowerCase() || "mp3";
       content.push({
         type: "input_audio",
         input_audio: {
-          data: base64Data,
+          data: "placeholder",
           format: format === "mp3" ? "mp3" : "wav"
         }
       });
       content.push({
-        type: "image_url",
-        image_url: { url: dataUrl }
+        type: "audio",
+        audio: fileUrl,
+        filename: file.name,
+        mimeType
       });
     } else if (mimeType.startsWith("video/")) {
       content.push({
-        type: "image_url",
-        image_url: { url: dataUrl }
+        type: "video",
+        video: fileUrl,
+        filename: file.name,
+        mimeType
       });
     } else {
       content.push({
         type: "file",
         filename: file.name,
         mimeType: mimeType,
-        data: dataUrl
+        data: fileUrl
       });
     }
 

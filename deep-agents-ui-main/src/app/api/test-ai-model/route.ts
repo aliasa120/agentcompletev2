@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import fs from "fs";
-import path from "path";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,86 +8,22 @@ const supabase = createClient(
 
 // GET /api/test-ai-model — returns env key status + custom models from DB
 export async function GET() {
-  let ninerouter_key = "";
+  const env_status: Record<string, boolean> = {};
+
+  let openrouter_key = "";
   try {
     const { data } = await supabase
       .from("agent_settings")
       .select("value")
-      .eq("key", "ninerouter_client_api_key")
+      .eq("key", "openrouter_client_api_key")
       .single();
     if (data?.value) {
-      ninerouter_key = data.value.trim();
+      openrouter_key = data.value.trim();
     }
   } catch {}
 
-  const env_status: Record<string, boolean> = {};
-
-  // Dynamically load all free/noAuth provider aliases from the 9Router source code folder
-  try {
-    const registryDir = path.join(process.cwd(), "../9router-master/open-sse/providers/registry");
-    if (fs.existsSync(registryDir)) {
-      const files = fs.readdirSync(registryDir);
-      for (const file of files) {
-        if (file.endsWith(".js") && file !== "index.js") {
-          const content = fs.readFileSync(path.join(registryDir, file), "utf8");
-          const idMatch = content.match(/id:\s*["']([^"']+)["']/);
-          const aliasMatch = content.match(/alias:\s*["']([^"']+)["']/);
-          const noAuthMatch = content.match(/noAuth:\s*true/);
-          if (idMatch && noAuthMatch) {
-            const alias = aliasMatch ? aliasMatch[1] : idMatch[1];
-            env_status[alias.toLowerCase()] = true;
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Failed to load noAuth providers in test-ai-model status check:", err);
-  }
-  
-  if (ninerouter_key) {
-    env_status["ninerouter"] = true;
-    try {
-      const nineRouterBaseUrl = process.env.NINE_ROUTER_INTERNAL_URL || process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "http://localhost:20128";
-      const res = await fetch(`${nineRouterBaseUrl}/v1/models`, {
-        headers: {
-          "Authorization": `Bearer ${ninerouter_key}`,
-          "x-9r-only-active": "true"
-        }
-      });
-      const d = await res.json();
-      const models = d.data || [];
-      for (const m of models) {
-        const parts = m.id.split("/");
-        if (parts.length > 1) {
-          env_status[parts[0].toLowerCase()] = true;
-        }
-      }
-    } catch (err) {
-      console.error("Failed to query 9Router inside test-ai-model status:", err);
-    }
-  }
-
-  const PROVIDER_STATUS_KEYS: Record<string, string> = {
-    vercel:      "AI_GATEWAY_API_KEY",
-    openai:      "OPENAI_API_KEY",
-    anthropic:   "ANTHROPIC_API_KEY",
-    google:      "GOOGLE_API_KEY",
-    openrouter:  "OPENROUTER_API_KEY",
-    litellm:     "LITELLM_API_KEY",
-    groq:        "GROQ_API_KEY",
-    together:    "TOGETHER_API_KEY",
-    nvidia:      "NVIDIA_API_KEY",
-    mimo:        "MIMO_API_KEY",
-    novita:      "NOVITA_API_KEY",
-    opencode:    "OPENCODE_API_KEY",
-    deepseek:    "DEEPSEEK_API_KEY",
-  };
-
-  for (const [pid, envKey] of Object.entries(PROVIDER_STATUS_KEYS)) {
-    if (env_status[pid] === undefined) {
-      env_status[pid] = !!(process.env[envKey]);
-    }
-  }
+  env_status["openrouter"] = !!(openrouter_key || process.env.OPENROUTER_API_KEY);
+  env_status["gemini"] = !!process.env.GEMINI_API_KEY;
 
   let custom_models: Record<string, string[]> = {};
   try {
@@ -129,50 +63,15 @@ export async function PATCH(req: Request) {
   }
 }
 
-// Provider → env var name (mirrors provider_registry.py)
-const PROVIDER_ENV_KEYS: Record<string, string> = {
-  vercel:     "AI_GATEWAY_API_KEY",
-  openai:     "OPENAI_API_KEY",
-  anthropic:  "ANTHROPIC_API_KEY",
-  google:     "GOOGLE_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  litellm:    "LITELLM_API_KEY",
-  groq:       "GROQ_API_KEY",
-  together:   "TOGETHER_API_KEY",
-  nvidia:     "NVIDIA_API_KEY",
-  mimo:       "MIMO_API_KEY",
-  novita:     "NOVITA_API_KEY",
-  opencode:   "OPENCODE_API_KEY",
-  deepseek:   "DEEPSEEK_API_KEY",
-};
-
-// Provider → base URL (mirrors provider_registry.py)
-const PROVIDER_BASE_URLS: Record<string, string> = {
-  vercel:     "https://ai-gateway.vercel.sh/v1",
-  openai:     "https://api.openai.com/v1",
-  anthropic:  "https://api.anthropic.com/v1",
-  google:     "https://generativelanguage.googleapis.com/v1beta/openai",
-  openrouter: "https://openrouter.ai/api/v1",
-  litellm:    "",
-  groq:       "https://api.groq.com/openai/v1",
-  together:   "https://api.together.xyz/v1",
-  nvidia:     "https://integrate.api.nvidia.com/v1",
-  mimo:       "https://api.xiaomimimo.com/v1",
-  novita:     "https://api.novita.ai/openai/v1",
-  opencode:   "https://opencode.ai/zen/v1",
-  deepseek:   "https://api.deepseek.com",
-};
-
+// POST /api/test-ai-model — execute test model call
 export async function POST(request: NextRequest) {
   let provider: string;
   let model: string;
-  let customBaseUrl: string;
 
   try {
     const body = await request.json();
-    provider      = (body.provider ?? "vercel").trim().toLowerCase();
+    provider      = (body.provider ?? "openrouter").trim().toLowerCase();
     model         = (body.model    ?? "").trim();
-    customBaseUrl = (body.baseUrl  ?? "").trim().replace(/\/+$/, "");
   } catch {
     return NextResponse.json({ success: false, error: "Invalid JSON body." }, { status: 400 });
   }
@@ -182,71 +81,70 @@ export async function POST(request: NextRequest) {
   }
 
   let resolvedKey = "";
-  let resolvedBase = "";
+  let endpoint = "";
+  let headers: Record<string, string> = { "Content-Type": "application/json" };
 
-  // Check if we have 9Router Client API Key configured
-  let ninerouter_key = "";
-  try {
-    const { data } = await supabase
-      .from("agent_settings")
-      .select("value")
-      .eq("key", "ninerouter_client_api_key")
-      .single();
-    if (data?.value) {
-      ninerouter_key = data.value.trim();
+  if (provider === "gemini") {
+    resolvedKey = process.env.GEMINI_API_KEY || "";
+    if (!resolvedKey) {
+      return NextResponse.json(
+        { success: false, error: "GEMINI_API_KEY environment variable is not set.", provider, model },
+        { status: 400 }
+      );
     }
-  } catch {}
-
-  if (ninerouter_key) {
-    resolvedKey = ninerouter_key;
-    const base = process.env.NINE_ROUTER_INTERNAL_URL || process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "http://localhost:20128";
-    resolvedBase = base.endsWith("/v1") ? base : `${base}/v1`;
+    // Gemini OpenAI compat endpoint
+    endpoint = `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`;
+    headers["Authorization"] = `Bearer ${resolvedKey}`;
   } else {
-    if (provider === "litellm") {
-      resolvedBase = customBaseUrl || process.env.LITELLM_BASE_URL || "http://47.82.164.26:4000";
-      if (!resolvedBase.endsWith("/v1")) resolvedBase = resolvedBase + "/v1";
-    } else {
-      resolvedBase = PROVIDER_BASE_URLS[provider] ?? "https://ai-gateway.vercel.sh/v1";
+    // OpenRouter
+    // Load OpenRouter key from DB
+    try {
+      const { data } = await supabase
+        .from("agent_settings")
+        .select("value")
+        .eq("key", "openrouter_client_api_key")
+        .single();
+      if (data?.value) {
+        resolvedKey = data.value.trim();
+      }
+    } catch {}
+
+    if (!resolvedKey) {
+      resolvedKey = process.env.OPENROUTER_API_KEY || "";
     }
-    const envKeyName = PROVIDER_ENV_KEYS[provider];
-    resolvedKey = envKeyName ? (process.env[envKeyName] ?? "") : "";
+
+    if (!resolvedKey) {
+      return NextResponse.json(
+        { success: false, error: "No OpenRouter Client API Key configured.", provider, model },
+        { status: 400 }
+      );
+    }
+
+    // Strip "openrouter/" prefix from model if present
+    if (model.startsWith("openrouter/")) {
+      model = model.slice("openrouter/".length);
+    }
+
+    endpoint = `https://openrouter.ai/api/v1/chat/completions`;
+    headers["Authorization"] = `Bearer ${resolvedKey}`;
+    headers["HTTP-Referer"] = "http://localhost:3000";
+    headers["X-Title"] = "AgentComplete";
   }
 
-  if (!resolvedKey) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: ninerouter_key 
-          ? "No client API key configured."
-          : `No API key set for provider "${provider}". Add ${PROVIDER_ENV_KEYS[provider] ?? "the env var"} to your .env file and restart the server.`,
-        provider,
-        model,
-      },
-      { status: 400 }
-    );
-  }
-
-  const endpoint = `${resolvedBase}/chat/completions`;
   const start = Date.now();
-
   console.log(`[test-ai-model] → ${provider} | ${model} | ${endpoint}`);
 
   try {
-    const timeoutMs = provider === "nvidia" ? 90_000 : 60_000;
     const resp = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${resolvedKey}`,
-        "Content-Type": "application/json",
-        ...(provider === "openrouter" ? { "HTTP-Referer": "http://localhost:3000" } : {}),
-      },
+      headers,
       body: JSON.stringify({
         model,
         messages: [{ role: "user", content: "Reply with one word: ok" }],
         max_tokens: 8,
         temperature: 0,
       }),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: AbortSignal.timeout(60_000),
     });
 
     const latency_ms = Date.now() - start;

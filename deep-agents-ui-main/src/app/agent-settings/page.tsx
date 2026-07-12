@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import {
   Zap, Home, Play, List, Activity, AlarmClock, CheckCircle2, XCircle,
   Search, FileText, ImageIcon, FlaskConical, Loader2, Bot, Cpu,
-  KeyRound, ChevronDown, ChevronUp, LogOut, User, Database, Settings, LayoutGrid
+  KeyRound, ChevronDown, ChevronUp, LogOut, User, Database, Settings, LayoutGrid,
+  Sparkles, Trash2
 } from "lucide-react";
 import { getConfig, saveConfig } from "@/lib/config";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
@@ -49,7 +50,10 @@ const AGENT_SETTING_KEYS = [
   "vector_indexing_provider", "vector_indexing_model",
   "super_indexing_enabled", "normal_indexing_enabled",
   "mem0_enabled", "mem0_extraction_provider", "mem0_extraction_model",
-  "ninerouter_client_api_key",
+  "openrouter_client_api_key",
+  "selected_ai_gateway",
+  "omni_provider",
+  "omni_model",
 ];
 
 const DEFAULTS: Record<string, string> = {
@@ -59,20 +63,23 @@ const DEFAULTS: Record<string, string> = {
   search_provider_primary: "linkup", search_provider_secondary: "parallel", search_max_retries: "3",
   extract_provider_primary: "tavily", extract_provider_secondary: "exa", extract_max_retries: "3",
   image_provider_primary: "kie", image_provider_secondary: "gemini_flash", image_max_retries: "2",
-  main_agent_provider: "vercel", main_agent_model: "xiaomi/mimo-v2.5-pro",
-  analyzer_provider: "vercel", analyzer_model: "moonshotai/kimi-k2.5",
-  feeder_provider: "vercel", feeder_model: "minimax/minimax-m2.7",
-  research_subagent_provider: "vercel", research_subagent_model: "xiaomi/mimo-v2.5-pro",
-  content_subagent_provider: "vercel", content_subagent_model: "xiaomi/mimo-v2.5-pro",
+  main_agent_provider: "openrouter", main_agent_model: "google/gemini-2.5-flash",
+  analyzer_provider: "openrouter", analyzer_model: "google/gemini-2.5-flash",
+  feeder_provider: "openrouter", feeder_model: "google/gemini-2.5-flash",
+  research_subagent_provider: "openrouter", research_subagent_model: "google/gemini-2.5-flash",
+  content_subagent_provider: "openrouter", content_subagent_model: "google/gemini-2.5-flash",
   custom_models: "{\"main_agent\":[],\"analyzer\":[],\"feeder\":[],\"research_subagent\":[],\"content_subagent\":[]}",
-  vector_indexing_provider: "vercel",
+  vector_indexing_provider: "openrouter",
   vector_indexing_model: "google/gemini-2.5-flash",
   super_indexing_enabled: "true",
   normal_indexing_enabled: "true",
   mem0_enabled: "false",
-  mem0_extraction_provider: "vercel",
-  mem0_extraction_model: "xiaomi/mimo-v2.5-pro",
-  ninerouter_client_api_key: "",
+  mem0_extraction_provider: "openrouter",
+  mem0_extraction_model: "google/gemini-2.5-flash",
+  openrouter_client_api_key: "",
+  selected_ai_gateway: "openrouter",
+  omni_provider: "openrouter",
+  omni_model: "google/gemini-2.5-flash",
 };
 
 const SEARCH_PROVIDERS = [
@@ -191,6 +198,19 @@ export default function AgentSettingsPage() {
   const [userEmail, setUserEmail] = useState<string>("");
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
 
+  // Gateway Models state
+  const [gatewayModels, setGatewayModels] = useState<any[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [modelSearch, setModelSearch] = useState("");
+
+  // OpenRouter Custom Models state
+  const [openRouterCustomModels, setOpenRouterCustomModels] = useState<string[]>([]);
+  const [newOpenRouterModel, setNewOpenRouterModel] = useState("");
+  const [loadingOpenRouterModels, setLoadingOpenRouterModels] = useState(false);
+  const [savingOpenRouterModels, setSavingOpenRouterModels] = useState(false);
+  const [providerMetas, setProviderMetas] = useState<any[]>([]);
+
   // ── SWR Data Fetching ──
   const fetcher = useCallback((url: string) => fetch(url).then(res => res.json()), []);
 
@@ -231,6 +251,79 @@ export default function AgentSettingsPage() {
       }
     }
   }, [section]);
+
+  useEffect(() => {
+    fetch("/api/provider-status")
+      .then(res => res.json())
+      .then(data => setProviderMetas(data.providers ?? []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const selectedGateway = settings.selected_ai_gateway || "openrouter";
+    if (selectedGateway === "openrouter") {
+      setLoadingOpenRouterModels(true);
+      fetch("/api/test-ai-model")
+        .then(r => r.json())
+        .then(data => {
+          const custom = data.custom_models?.openrouter ?? [];
+          setOpenRouterCustomModels(custom);
+        })
+        .catch(() => {})
+        .finally(() => setLoadingOpenRouterModels(false));
+    }
+  }, [settings.selected_ai_gateway]);
+
+  const handleAddOpenRouterModel = async () => {
+    let val = newOpenRouterModel.trim();
+    if (!val) return;
+    // Prefix if it doesn't start with openrouter/
+    if (!val.startsWith("openrouter/")) {
+      val = `openrouter/${val}`;
+    }
+    if (openRouterCustomModels.includes(val)) return;
+
+    const updated = [...openRouterCustomModels, val];
+    setOpenRouterCustomModels(updated);
+    setNewOpenRouterModel("");
+
+    setSavingOpenRouterModels(true);
+    try {
+      await fetch("/api/test-ai-model", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider_id: "openrouter",
+          custom_models: updated,
+        }),
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSavingOpenRouterModels(false);
+    }
+  };
+
+  const handleRemoveOpenRouterModel = async (modelToRemove: string) => {
+    const updated = openRouterCustomModels.filter(m => m !== modelToRemove);
+    setOpenRouterCustomModels(updated);
+
+    setSavingOpenRouterModels(true);
+    try {
+      await fetch("/api/test-ai-model", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider_id: "openrouter",
+          custom_models: updated,
+        }),
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSavingOpenRouterModels(false);
+    }
+  };
 
   const saveConfiguration = () => {
     if (!configUrl || !configAssistantId) {
@@ -556,6 +649,25 @@ export default function AgentSettingsPage() {
     setSettings(prev => ({ ...prev, [k]: v }));
   };
 
+  // Save a single key immediately to DB without waiting for full saveSettings state sync
+  const saveSingleSetting = async (key: string, value: string) => {
+    setSetting(key, value);
+    try {
+      const currentRows = AGENT_SETTING_KEYS.map(k => ({
+        key: k,
+        value: k === key ? value : (settings[k] ?? "")
+      }));
+      await fetch("/api/agent-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: currentRows })
+      });
+      mutateSettings();
+    } catch (e) {
+      console.error("Error saving setting:", e);
+    }
+  };
+
   const saveSettings = async () => {
     const interval = parseInt(settings.auto_trigger_interval_minutes || "", 10);
     if (settings.auto_trigger_enabled === "true" && (isNaN(interval) || interval < 1)) {
@@ -787,68 +899,198 @@ export default function AgentSettingsPage() {
     </div>
   );
 
-  const renderGatewayIframe = (pathSuffix: string) => {
-    let nineRouterBaseUrl = process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "http://localhost:20128";
-    if (typeof window !== "undefined") {
-      const hostname = window.location.hostname;
-      const protocol = window.location.protocol;
-      
-      if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.startsWith("192.168.")) {
-        nineRouterBaseUrl = "http://localhost:20128";
-      } else if (/^[0-9.]+$/.test(hostname)) {
-        nineRouterBaseUrl = `${protocol}//${hostname}:20128`;
+  const fetchGatewayModels = async () => {
+    setLoadingModels(true);
+    setModelsError(null);
+    try {
+      const res = await fetch("/api/gateway/models");
+      const d = await res.json();
+      if (d.error) {
+        setModelsError(d.error);
       } else {
-        nineRouterBaseUrl = `${protocol}//9router.${hostname}`;
+        setGatewayModels(d.data || []);
       }
+    } catch (err: any) {
+      setModelsError(err.message || "Failed to fetch models");
+    } finally {
+      setLoadingModels(false);
     }
-    const iframeUrl = `${nineRouterBaseUrl}${pathSuffix}`;
+  };
+
+  const renderGatewayPanel = (pathSuffix: string) => {
+    return (
+      <div className="space-y-6 flex flex-col">
+        {/* OpenRouter Setup & Model List */}
+        <div className="space-y-6 flex flex-col">
+          <div className="rounded-xl border bg-card p-5 shadow-sm space-y-4">
+            <div className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-primary" />
+              <h3 className="font-semibold text-sm">OpenRouter Credentials</h3>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Enter your OpenRouter Client API Key. Calls OpenRouter endpoints directly.
+            </p>
+            <div className="flex items-center gap-3">
+              <div className="flex-1 max-w-md">
+                <Input
+                  type="password"
+                  placeholder="OpenRouter API Key (e.g. sk-or-...)"
+                  value={settings.openrouter_client_api_key || ""}
+                  onChange={(e) => setSetting("openrouter_client_api_key", e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </div>
+              <Button
+                onClick={saveSettings}
+                disabled={saveStatus === "saving" || !isDirty}
+                size="sm"
+                className="h-9 font-semibold text-xs px-4"
+              >
+                {saveStatus === "saving" ? "Saving…" : "Save Key"}
+              </Button>
+              {saveStatus === "saved" && (
+                <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1">
+                  <CheckCircle2 className="h-4 w-4" /> Saved
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* OpenRouter Custom Models Card */}
+          <div className="rounded-xl border bg-card p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary animate-pulse" />
+                <h3 className="font-semibold text-sm">OpenRouter Custom Models</h3>
+              </div>
+              {savingOpenRouterModels && (
+                <span className="text-[10px] text-muted-foreground animate-pulse">Saving...</span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Paste the model ID (e.g. <code>tencent/hy3:free</code> or <code>xiaomi/mimo-v2.5</code>). These models will then appear in the AI Providers settings section under the <strong>openrouter</strong> provider.
+            </p>
+
+            {loadingOpenRouterModels ? (
+              <div className="p-4 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> Loading models...
+              </div>
+            ) : openRouterCustomModels.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {openRouterCustomModels.map((m) => (
+                  <div key={m} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-card/50 text-xs shadow-sm">
+                    <Sparkles className="h-3 w-3 text-primary shrink-0" />
+                    <p className="flex-1 text-[11px] font-mono truncate text-foreground">{m}</p>
+                    <button
+                      onClick={() => handleRemoveOpenRouterModel(m)}
+                      className="text-muted-foreground hover:text-rose-400 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">No custom OpenRouter models configured. Paste models below to add them.</p>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <Input
+                type="text"
+                value={newOpenRouterModel}
+                onChange={(e) => setNewOpenRouterModel(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddOpenRouterModel()}
+                placeholder="Enter model ID (e.g. tencent/hy3:free)"
+                className="flex-1 h-9 text-xs font-mono"
+              />
+              <Button
+                onClick={handleAddOpenRouterModel}
+                disabled={!newOpenRouterModel.trim()}
+                size="sm"
+                className="h-9 font-semibold text-xs px-4"
+              >
+                Add Model
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderOmniSettingsPanel = () => {
+    const selectedProviderMeta = providerMetas.find(p => p.id === (settings.omni_provider || "openrouter"));
+    const modelOptions = selectedProviderMeta?.defaultModels ?? [];
 
     return (
-      <div className="space-y-6 flex flex-col h-[calc(100vh-10rem)]">
-        {/* 9Router Client API Key Configuration Card */}
-        <div className="rounded-xl border bg-card p-5 shadow-sm space-y-4 shrink-0">
-          <div className="flex items-center gap-2">
-            <KeyRound className="h-4 w-4 text-primary" />
-            <h3 className="font-semibold text-sm">9Router Client Credentials</h3>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Enter your 9Router Client API Key below. This key will be used to securely authenticate your LLM requests routed through the 9Router gateway.
-          </p>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 max-w-md">
-              <Input
-                type="password"
-                placeholder="9Router Client API Key (e.g. 9r_...)"
-                value={settings.ninerouter_client_api_key || ""}
-                onChange={(e) => setSetting("ninerouter_client_api_key", e.target.value)}
-                className="h-9 text-xs animate-none"
-              />
-            </div>
-            <Button
-              onClick={saveSettings}
-              disabled={saveStatus === "saving" || !isDirty}
-              size="sm"
-              className="h-9 font-semibold text-xs px-4"
+      <div className="rounded-xl border bg-card p-6 shadow-sm space-y-5">
+        <div className="flex items-center gap-2">
+          <Cpu className="h-5 w-5 text-primary animate-pulse" />
+          <h2 className="font-bold text-lg">Omni Analyzer Settings</h2>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Configure which Omni model will process incompatible attachments (like audio, video, PDF) during preflight normalization.
+        </p>
+        <div className="grid grid-cols-2 gap-4 pt-2">
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-muted-foreground">Omni Provider</label>
+            <select
+              value={settings.omni_provider || "openrouter"}
+              onChange={(e) => {
+                setSetting("omni_provider", e.target.value);
+                const meta = providerMetas.find(p => p.id === e.target.value);
+                const defaults = meta?.defaultModels ?? [];
+                if (defaults.length > 0) {
+                  setSetting("omni_model", defaults[0].value);
+                } else {
+                  setSetting("omni_model", "");
+                }
+              }}
+              className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             >
-              {saveStatus === "saving" ? "Saving…" : "Save Key"}
-            </Button>
-            {saveStatus === "saved" && (
-              <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1">
-                <CheckCircle2 className="h-4 w-4" /> Saved
-              </span>
+              <option value="openrouter">OpenRouter Gateway</option>
+              <option value="gemini">Gemini Direct API</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-muted-foreground">Omni Model ID</label>
+            {modelOptions.length > 0 ? (
+              <select
+                value={settings.omni_model || ""}
+                onChange={(e) => setSetting("omni_model", e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="" disabled>Select a model...</option>
+                {modelOptions.map((m: any) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label} ({m.badge})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <Input
+                placeholder="e.g. xiaomi/mimo-v2.5"
+                value={settings.omni_model || ""}
+                onChange={(e) => setSetting("omni_model", e.target.value)}
+                className="h-9 text-xs"
+              />
             )}
           </div>
         </div>
-
-        {/* Unified 9Router Dashboard Iframe */}
-        <div className="flex-1 border rounded-xl overflow-hidden bg-card/45 shadow-sm relative min-h-[480px]">
-          <iframe
-            src={iframeUrl}
-            className="w-full h-full border-0 absolute inset-0 bg-transparent"
-            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
-            allow="clipboard-write; clipboard-read"
-            title="9Router Gateway Interface"
-          />
+        <div className="flex justify-end pt-4 border-t flex items-center gap-3">
+          {saveStatus === "saved" && (
+            <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1">
+              <CheckCircle2 className="h-4 w-4" /> Saved
+            </span>
+          )}
+          <Button
+            onClick={saveSettings}
+            disabled={saveStatus === "saving" || !isDirty}
+            size="sm"
+            className="font-semibold text-xs px-6"
+          >
+            {saveStatus === "saving" ? "Saving settings…" : "Save Omni Config"}
+          </Button>
         </div>
       </div>
     );
@@ -862,6 +1104,7 @@ export default function AgentSettingsPage() {
       case "tools-manual": return <ToolsSection initialTab="manual" onRefresh={refreshSettingsAndTools} />;
       case "tools-zapier": return <ToolsSection initialTab="zapier" onRefresh={refreshSettingsAndTools} />;
       case "tools-smithery": return <ToolsSection initialTab="smithery" onRefresh={refreshSettingsAndTools} />;
+      case "omni-settings": return renderOmniSettingsPanel();
       case "providers": return (
         <ProviderOrderingSection
           globalSettings={settings}
@@ -887,14 +1130,7 @@ export default function AgentSettingsPage() {
       );
       case "telegram-bots": return <TelegramBotsSection />;
       case "scheduled-tasks": return <ScheduledTasksSection />;
-      case "gateway":
-      case "gateway-dashboard": return renderGatewayIframe("/dashboard");
-      case "gateway-providers": return renderGatewayIframe("/dashboard/providers");
-      case "gateway-combos": return renderGatewayIframe("/dashboard/combos");
-      case "gateway-quota": return renderGatewayIframe("/dashboard/quota");
-      case "gateway-token-saver": return renderGatewayIframe("/dashboard/token-saver");
-      case "gateway-usage": return renderGatewayIframe("/dashboard/usage");
-      case "gateway-console-log": return renderGatewayIframe("/dashboard/console-log");
+      case "gateway": return renderGatewayPanel("");
       case "additional-features": return <AdditionalFeaturesSection />;
       default:          return null;
     }

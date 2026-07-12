@@ -229,12 +229,12 @@ export function LangGraphRuntimeProvider({
           safeContent = rawContent.map((part: any) => {
             if (!part) return null;
             // reasoning parts without a summary array crash contentToParts line 35.
-            // Convert them to "thinking" which the library handles safely.
+            // Provide an empty summary array to prevent this.
             if (part.type === "reasoning" && !Array.isArray(part.summary)) {
               return {
                 ...part,
-                type: "thinking",
-                thinking: part.text || part.thinking || "",
+                text: part.text || part.thinking || "",
+                summary: [],
               };
             }
             return part;
@@ -253,6 +253,33 @@ export function LangGraphRuntimeProvider({
 
         const converted = convertLangChainBaseMessage(safeMessage, metadata) as any;
 
+        // Inject reasoning_content as a 'reasoning' block at the beginning of assistant message
+        if (converted && converted.role === "assistant") {
+          const reasoningContent = message.additional_kwargs?.reasoning_content;
+          if (reasoningContent) {
+            const contentParts = typeof converted.content === "string"
+              ? [{ type: "text" as const, text: converted.content }]
+              : [...(converted.content || [])];
+
+            if (!contentParts.some((p: any) => p.type === "reasoning")) {
+              contentParts.unshift({
+                type: "reasoning" as const,
+                text: reasoningContent,
+                summary: [],
+              });
+              converted.content = contentParts;
+            } else {
+              // Update existing reasoning part
+              converted.content = contentParts.map((p: any) => {
+                if (p.type === "reasoning") {
+                  return { ...p, text: reasoningContent };
+                }
+                return p;
+              });
+            }
+          }
+        }
+
         // Ensure converted content is always a valid array or string
         if (converted && converted.role !== "tool") {
           if (!Array.isArray(converted.content) && typeof converted.content !== "string") {
@@ -261,6 +288,25 @@ export function LangGraphRuntimeProvider({
         }
 
         if (converted?.role === "user") {
+          // Filter out duplicate rendering of non-image file attachments in content
+          if (Array.isArray(converted.content)) {
+            converted.content = converted.content.filter((part: any) => {
+              if (part.type === "image") {
+                const url = part.image || "";
+                if (url.startsWith("data:") && !url.startsWith("data:image/")) {
+                  return false; // strip audio/video/pdf from the content block
+                }
+              }
+              if (part.type === "image_url") {
+                const url = part.image_url?.url || "";
+                if (url.startsWith("data:") && !url.startsWith("data:image/")) {
+                  return false; // strip audio/video/pdf from the content block
+                }
+              }
+              return true;
+            });
+          }
+
           const msgMeta = (message as any).additional_kwargs?.metadata;
           if (msgMeta?.attachments) {
             return {
@@ -298,7 +344,7 @@ export function LangGraphRuntimeProvider({
       const parts = [...msg.content, ...(msg.attachments?.flatMap((a: any) => a.content) ?? [])];
       let content: string | any[];
       const textParts = parts.filter((p: any) => p.type === "text");
-      const hasNonText = parts.some((p: any) => p.type === "image" || p.type === "image_url" || p.type === "file");
+      const hasNonText = parts.some((p: any) => p.type === "image" || p.type === "image_url" || p.type === "file" || p.type === "audio" || p.type === "video");
 
       if (!hasNonText && textParts.length === 1) {
         content = textParts[0].text;
@@ -307,7 +353,16 @@ export function LangGraphRuntimeProvider({
           if (p.type === "text") return { type: "text" as const, text: p.text };
           if (p.type === "image") return { type: "image_url" as const, image_url: { url: p.image } };
           if (p.type === "image_url") return { type: "image_url" as const, image_url: p.image_url };
+          if (p.type === "audio") return { type: "image_url" as const, image_url: { url: p.audio } };
+          if (p.type === "video") return { type: "image_url" as const, image_url: { url: p.video } };
+          if (p.type === "input_audio") return p;
           if (p.type === "file") {
+            if (p.mimeType === "application/pdf" || p.filename?.endsWith(".pdf")) {
+              return {
+                type: "image_url" as const,
+                image_url: { url: p.data }
+              };
+            }
             try {
               const base64Str = p.data.split(",")[1];
               const isTextFile = p.mimeType.startsWith("text/") || 
@@ -362,12 +417,39 @@ export function LangGraphRuntimeProvider({
           }
         }
       };
+
+      let optimisticContent: string | any[];
+      if (!hasNonText && textParts.length === 1) {
+        optimisticContent = textParts[0].text;
+      } else {
+        const cleanContent = parts.map((p: any) => {
+          if (p.type === "text") return { type: "text" as const, text: p.text };
+          if (p.type === "image") return { type: "image_url" as const, image_url: { url: p.image } };
+          if (p.type === "image_url") {
+            const url = p.image_url?.url || "";
+            if (url.startsWith("data:image/") || !url.startsWith("data:")) {
+              return { type: "image_url" as const, image_url: p.image_url };
+            }
+          }
+          return null;
+        }).filter(Boolean);
+
+        optimisticContent = cleanContent.length === 1 && cleanContent[0]?.type === "text"
+          ? cleanContent[0].text
+          : cleanContent;
+      }
+
+      const optimisticMessage = {
+        ...newMessage,
+        content: optimisticContent,
+      };
+
       await stream.submit(
         { messages: [newMessage] },
         {
           optimisticValues: (prev: any) => ({
             ...prev,
-            messages: [...(prev.messages ?? []), newMessage],
+            messages: [...(prev.messages ?? []), optimisticMessage],
           }),
           streamSubgraphs: true,
           metadata: {
@@ -478,6 +560,32 @@ export function LangGraphRuntimeProvider({
         }
       };
 
+      let optimisticContent: string | any[];
+      if (!hasNonText && textParts.length === 1) {
+        optimisticContent = textParts[0].text;
+      } else {
+        const cleanContent = parts.map((p: any) => {
+          if (p.type === "text") return { type: "text" as const, text: p.text };
+          if (p.type === "image") return { type: "image_url" as const, image_url: { url: p.image } };
+          if (p.type === "image_url") {
+            const url = p.image_url?.url || "";
+            if (url.startsWith("data:image/") || !url.startsWith("data:")) {
+              return { type: "image_url" as const, image_url: p.image_url };
+            }
+          }
+          return null;
+        }).filter(Boolean);
+
+        optimisticContent = cleanContent.length === 1 && cleanContent[0]?.type === "text"
+          ? cleanContent[0].text
+          : cleanContent;
+      }
+
+      const optimisticMessage = {
+        ...newMessage,
+        content: optimisticContent,
+      };
+
       await stream.submit(
         { messages: [newMessage] },
         {
@@ -489,7 +597,7 @@ export function LangGraphRuntimeProvider({
             });
             return {
               ...prev,
-              messages: [...filteredMsgs, newMessage],
+              messages: [...filteredMsgs, optimisticMessage],
             };
           },
           streamSubgraphs: true,

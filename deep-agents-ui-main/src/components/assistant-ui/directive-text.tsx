@@ -24,10 +24,16 @@ export function createDirectiveText(
   const fallbackIcon = options?.fallbackIcon;
 
   const Component: TextMessagePartComponent = ({ text }) => {
-    const segments = formatter.parse(text);
+    let cleanText = text;
+    const systemNoteIndex = text.indexOf("[System Note:");
+    if (systemNoteIndex !== -1) {
+      cleanText = text.substring(0, systemNoteIndex).trim();
+    }
+
+    const segments = formatter.parse(cleanText);
 
     if (segments.length === 1 && segments[0]!.kind === "text") {
-      return <>{text}</>;
+      return <>{cleanText}</>;
     }
 
     return (
