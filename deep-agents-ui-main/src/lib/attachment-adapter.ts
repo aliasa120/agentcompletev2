@@ -4,9 +4,10 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
   accept = "*";
 
   async add({ file }: { file: File }): Promise<PendingAttachment> {
-    const isImage = file.type.startsWith("image/");
-    const isAudio = file.type.startsWith("audio/");
-    const isVideo = file.type.startsWith("video/");
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    const isImage = file.type.startsWith("image/") || ["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp"].includes(ext);
+    const isAudio = file.type.startsWith("audio/") || ["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "amr", "wma", "aiff", "caf"].includes(ext);
+    const isVideo = file.type.startsWith("video/") || ["mp4", "webm", "mov", "avi", "mkv", "flv", "wmv", "3gp", "mpeg", "mpg"].includes(ext);
     
     return {
       id: crypto.randomUUID(),
@@ -20,12 +21,19 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
   async send(attachment: PendingAttachment): Promise<CompleteAttachment> {
     const file = attachment.file;
     let mimeType = file.type;
-    if (!mimeType) {
-      const ext = file.name.split(".").pop()?.toLowerCase();
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+
+    if (!mimeType || mimeType === "application/octet-stream") {
       if (ext === "pdf") mimeType = "application/pdf";
-      else if (["mp3", "wav", "ogg", "m4a", "aac"].includes(ext || "")) mimeType = `audio/${ext === "mp3" ? "mpeg" : ext}`;
-      else if (["mp4", "webm", "mov", "avi"].includes(ext || "")) mimeType = `video/${ext === "mov" ? "quicktime" : ext}`;
-      else mimeType = "application/octet-stream";
+      else if (["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "amr", "wma", "aiff", "caf"].includes(ext)) {
+        mimeType = `audio/${ext === "mp3" ? "mpeg" : ext === "m4a" ? "x-m4a" : ext}`;
+      } else if (["mp4", "webm", "mov", "avi", "mkv", "flv", "wmv", "3gp", "mpeg", "mpg"].includes(ext)) {
+        mimeType = `video/${ext === "mov" ? "quicktime" : ext === "avi" ? "x-msvideo" : ext}`;
+      } else if (["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp"].includes(ext)) {
+        mimeType = `image/${ext === "jpg" ? "jpeg" : ext}`;
+      } else {
+        mimeType = "application/octet-stream";
+      }
     }
 
     const base64Data = await new Promise<string>((resolve, reject) => {
