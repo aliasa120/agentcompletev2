@@ -597,6 +597,8 @@ const Composer: FC<{ onStartAgent?: () => void }> = ({ onStartAgent }) => {
 };
 
 const ComposerAction: FC<{ onStartAgent?: () => void }> = ({ onStartAgent }) => {
+  const isUploading = useAuiState((s) => s.composer.attachments.some((a) => a.status.type === "running"));
+
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
       <div className="flex items-center gap-1">
@@ -614,6 +616,7 @@ const ComposerAction: FC<{ onStartAgent?: () => void }> = ({ onStartAgent }) => 
                 size="icon"
                 className="aui-composer-dictate size-7 rounded-full"
                 aria-label="Start voice input"
+                disabled={isUploading}
               >
                 <MicIcon className="aui-composer-dictate-icon size-4" />
               </TooltipIconButton>
@@ -647,6 +650,7 @@ const ComposerAction: FC<{ onStartAgent?: () => void }> = ({ onStartAgent }) => 
                 className="size-7 rounded-full text-primary border-primary bg-primary/5 hover:bg-primary/10 flex items-center justify-center"
                 onClick={onStartAgent}
                 aria-label="Start Agent"
+                disabled={isUploading}
               >
                 <Play className="size-3 fill-current" />
               </TooltipIconButton>
@@ -660,6 +664,7 @@ const ComposerAction: FC<{ onStartAgent?: () => void }> = ({ onStartAgent }) => 
                 size="icon"
                 className="aui-composer-send size-7 rounded-full"
                 aria-label="Send message"
+                disabled={isUploading}
               >
                 <ArrowUpIcon className="aui-composer-send-icon size-4.5" />
               </TooltipIconButton>
