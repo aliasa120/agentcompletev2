@@ -228,7 +228,7 @@ export default function FeederSettingsPage() {
             setIsDirty(false);
 
             // Populate Feeder Agent LLM settings
-            const agentLlm: Record<string, string> = { feeder_provider: "ninerouter", feeder_model: "oc/auto" };
+            const agentLlm: Record<string, string> = { feeder_provider: "openrouter", feeder_model: "google/gemini-2.5-flash" };
             for (const row of agentSettRes.data ?? []) {
                 if (row.key === "feeder_provider" || row.key === "feeder_model") {
                     agentLlm[row.key] = row.value ?? "";
@@ -381,8 +381,8 @@ export default function FeederSettingsPage() {
         setAgentSaveStatus("saving");
         try {
             const rows = [
-                { key: "feeder_provider", value: agentSettings.feeder_provider || "ninerouter", updated_at: new Date().toISOString() },
-                { key: "feeder_model", value: agentSettings.feeder_model || "oc/auto", updated_at: new Date().toISOString() },
+                { key: "feeder_provider", value: agentSettings.feeder_provider || "openrouter", updated_at: new Date().toISOString() },
+                { key: "feeder_model", value: agentSettings.feeder_model || "google/gemini-2.5-flash", updated_at: new Date().toISOString() },
             ];
             const { error } = await supabase.from("agent_settings").upsert(rows, { onConflict: "key" });
             if (error) {
@@ -439,7 +439,7 @@ export default function FeederSettingsPage() {
     };
 
     const autoEnabled = settings.feeder_auto_trigger_enabled === "true";
-    const selectedProvider = agentSettings.feeder_provider || "ninerouter";
+    const selectedProvider = agentSettings.feeder_provider || "openrouter";
     const providerMeta = providerMetas.find(p => p.id === selectedProvider) || providerMetas[0];
     const models = providerMeta?.defaultModels || [];
 

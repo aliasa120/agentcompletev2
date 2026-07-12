@@ -89,7 +89,7 @@ import {
   type DirectiveChipProps,
 } from "@assistant-ui/react-lexical";
 import Image from "next/image";
-import { useState, useEffect, useRef, type FC, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, type FC, type ReactNode } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Tooltip,
@@ -696,6 +696,29 @@ const MessageError: FC = () => {
 
 const AssistantWorkingIndicator: FC = () => {
   const isEmpty = useAuiState((s) => s.message.content.length === 0);
+  
+  const statusText = useAuiState((s) => {
+    const messages = s.thread?.messages || [];
+    const userMessages = messages.filter((m: any) => m.role === "user");
+    if (userMessages.length === 0) return "Agent is thinking";
+    
+    const lastUserMsg = userMessages[userMessages.length - 1];
+    const attachments = lastUserMsg.attachments || [];
+    
+    if (attachments.length > 0) {
+      const hasAudio = attachments.some((att: any) => att.type === "audio" || att.contentType?.startsWith("audio/") || att.name?.endsWith(".mp3") || att.name?.endsWith(".wav"));
+      const hasVideo = attachments.some((att: any) => att.type === "video" || att.contentType?.startsWith("video/") || att.name?.endsWith(".mp4"));
+      const hasPdf = attachments.some((att: any) => att.type === "document" || att.contentType?.startsWith("application/pdf") || att.name?.endsWith(".pdf"));
+      
+      if (hasAudio) return "Agent is listening...";
+      if (hasVideo) return "Agent is seeing...";
+      if (hasPdf) return "Agent is reading...";
+      return "Agent is processing...";
+    }
+    
+    return "Agent is thinking";
+  });
+
   if (isEmpty) {
     return (
       <span
@@ -703,7 +726,7 @@ const AssistantWorkingIndicator: FC = () => {
         className="text-muted-foreground inline-flex items-center gap-2 align-middle"
       >
         <DotMatrix state="connecting" aria-hidden />
-        <span className="text-sm">Connecting</span>
+        <span className="text-sm font-medium animate-pulse">{statusText}</span>
       </span>
     );
   }
@@ -750,6 +773,16 @@ const AssistantMessage: FC = () => {
   const ACTION_BAR_PT = "pt-1.5";
   const ACTION_BAR_HEIGHT = `-mb-[1.875rem] min-h-[1.875rem] ${ACTION_BAR_PT}`;
 
+  const handleGroupBy = useCallback((part: any) => {
+    if (part.type === "reasoning" || part.type === "thinking") {
+      return ["group-chainOfThought", "group-reasoning"] as const;
+    }
+    if (part.type === "tool-call") {
+      return ["group-chainOfThought", "group-tool"] as const;
+    }
+    return null;
+  }, []);
+
   return (
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
@@ -761,26 +794,22 @@ const AssistantMessage: FC = () => {
         className="text-foreground px-2 text-sm leading-relaxed wrap-break-word"
       >
         <MessagePrimitive.GroupedParts
-          groupBy={groupPartByType({
-            reasoning: ["group-chainOfThought", "group-reasoning"],
-            "tool-call": ["group-chainOfThought", "group-tool"],
-            "standalone-tool-call": [],
-          })}
+          groupBy={handleGroupBy}
         >
           {({ part, children }) => {
-            switch (part.type) {
+            switch (part.type as any) {
               case "group-chainOfThought":
                 return <div data-slot="aui_chain-of-thought">{children}</div>;
               case "group-tool":
                 return (
-                  <AutoCollapsibleToolGroup part={part}>
+                  <AutoCollapsibleToolGroup part={part as any}>
                     {children}
                   </AutoCollapsibleToolGroup>
                 );
               case "group-reasoning": {
-                const running = part.status.type === "running";
+                const running = (part as any).status?.type === "running";
                 return (
-                  <ReasoningRoot defaultOpen={running}>
+                  <ReasoningRoot defaultOpen={running} streaming={running}>
                     <ReasoningTrigger active={running} />
                     <ReasoningContent aria-busy={running}>
                       <ReasoningText>{children}</ReasoningText>
@@ -791,13 +820,15 @@ const AssistantMessage: FC = () => {
               case "text":
                 return <MarkdownText />;
               case "reasoning":
-                return <Reasoning {...part} />;
+                return <Reasoning {...(part as any)} />;
+              case "thinking":
+                return <span className="whitespace-pre-wrap">{(part as any).thinking}</span>;
               case "tool-call":
-                return part.toolUI ?? <ToolFallback {...part} />;
+                return (part as any).toolUI ?? <ToolFallback {...(part as any)} />;
               case "indicator":
                 return <AssistantWorkingIndicator />;
               case "data":
-                return part.dataRendererUI;
+                return (part as any).dataRendererUI;
               default:
                 return null;
             }

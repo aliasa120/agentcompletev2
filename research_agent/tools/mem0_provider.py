@@ -40,7 +40,7 @@ def get_mem0_client() -> Optional[Any]:
             os.environ.pop(k, None)
 
     # Get LLM configuration via unified provider_engine resolver
-    provider = settings.get("mem0_extraction_provider", "ninerouter").strip().lower()
+    provider = settings.get("mem0_extraction_provider", "openrouter").strip().lower()
     from .provider_engine import get_llm_config
     base_url, api_key, model = get_llm_config("mem0_extraction")
 

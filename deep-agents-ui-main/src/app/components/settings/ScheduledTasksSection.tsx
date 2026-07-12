@@ -715,7 +715,7 @@ export function ScheduledTasksSection() {
                       <Label htmlFor="task-provider" className="text-[10px] font-semibold uppercase">Provider Override</Label>
                       <Input
                         id="task-provider"
-                        placeholder="e.g. ninerouter"
+                        placeholder="e.g. openrouter"
                         value={formProvider}
                         onChange={e => setFormProvider(e.target.value)}
                         className="h-8 text-xs font-mono"

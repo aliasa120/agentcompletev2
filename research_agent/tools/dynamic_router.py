@@ -35,6 +35,7 @@ from research_agent.tools import (
     manage_skill,
     get_wordpress_categories,
     publish_to_wordpress,
+    analyze_attachment,
 )
 from research_agent.tools.mem0_tools import (
     search_memories,
@@ -59,10 +60,20 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
     "publish_to_wordpress": publish_to_wordpress,
     # Mem0 memory tools (only search_memories is exposed to agent)
     "search_memories": search_memories,
+    "analyze_attachment": analyze_attachment,
 }
 
 # Rich tool metadata including descriptions, keywords (synonyms), and example triggers
 TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
+    "analyze_attachment": {
+        "short_description": "Re-analyze or search for details inside a previously uploaded file (audio, video, PDF).",
+        "keywords": ["analyze attachment", "inspect file", "re-read video", "re-read audio", "previous file", "check pdf", "audio details"],
+        "example_triggers": [
+            "Look at the video again and tell me what was shown.",
+            "Inspect the previously uploaded audio file.",
+            "Re-analyze the document to check the date."
+        ]
+    },
     "youtube_transcript": {
         "short_description": "Extract full transcript from public YouTube videos as structured Markdown.",
         "keywords": ["youtube", "transcript", "youtube transcript", "video transcript", "video subtitles", "video text", "extract subtitles"],

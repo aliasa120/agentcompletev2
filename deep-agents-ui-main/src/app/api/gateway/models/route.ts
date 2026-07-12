@@ -1,20 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import fs from "fs";
 
 export async function GET(request: NextRequest) {
   try {
-    // 1. Authenticate user
     const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
+          getAll() { return cookieStore.getAll(); },
           setAll(cookiesToSet) {
             try {
               cookiesToSet.forEach(({ name, value, options }) =>
@@ -31,38 +27,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 2. Fetch the 9Router client API key from Supabase agent_settings
-    const { data: settingsData } = await supabase
+    const { data: settings } = await supabase
       .from("agent_settings")
-      .select("value")
-      .eq("key", "ninerouter_client_api_key")
-      .single();
+      .select("key, value");
 
-    const clientApiKey = settingsData?.value?.trim() || process.env.NINE_ROUTER_API_KEY || "";
+    const settingsMap = new Map((settings || []).map(s => [s.key, s.value]));
 
-    // 3. Query local 9Router instance models endpoint
-    const nineRouterBaseUrl = process.env.NINE_ROUTER_INTERNAL_URL || process.env.NEXT_PUBLIC_NINE_ROUTER_URL || "http://localhost:20128";
-    
-    const headers: Record<string, string> = {};
-    if (clientApiKey) {
-      headers["Authorization"] = `Bearer ${clientApiKey}`;
-    }
-    headers["x-9r-only-active"] = "true";
-
-    const res = await fetch(`${nineRouterBaseUrl}/v1/models`, {
-      headers,
-      next: { revalidate: 10 } // cache for 10 seconds to reduce load
+    const openRouterKey = settingsMap.get("openrouter_client_api_key")?.trim() || process.env.OPENROUTER_API_KEY || "";
+    const res = await fetch("https://openrouter.ai/api/v1/models", {
+      headers: openRouterKey ? { "Authorization": `Bearer ${openRouterKey}` } : {}
     });
 
     if (!res.ok) {
       const errMsg = await res.text();
-      return NextResponse.json({ error: `9Router returned error: ${errMsg}` }, { status: res.status });
+      return NextResponse.json({ error: `OpenRouter returned error: ${errMsg}` }, { status: res.status });
     }
 
     const payload = await res.json();
     return NextResponse.json(payload);
   } catch (error: any) {
-    console.error("Error fetching 9Router models:", error);
+    console.error("Error fetching gateway models:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

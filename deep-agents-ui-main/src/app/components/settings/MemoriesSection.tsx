@@ -8,7 +8,6 @@ import {
   Brain, Trash2, Search, Sparkles, Loader2, Database, AlertCircle, RefreshCw, Layers, Save, CheckCircle2
 } from "lucide-react";
 import { toast } from "sonner";
-import { LLM_PROVIDERS } from "./ProviderOrderingSection";
 
 interface Memory {
   id: string;
@@ -39,8 +38,8 @@ export function MemoriesSection({
   const [isClearing, setIsClearing] = useState<boolean>(false);
 
   const mem0Enabled = globalSettings.mem0_enabled === "true";
-  const selectedProvider = globalSettings.mem0_extraction_provider || "ninerouter";
-  const selectedModel = globalSettings.mem0_extraction_model || "oc/auto";
+  const selectedProvider = globalSettings.mem0_extraction_provider || "openrouter";
+  const selectedModel = globalSettings.mem0_extraction_model || "google/gemini-2.5-flash";
 
   const [providerMetas, setProviderMetas] = useState<any[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);

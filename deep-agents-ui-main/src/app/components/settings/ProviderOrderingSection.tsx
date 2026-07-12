@@ -551,20 +551,7 @@ function ProviderCategoryPanel({
 }
 
 // ── LLM Provider definitions ─────────────────────────────────────────────────
-
-export const LLM_PROVIDERS = [
-  {
-    id: "ninerouter",
-    label: "9Router AI Gateway",
-    envKey: "NINE_ROUTER_API_KEY",
-    docsUrl: "http://localhost:20128",
-    defaultModels: [
-      { value: "kr/claude-sonnet-4.5", label: "Claude Sonnet 4.5 (Kiro)", badge: "Free" },
-      { value: "oc/auto", label: "OpenCode Auto", badge: "Free" },
-      { value: "cc/claude-opus-4-7", label: "Claude Opus 4.7 (Sub)", badge: "Subscription" },
-    ],
-  },
-];
+export const LLM_PROVIDERS: any[] = [];
 
 type TestResult = { status: "idle" | "testing" | "ok" | "error"; latency?: number; error?: string };
 
@@ -607,12 +594,26 @@ function LLMProvidersPanel() {
 
   const activeProvider = providerMetas.find(p => p.id === activeProviderId) || providerMetas[0];
 
+  /**
+   * Merge provider default models with user-added custom models.
+   * Uses a Map<value, meta> so identical model values are deduplicated
+   * (first occurrence wins — defaults take priority over raw custom strings).
+   * This is the industry-standard approach: O(n) dedup with stable insertion order.
+   */
   const allModels = (providerId: string, defaults: { value: string; label: string; badge: string }[]) => {
-    const custom = customModelsByProvider[providerId] ?? [];
-    return [
-      ...(defaults || []),
-      ...custom.map(v => ({ value: v, label: v, badge: "Custom" })),
-    ];
+    const map = new Map<string, { value: string; label: string; badge: string }>();
+
+    // 1. Insert hardcoded / gateway defaults first (they have nice labels/badges)
+    for (const m of (defaults || [])) {
+      if (!map.has(m.value)) map.set(m.value, m);
+    }
+
+    // 2. Merge user-added custom models; skip if already present from defaults
+    for (const v of (customModelsByProvider[providerId] ?? [])) {
+      if (!map.has(v)) map.set(v, { value: v, label: v, badge: "Custom" });
+    }
+
+    return Array.from(map.values());
   };
 
   const handleTestModel = async (providerId: string) => {
@@ -760,21 +761,18 @@ function LLMProvidersPanel() {
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
               <Key className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-muted-foreground">Gateway Provider Status:</span>
+              <span className="text-muted-foreground">Provider:</span>
               <code className="text-[11px] font-mono bg-muted-foreground/10 px-1.5 py-0.5 rounded text-foreground font-bold">
                 {activeProvider?.label || "None"}
               </code>
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-violet-500/10 text-violet-600 border border-violet-400/30">
+                Direct API
+              </span>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Configure and manage credentials for this provider directly inside the 9Router Gateway dashboard.
+              Calls are routed directly to the OpenRouter API using your OpenRouter key.
             </p>
           </div>
-          <button
-            onClick={() => setActiveProviderId("gateway")}
-            className="shrink-0 h-8 px-3.5 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 flex items-center justify-center gap-1 text-xs font-semibold transition-colors"
-          >
-            Configure 9Router <ChevronRight className="h-3.5 w-3.5" />
-          </button>
         </div>
 
         {/* Row 2: Select Model & Test */}

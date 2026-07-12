@@ -37,17 +37,28 @@ class ProviderConfig(TypedDict, total=False):
 # Order determines the display order in the UI.
 
 PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
-    "ninerouter": {
-        "base_url_env": "NINE_ROUTER_URL",
-        "base_url_default": "http://localhost:20128/v1",
-        "env_key": "NINE_ROUTER_API_KEY",
-        "label": "9Router AI Gateway",
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "env_key": "OPENROUTER_API_KEY",
+        "label": "OpenRouter AI Gateway",
         "openai_compat": True,
-        "badge_color": "from-cyan-500 to-blue-600",
+        "badge_color": "from-violet-500 to-purple-600",
         "default_models": [
-            {"value": "kr/claude-sonnet-4.5", "label": "Claude Sonnet 4.5 (Kiro)", "badge": "Free"},
-            {"value": "oc/auto",              "label": "OpenCode Auto",           "badge": "Free"},
-            {"value": "cc/claude-opus-4-7",   "label": "Claude Opus 4.7 (Sub)",   "badge": "Subscription"},
+            {"value": "openrouter/tencent/hy3:free",       "label": "Hunyuan 3 Free",       "badge": "Free"},
+            {"value": "openrouter/google/gemini-2.5-flash", "label": "Gemini 2.5 Flash",     "badge": "Cloud"},
+            {"value": "openrouter/google/gemini-2.5-pro",   "label": "Gemini 2.5 Pro",       "badge": "Cloud"},
+        ],
+    },
+    "gemini": {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "env_key": "GEMINI_API_KEY",
+        "label": "Gemini (Direct API)",
+        "openai_compat": True,
+        "badge_color": "from-blue-500 to-indigo-600",
+        "default_models": [
+            {"value": "gemini-2.5-flash",      "label": "Gemini 2.5 Flash",      "badge": "Direct"},
+            {"value": "gemini-2.5-pro",        "label": "Gemini 2.5 Pro",        "badge": "Direct"},
+            {"value": "gemini-3.1-flash-lite", "label": "Gemini 3.1 Flash Lite", "badge": "Direct"},
         ],
     },
 }

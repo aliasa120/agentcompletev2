@@ -207,35 +207,35 @@ def get_retry_delay() -> int:
 
 _AGENT_DEFAULTS: dict[str, dict[str, str]] = {
     "main_agent": {
-        "provider": "vercel",
-        "model": "xiaomi/mimo-v2.5-pro",
+        "provider": "openrouter",
+        "model": "google/gemini-2.5-flash",
     },
     "analyzer": {
-        "provider": "vercel",
-        "model": "moonshotai/kimi-k2.5",
+        "provider": "openrouter",
+        "model": "google/gemini-2.5-flash",
     },
     "feeder": {
-        "provider": "vercel",
-        "model": "minimax/minimax-m2.7",
+        "provider": "openrouter",
+        "model": "google/gemini-2.5-flash",
     },
     # Subagents: default to same model as main_agent — configurable in UI
     "research_subagent": {
-        "provider": "vercel",
-        "model": "xiaomi/mimo-v2.5-pro",
+        "provider": "openrouter",
+        "model": "google/gemini-2.5-flash",
     },
     "content_subagent": {
-        "provider": "vercel",
-        "model": "xiaomi/mimo-v2.5-pro",
+        "provider": "openrouter",
+        "model": "google/gemini-2.5-flash",
     },
-    # Vector indexing: default to Vercel/Gemini 2.5 Flash
+    # Vector indexing: default to OpenRouter/Gemini 2.5 Flash
     "vector_indexing": {
-        "provider": "vercel",
+        "provider": "openrouter",
         "model": "google/gemini-2.5-flash",
     },
     # Mem0 extraction settings
     "mem0_extraction": {
-        "provider": "ninerouter",
-        "model": "oc/auto",
+        "provider": "openrouter",
+        "model": "google/gemini-2.5-flash",
     },
 }
 
@@ -266,36 +266,34 @@ def get_llm_config(agent: str) -> tuple[str, str, str]:
     provider = settings.get(f"{agent}_provider", defaults["provider"]).strip().lower()
     model = settings.get(f"{agent}_model", defaults["model"]).strip()
 
-    is_gateway_sub_provider = provider not in get_all_provider_names()
+    # Fallback unregistered providers to openrouter direct
+    actual_provider = provider
+    if actual_provider not in get_all_provider_names():
+        actual_provider = "openrouter"
 
-    if is_gateway_sub_provider:
-        # Route through 9Router base URL & client credentials
-        base_url = get_provider_base_url("ninerouter")
-        api_key = settings.get("ninerouter_client_api_key", "").strip()
+    base_url = get_provider_base_url(actual_provider)
+    cfg = get_provider_config(actual_provider)
+    needs_v1 = cfg and "base_url_env" in cfg
+    if needs_v1 and not base_url.endswith("/v1"):
+        base_url = base_url + "/v1"
+
+    if actual_provider == "openrouter":
+        api_key = settings.get("openrouter_client_api_key", "").strip()
         if not api_key:
-            api_key = get_provider_api_key("ninerouter")
+            api_key = get_provider_api_key("openrouter")
     else:
-        # Resolve base_url from registry
-        base_url = get_provider_base_url(provider)
-        cfg = get_provider_config(provider)
-        needs_v1 = cfg and "base_url_env" in cfg
-        if needs_v1 and not base_url.endswith("/v1"):
-            base_url = base_url + "/v1"
-
-        if provider == "ninerouter":
-            api_key = settings.get("ninerouter_client_api_key", "").strip()
-            if not api_key:
-                api_key = get_provider_api_key(provider)
-        else:
-            api_key = get_provider_api_key(provider)
+        api_key = get_provider_api_key(actual_provider)
 
     if not model:
         model = defaults["model"]
 
+    if actual_provider == "openrouter" and model.startswith("openrouter/"):
+        model = model[len("openrouter/"):]
+
     if not api_key:
         logger.warning(
-            f"[provider_engine] ⚠️ No API key found for provider '{provider}' "
-            f"(env var: {get_provider_config('ninerouter' if is_gateway_sub_provider else provider).get('env_key', '?')}). "
+            f"[provider_engine] ⚠️ No API key found for provider '{actual_provider}' "
+            f"(env var: {get_provider_config(actual_provider).get('env_key', '?')}). "
             f"Set it in your .env file."
         )
 
