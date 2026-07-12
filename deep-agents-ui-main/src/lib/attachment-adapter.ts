@@ -2,27 +2,39 @@ import { AttachmentAdapter, PendingAttachment, CompleteAttachment } from "@assis
 
 export class LangGraphAttachmentAdapter implements AttachmentAdapter {
   accept = "*";
+  private urls = new Map<string, { url: string; mimeType: string }>();
 
-  async add({ file }: { file: File }): Promise<PendingAttachment> {
+  async *add({ file }: { file: File }) {
+    const id = crypto.randomUUID();
     const ext = file.name.split(".").pop()?.toLowerCase() || "";
     const isImage = file.type.startsWith("image/") || ["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp"].includes(ext);
     const isAudio = file.type.startsWith("audio/") || ["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "amr", "wma", "aiff", "caf"].includes(ext);
     const isVideo = file.type.startsWith("video/") || ["mp4", "webm", "mov", "avi", "mkv", "flv", "wmv", "3gp", "mpeg", "mpg"].includes(ext);
-    
-    return {
-      id: crypto.randomUUID(),
-      type: isImage ? "image" : isAudio ? "audio" : isVideo ? "video" : "document",
+    const type = isImage ? ("image" as const) : isAudio ? ("audio" as const) : isVideo ? ("video" as const) : ("document" as const);
+
+    // 1. Instantly yield a "running" status with progress 0, so the file card appears with a loading spinner immediately!
+    yield {
+      id,
+      type,
       name: file.name,
       file,
-      status: { type: "requires-action", reason: "composer-send" },
+      status: { type: "running" as const, reason: "uploading" as const, progress: 0 },
     };
-  }
 
-  async send(attachment: PendingAttachment): Promise<CompleteAttachment> {
-    const file = attachment.file;
+    // 2. Perform the validation and upload in the background
+    const MAX_SIZE = 200 * 1024 * 1024; // 200MB
+    if (file.size > MAX_SIZE) {
+      yield {
+        id,
+        type,
+        name: file.name,
+        file,
+        status: { type: "incomplete" as const, reason: "error" as const, error: new Error(`File exceeds 200MB limit`) },
+      };
+      return;
+    }
+
     let mimeType = file.type;
-    const ext = file.name.split(".").pop()?.toLowerCase() || "";
-
     if (!mimeType || mimeType === "application/octet-stream") {
       if (ext === "pdf") mimeType = "application/pdf";
       else if (["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "amr", "wma", "aiff", "caf"].includes(ext)) {
@@ -36,16 +48,29 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
       }
     }
 
-    const base64Data = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        const base64 = result.split(",")[1];
-        resolve(base64);
+    // Convert file to Base64 in background
+    let base64Data: string;
+    try {
+      base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64 = result.split(",")[1];
+          resolve(base64);
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+      });
+    } catch (err: any) {
+      yield {
+        id,
+        type,
+        name: file.name,
+        file,
+        status: { type: "incomplete" as const, reason: "error" as const, error: err },
       };
-      reader.onerror = (err) => reject(err);
-      reader.readAsDataURL(file);
-    });
+      return;
+    }
 
     const dataUrl = `data:${mimeType};base64,${base64Data}`;
 
@@ -96,12 +121,39 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
       }
     } catch (err: any) {
       console.warn("Failed to upload file to Supabase Storage:", err);
-      // If it's a media or large file, do NOT fall back to the giant base64 dataUrl, 
-      // as it will exceed request payload limits and crash/hang the chat interface.
       if (isMedia || isLarge) {
-        throw new Error(`Failed to upload media file to storage: ${err?.message || err}`);
+        yield {
+          id,
+          type,
+          name: file.name,
+          file,
+          status: { type: "incomplete" as const, reason: "error" as const, error: err },
+        };
+        return;
       }
     }
+
+    // Save url/mimeType to map so we can look it up during send()
+    this.urls.set(id, { url: fileUrl, mimeType });
+
+    // Yield final completed state
+    yield {
+      id,
+      type,
+      name: file.name,
+      file,
+      status: { type: "requires-action" as const, reason: "composer-send" as const },
+    };
+  }
+
+  async send(attachment: PendingAttachment): Promise<CompleteAttachment> {
+    const resolved = this.urls.get(attachment.id);
+    const fileUrl = resolved?.url || "";
+    const mimeType = resolved?.mimeType || attachment.file.type;
+    const file = attachment.file;
+
+    // Cleanup reference
+    this.urls.delete(attachment.id);
 
     const content: any[] = [];
     if (mimeType.startsWith("image/")) {
@@ -110,14 +162,6 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
         image_url: { url: fileUrl }
       });
     } else if (mimeType.startsWith("audio/")) {
-      const format = file.name.split(".").pop()?.toLowerCase() || "mp3";
-      content.push({
-        type: "input_audio",
-        input_audio: {
-          data: "placeholder",
-          format: format === "mp3" ? "mp3" : "wav"
-        }
-      });
       content.push({
         type: "audio",
         audio: fileUrl,
@@ -149,5 +193,7 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
     };
   }
 
-  async remove(attachment: PendingAttachment): Promise<void> {}
+  async remove(attachment: PendingAttachment): Promise<void> {
+    this.urls.delete(attachment.id);
+  }
 }
