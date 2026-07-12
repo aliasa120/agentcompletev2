@@ -20,6 +20,11 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
 
   async send(attachment: PendingAttachment): Promise<CompleteAttachment> {
     const file = attachment.file;
+    const MAX_SIZE = 200 * 1024 * 1024; // 200MB
+    if (file.size > MAX_SIZE) {
+      throw new Error(`File exceeds the 200MB size limit (size: ${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+    }
+    
     let mimeType = file.type;
     const ext = file.name.split(".").pop()?.toLowerCase() || "";
 
