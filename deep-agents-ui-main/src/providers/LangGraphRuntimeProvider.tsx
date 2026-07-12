@@ -353,9 +353,9 @@ export function LangGraphRuntimeProvider({
           if (p.type === "text") return { type: "text" as const, text: p.text };
           if (p.type === "image") return { type: "image_url" as const, image_url: { url: p.image } };
           if (p.type === "image_url") return { type: "image_url" as const, image_url: p.image_url };
-          if (p.type === "audio") return { type: "image_url" as const, image_url: { url: p.audio } };
-          if (p.type === "video") return { type: "image_url" as const, image_url: { url: p.video } };
-          if (p.type === "input_audio") return p;
+          if (p.type === "audio") return { type: "audio" as const, audio: p.audio, filename: p.filename, mimeType: p.mimeType };
+          if (p.type === "video") return { type: "video" as const, video: p.video, filename: p.filename, mimeType: p.mimeType };
+          if (p.type === "input_audio") return null;
           if (p.type === "file") {
             if (p.mimeType === "application/pdf" || p.filename?.endsWith(".pdf")) {
               return {
@@ -392,8 +392,8 @@ export function LangGraphRuntimeProvider({
               }
             };
           }
-          return { type: "text" as const, text: "" };
-        });
+          return null;
+        }).filter(Boolean);
       }
 
       const quote = (msg as any).metadata?.custom?.quote;
@@ -495,7 +495,7 @@ export function LangGraphRuntimeProvider({
       const parts = [...msg.content, ...(msg.attachments?.flatMap((a: any) => a.content) ?? [])];
       let content: string | any[];
       const textParts = parts.filter((p: any) => p.type === "text");
-      const hasNonText = parts.some((p: any) => p.type === "image" || p.type === "image_url" || p.type === "file");
+      const hasNonText = parts.some((p: any) => p.type === "image" || p.type === "image_url" || p.type === "file" || p.type === "audio" || p.type === "video");
 
       if (!hasNonText && textParts.length === 1) {
         content = textParts[0].text;
@@ -504,6 +504,9 @@ export function LangGraphRuntimeProvider({
           if (p.type === "text") return { type: "text" as const, text: p.text };
           if (p.type === "image") return { type: "image_url" as const, image_url: { url: p.image } };
           if (p.type === "image_url") return { type: "image_url" as const, image_url: p.image_url };
+          if (p.type === "audio") return { type: "audio" as const, audio: p.audio, filename: p.filename, mimeType: p.mimeType };
+          if (p.type === "video") return { type: "video" as const, video: p.video, filename: p.filename, mimeType: p.mimeType };
+          if (p.type === "input_audio") return null;
           if (p.type === "file") {
             try {
               const base64Str = p.data.split(",")[1];
@@ -534,8 +537,8 @@ export function LangGraphRuntimeProvider({
               }
             };
           }
-          return { type: "text" as const, text: "" };
-        });
+          return null;
+        }).filter(Boolean);
       }
 
       const quote = (msg as any).metadata?.custom?.quote;

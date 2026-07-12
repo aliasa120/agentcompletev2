@@ -4,9 +4,10 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
   accept = "*";
 
   async add({ file }: { file: File }): Promise<PendingAttachment> {
-    const isImage = file.type.startsWith("image/");
-    const isAudio = file.type.startsWith("audio/");
-    const isVideo = file.type.startsWith("video/");
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    const isImage = file.type.startsWith("image/") || ["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp"].includes(ext);
+    const isAudio = file.type.startsWith("audio/") || ["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "amr", "wma", "aiff", "caf"].includes(ext);
+    const isVideo = file.type.startsWith("video/") || ["mp4", "webm", "mov", "avi", "mkv", "flv", "wmv", "3gp", "mpeg", "mpg"].includes(ext);
     
     return {
       id: crypto.randomUUID(),
@@ -20,12 +21,19 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
   async send(attachment: PendingAttachment): Promise<CompleteAttachment> {
     const file = attachment.file;
     let mimeType = file.type;
-    if (!mimeType) {
-      const ext = file.name.split(".").pop()?.toLowerCase();
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+
+    if (!mimeType || mimeType === "application/octet-stream") {
       if (ext === "pdf") mimeType = "application/pdf";
-      else if (["mp3", "wav", "ogg", "m4a", "aac"].includes(ext || "")) mimeType = `audio/${ext === "mp3" ? "mpeg" : ext}`;
-      else if (["mp4", "webm", "mov", "avi"].includes(ext || "")) mimeType = `video/${ext === "mov" ? "quicktime" : ext}`;
-      else mimeType = "application/octet-stream";
+      else if (["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "amr", "wma", "aiff", "caf"].includes(ext)) {
+        mimeType = `audio/${ext === "mp3" ? "mpeg" : ext === "m4a" ? "x-m4a" : ext}`;
+      } else if (["mp4", "webm", "mov", "avi", "mkv", "flv", "wmv", "3gp", "mpeg", "mpg"].includes(ext)) {
+        mimeType = `video/${ext === "mov" ? "quicktime" : ext === "avi" ? "x-msvideo" : ext}`;
+      } else if (["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp"].includes(ext)) {
+        mimeType = `image/${ext === "jpg" ? "jpeg" : ext}`;
+      } else {
+        mimeType = "application/octet-stream";
+      }
     }
 
     const base64Data = await new Promise<string>((resolve, reject) => {
@@ -42,19 +50,25 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
     const dataUrl = `data:${mimeType};base64,${base64Data}`;
 
     // Upload to local workspace so Python agent tools (like ls, glob) can see the file
-    try {
-      await fetch("/api/upload-workspace", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          filename: file.name,
-          base64: base64Data,
-        }),
-      });
-    } catch (err) {
-      console.warn("Failed to write uploaded file to local workspace:", err);
+    // Skip this for media files (images, audio, video) or files larger than 2MB to prevent HTTP 413 Payload Too Large errors
+    const isMedia = mimeType.startsWith("image/") || mimeType.startsWith("audio/") || mimeType.startsWith("video/");
+    const isLarge = file.size > 2 * 1024 * 1024;
+    
+    if (!isMedia && !isLarge) {
+      try {
+        await fetch("/api/upload-workspace", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            filename: file.name,
+            base64: base64Data,
+          }),
+        });
+      } catch (err) {
+        console.warn("Failed to write uploaded file to local workspace:", err);
+      }
     }
 
     // Upload to Supabase Storage Bucket ('uploads')
@@ -72,6 +86,7 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
 
       if (uploadError) {
         console.warn("Supabase Storage upload error:", uploadError);
+        throw new Error(uploadError.message);
       } else {
         const { data: { publicUrl } } = supabase.storage
           .from("uploads")
@@ -79,8 +94,13 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
         fileUrl = publicUrl;
         console.log("Successfully uploaded to Supabase Storage:", fileUrl);
       }
-    } catch (err) {
-      console.warn("Failed to upload file to Supabase Storage, using fallback dataUrl:", err);
+    } catch (err: any) {
+      console.warn("Failed to upload file to Supabase Storage:", err);
+      // If it's a media or large file, do NOT fall back to the giant base64 dataUrl, 
+      // as it will exceed request payload limits and crash/hang the chat interface.
+      if (isMedia || isLarge) {
+        throw new Error(`Failed to upload media file to storage: ${err?.message || err}`);
+      }
     }
 
     const content: any[] = [];
