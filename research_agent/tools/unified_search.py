@@ -24,9 +24,10 @@ logger = logging.getLogger("unified_search")
 
 async def _call_linkup(query: str, **_) -> str:
     """Adapter: call Linkup search. Ignores kwargs not relevant to Linkup."""
-    linkup_key = os.environ.get("LINKUP_API_KEY", "")
+    from .provider_engine import get_user_api_key
+    linkup_key = get_user_api_key("linkup_api_key", "LINKUP_API_KEY")
     if not linkup_key:
-        raise RuntimeError("LINKUP_API_KEY not set.")
+        raise RuntimeError("linkup_api_key not set in user settings or LINKUP_API_KEY env.")
     try:
         from linkup import LinkupClient
     except ImportError:
@@ -46,9 +47,10 @@ async def _call_linkup(query: str, **_) -> str:
 
 async def _call_parallel(query: str, **_) -> str:
     """Adapter: call Parallel AI search via HTTP. Uses x-api-key header + /v1beta/search."""
-    api_key = os.environ.get("PARALLEL_API_KEY", "")
+    from .provider_engine import get_user_api_key
+    api_key = get_user_api_key("parallel_api_key", "PARALLEL_API_KEY")
     if not api_key:
-        raise RuntimeError("PARALLEL_API_KEY not set.")
+        raise RuntimeError("parallel_api_key not set in user settings or PARALLEL_API_KEY env.")
 
     payload = {
         "objective": query,
@@ -91,9 +93,10 @@ async def _call_parallel(query: str, **_) -> str:
 
 async def _call_tavily(query: str, **_) -> str:
     """Adapter: call Tavily search."""
-    tavily_key = os.environ.get("TAVILY_API_KEY", "")
+    from .provider_engine import get_user_api_key
+    tavily_key = get_user_api_key("tavily_api_key", "TAVILY_API_KEY")
     if not tavily_key:
-        raise RuntimeError("TAVILY_API_KEY not set.")
+        raise RuntimeError("tavily_api_key not set in user settings or TAVILY_API_KEY env.")
     try:
         from tavily import TavilyClient
     except ImportError:
@@ -145,10 +148,10 @@ _PROVIDER_MAP = {
 }
 
 
-# ── LangGraph Tool ─────────────────────────────────────────────────────────────
+from langchain_core.runnables import RunnableConfig
 
 @tool(parse_docstring=True)
-def unified_search(query: str) -> str:
+def unified_search(query: str, config: RunnableConfig = None) -> str:
     """Search the web for current news and information on a given topic.
 
     Provider selection, priority, retry count, and fallback logic are
@@ -163,6 +166,7 @@ def unified_search(query: str) -> str:
 
     Args:
         query: Keyword-dense search string (4-8 words). No quotes. Include year.
+        config: Optional LangChain runnable configuration.
 
     Returns:
         Sourced answer with inline citations and source URLs from the active provider.
@@ -185,6 +189,7 @@ def unified_search(query: str) -> str:
             max_retries=4,
             timeout_seconds=30,
             query=query,
+            config=config,
         )
     )
 

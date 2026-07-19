@@ -516,8 +516,16 @@ def run_sync(coro):
 
 
 
+_manual_mcp_tools_cache: Dict[str, List[BaseTool]] = {}
+
 async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, Any] = None) -> List[BaseTool]:
     """Connect to a manual MCP server via SSE or Stdio and fetch the specified tool."""
+    cache_key = mcp_url.strip()
+    if cache_key in _manual_mcp_tools_cache:
+        matched = [t for t in _manual_mcp_tools_cache[cache_key] if t.name == tool_key]
+        if matched:
+            return [matched[0]]
+
     # Intercept internal virtual Mem0 MCP tools
     if mcp_url == "mem0-mcp-internal" or tool_key in [
         "add_memory", "search_memories", "get_memories", "get_memory",
@@ -601,7 +609,8 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
 
     is_zapier = base_url.startswith("https://mcp.zapier.com/")
     if is_zapier:
-        zapier_secret = os.environ.get("ZAPIER_MCP_SECRET", "")
+        from research_agent.tools.provider_engine import get_user_api_key
+        zapier_secret = get_user_api_key("zapier_mcp_secret")
         if zapier_secret:
             headers["Authorization"] = f"Bearer {zapier_secret}"
 
@@ -663,28 +672,30 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
             
             list_res = await _check_stateless()
             if list_res and "result" in list_res and "tools" in list_res["result"]:
-                logger.info(f"Target {base_url} verified as stateless. Loading tool '{tool_key}' via stateless adapter.")
+                logger.info(f"Target {base_url} verified as stateless. Loading all tools via stateless adapter into cache.")
                 raw_tools = list_res["result"]["tools"]
-                tool_data = next((t for t in raw_tools if t.get("name") == tool_key), None)
-                if tool_data:
-                    from pydantic import create_model, Field
-                    from typing import Optional, Union
-                    
+                
+                from pydantic import create_model, Field
+                from typing import Optional, Union
+                from langchain_core.tools import StructuredTool
+                
+                type_mapping = {
+                    "string": str,
+                    "integer": int,
+                    "number": float,
+                    "boolean": bool,
+                    "array": list,
+                    "object": dict
+                }
+                
+                parsed_tools = []
+                for tool_data in raw_tools:
                     tool_name = tool_data.get("name")
                     description = tool_data.get("description", "")
                     
                     input_schema = tool_data.get("inputSchema", {})
                     properties = input_schema.get("properties", {})
                     required = input_schema.get("required", [])
-                    
-                    type_mapping = {
-                        "string": str,
-                        "integer": int,
-                        "number": float,
-                        "boolean": bool,
-                        "array": list,
-                        "object": dict
-                    }
                     
                     fields = {}
                     for param_name, param_schema in properties.items():
@@ -714,81 +725,84 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
                             
                     args_schema = create_model(f"{tool_name}Input", **fields)
                     
-                    async def _execute(**kwargs):
-                        args_payload = {k: v for k, v in kwargs.items() if v is not None}
-                        exec_headers = {
-                            "Content-Type": "application/json",
-                            "Accept": "application/json, text/event-stream",
-                            **headers
-                        }
-                        async with httpx.AsyncClient(timeout=60.0) as exec_client:
-                            exec_resp = await exec_client.post(
-                                base_url,
-                                headers=exec_headers,
-                                json={
-                                    "jsonrpc": "2.0",
-                                    "method": "tools/call",
-                                    "params": {
-                                        "name": tool_name,
-                                        "arguments": args_payload
-                                    },
-                                    "id": 1
-                                }
-                            )
-                            exec_resp.raise_for_status()
-                            text = exec_resp.text
-                            exec_data = None
-                            
-                            # Try 1: direct JSON response
-                            try:
-                                exec_data = json.loads(text)
-                            except Exception:
-                                pass
+                    def make_execute_fn(t_name):
+                        async def _execute(**kwargs):
+                            args_payload = {k: v for k, v in kwargs.items() if v is not None}
+                            exec_headers = {
+                                "Content-Type": "application/json",
+                                "Accept": "application/json, text/event-stream",
+                                **headers
+                            }
+                            async with httpx.AsyncClient(timeout=60.0) as exec_client:
+                                exec_resp = await exec_client.post(
+                                    base_url,
+                                    headers=exec_headers,
+                                    json={
+                                        "jsonrpc": "2.0",
+                                        "method": "tools/call",
+                                        "params": {
+                                            "name": t_name,
+                                            "arguments": args_payload
+                                        },
+                                        "id": 1
+                                    }
+                                )
+                                exec_resp.raise_for_status()
+                                text = exec_resp.text
+                                exec_data = None
                                 
-                            # Try 2: SSE-encoded response (starts with event/data lines)
-                            if exec_data is None:
-                                for line in text.split("\n"):
-                                    if line.startswith("data:"):
-                                        payload = line[5:].strip()
-                                        if not payload:
-                                            continue
-                                        try:
-                                            parsed = json.loads(payload)
-                                            if "result" in parsed or "error" in parsed:
-                                                exec_data = parsed
-                                                break
-                                        except Exception:
-                                            pass
-                                            
-                            if exec_data is None:
-                                # Fallback: raise the original decode error
-                                exec_data = exec_resp.json()
-                                
-                            if "error" in exec_data:
-                                return f"Error executing tool: {exec_data['error']}"
-                                
-                            result = exec_data.get("result", {})
-                            content = result.get("content", [])
-                            text_parts = []
-                            for item in content:
-                                if isinstance(item, dict):
-                                    if item.get("type") == "text":
-                                        text_parts.append(item.get("text", ""))
+                                try:
+                                    exec_data = json.loads(text)
+                                except Exception:
+                                    pass
+                                    
+                                if exec_data is None:
+                                    for line in text.split("\n"):
+                                        if line.startswith("data:"):
+                                            payload = line[5:].strip()
+                                            if not payload:
+                                                continue
+                                            try:
+                                                parsed = json.loads(payload)
+                                                if "result" in parsed or "error" in parsed:
+                                                    exec_data = parsed
+                                                    break
+                                            except Exception:
+                                                pass
+                                                
+                                if exec_data is None:
+                                    exec_data = exec_resp.json()
+                                    
+                                if "error" in exec_data:
+                                    return f"Error executing tool: {exec_data['error']}"
+                                    
+                                result = exec_data.get("result", {})
+                                content = result.get("content", [])
+                                text_parts = []
+                                for item in content:
+                                    if isinstance(item, dict):
+                                        if item.get("type") == "text":
+                                            text_parts.append(item.get("text", ""))
+                                        else:
+                                            text_parts.append(json.dumps(item))
                                     else:
-                                        text_parts.append(json.dumps(item))
-                                else:
-                                    text_parts.append(str(item))
-                            return "\n".join(text_parts)
-                            
-                    from langchain_core.tools import StructuredTool
+                                        text_parts.append(str(item))
+                                return "\n".join(text_parts)
+                        return _execute
+
                     stateless_tool = StructuredTool(
                         name=tool_name,
                         description=description,
                         args_schema=args_schema,
                         func=None,
-                        coroutine=_execute
+                        coroutine=make_execute_fn(tool_name)
                     )
-                    return [wrap_tool_with_redaction(stateless_tool)]
+                    parsed_tools.append(wrap_tool_with_redaction(stateless_tool))
+                
+                _manual_mcp_tools_cache[cache_key] = parsed_tools
+                matched = [t for t in parsed_tools if t.name == tool_key]
+                if matched:
+                    return [matched[0]]
                 else:
                     logger.warning(f"Tool '{tool_key}' not found in stateless server's tool listing.")
                     return []
@@ -901,29 +915,28 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
         async with client.session("manual_server") as session:
             raw_tools = await _list_all_tools(session)
 
-        # Step 2: find the requested tool in the listing
-        matched_defs = [t for t in raw_tools if t.name == tool_key]
-        if not matched_defs:
+        # Step 2: build tool objects bound to the connection config for all tools
+        converted = [
+            convert_mcp_tool_to_langchain_tool(
+                None,
+                t,
+                connection=_server_cfg,
+            )
+            for t in raw_tools
+        ]
+
+        wrapped = [wrap_tool_with_redaction(t) for t in converted]
+        _manual_mcp_tools_cache[cache_key] = wrapped
+        logger.info(f"Loaded {len(wrapped)} manual MCP tools from server into cache")
+
+        matched = [t for t in wrapped if t.name == tool_key]
+        if not matched:
             logger.warning(
                 f"Manual MCP tool '{tool_key}' not found on server. "
                 f"Available: {[t.name for t in raw_tools]}"
             )
             return []
-
-        # Step 3: build tool objects bound to the connection config (not the session)
-        # so each ainvoke creates a fresh subprocess/session independently.
-        matched = [
-            convert_mcp_tool_to_langchain_tool(
-                None,           # session=None → use connection on each call
-                t,
-                connection=_server_cfg,  # the "manual_server" inner config dict
-            )
-            for t in matched_defs
-        ]
-
-        logger.info(f"Loaded manual MCP tool: {tool_key} from server")
-        matched = [wrap_tool_with_redaction(t) for t in matched]
-        return matched
+        return [matched[0]]
 
     if _is_stdio:
         # For stdio transport the MCP SDK calls shutil.which() → os.access() which
@@ -991,7 +1004,7 @@ def load_mcp_tools_for_agent(agent_id: str) -> List[BaseTool]:
         return []
 
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    key = os.environ.get("SUPABASE_ANON_KEY", "")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_ANON_KEY", "")
     if not url or not key:
         logger.warning("SUPABASE_URL or SUPABASE_ANON_KEY not set. Cannot load MCP tools.")
         return []
@@ -1002,52 +1015,61 @@ def load_mcp_tools_for_agent(agent_id: str) -> List[BaseTool]:
         logger.error(f"Failed to initialize Supabase client in mcp_loader: {e}")
         return []
 
-    # Get enabled MCP tool assignments for this agent
+    # Call get_backend_bootstrap_data RPC to bypass RLS
     try:
-        resp = client.table("agent_tool_assignments")\
-                     .select("*")\
-                     .eq("agent_id", agent_id)\
-                     .eq("tool_type", "mcp")\
-                     .eq("enabled", True)\
-                     .execute()
+        bootstrap_resp = client.rpc("get_backend_bootstrap_data").execute()
+        bootstrap = bootstrap_resp.data or {}
     except Exception as e:
-        logger.error(f"Failed to fetch tool assignments: {e}")
-        return []
+        logger.error(f"Failed to fetch bootstrap data in load_mcp_tools_for_agent: {e}")
+        bootstrap = {}
 
-    assignments = resp.data or []
+    # Get enabled MCP tool assignments for this agent
+    all_assignments = bootstrap.get("agent_tool_assignments") or []
+    assignments = [a for a in all_assignments if a.get("agent_id") == agent_id and a.get("tool_type") == "mcp" and a.get("enabled") == True]
     if not assignments:
         return []
 
-    # Fetch agent settings from Supabase
-    try:
-        settings_resp = client.table("agent_settings").select("key,value").execute()
-        db_settings = {row["key"]: row["value"] for row in (settings_resp.data or [])}
-    except Exception as e:
-        logger.warning(f"Failed to fetch agent settings in mcp_loader: {e}")
-        db_settings = {}
+    # Resolve user_id from agent_configs
+    all_configs = bootstrap.get("agent_configs") or []
+    agent_cfg = next((c for c in all_configs if c.get("id") == agent_id), None)
+    user_id = agent_cfg.get("user_id") if agent_cfg else None
 
-    vector_enabled = db_settings.get("vector_indexing_enabled", "true").lower() == "true"
+    # Filter settings by user_id
+    all_settings = bootstrap.get("agent_settings") or []
+    db_settings = {}
+    for row in all_settings:
+        row_uid = row.get("user_id")
+        if user_id:
+            if row_uid == user_id or not row_uid:
+                db_settings[row["key"]] = row["value"]
+        else:
+            if not row_uid:
+                db_settings[row["key"]] = row["value"]
+
+    super_enabled = db_settings.get("super_indexing_enabled", "true").lower() == "true"
     normal_enabled = db_settings.get("normal_indexing_enabled", "true").lower() == "true"
 
     # Fetch global MCP tool settings
-    try:
-        mcp_settings_resp = client.table("mcp_tool_settings").select("tool_key, loading_mode").execute()
-        mcp_tool_modes = {row["tool_key"]: row["loading_mode"] for row in (mcp_settings_resp.data or [])}
-    except Exception as e:
-        logger.warning(f"Failed to fetch mcp_tool_settings in mcp_loader: {e}")
-        mcp_tool_modes = {}
+    all_mcp_settings = bootstrap.get("mcp_tool_settings") or []
+    mcp_tool_modes = {row["tool_key"]: row["loading_mode"] for row in all_mcp_settings}
 
     # Only load tools with loading_mode == 'primary' (after global resolution and overrides)
     primary_assignments = []
     for a in assignments:
         tool_key = a.get("tool_key")
         # Resolve global loading mode
-        mode = mcp_tool_modes.get(tool_key, "primary")
+        mode = a.get("loading_mode")
+        if not mode:
+            mode = mcp_tool_modes.get(tool_key, "primary")
         if tool_key in ["list_tools", "load_tools", "call_tool"]:
             mode = "primary"
             
+        # Map legacy vector to super
+        if mode == "vector":
+            mode = "super"
+
         # Apply override if disabled
-        if mode == "vector" and not vector_enabled:
+        if mode == "super" and not super_enabled:
             mode = "primary"
         if mode == "normal" and not normal_enabled:
             mode = "primary"
@@ -1058,13 +1080,17 @@ def load_mcp_tools_for_agent(agent_id: str) -> List[BaseTool]:
     assigned_keys = {a["tool_key"] for a in primary_assignments}
     logger.info(f"Loading {len(assigned_keys)} MCP tools for agent {agent_id}: {assigned_keys}")
 
-    # Load active connections to classify tool_keys
-    try:
-        conn_resp = client.table("mcp_connections").select("*").eq("status", "active").execute()
-        connections = conn_resp.data or []
-    except Exception as e:
-        logger.error(f"Failed to fetch active MCP connections: {e}")
-        connections = []
+    # Fetch active MCP connections from bootstrap
+    all_connections = bootstrap.get("mcp_connections") or []
+    connections = []
+    for conn in all_connections:
+        conn_uid = conn.get("user_id")
+        if user_id:
+            if conn_uid == user_id or not conn_uid:
+                connections.append(conn)
+        else:
+            if not conn_uid:
+                connections.append(conn)
 
     composio_keys = []
     manual_tools_to_load = []
@@ -1093,13 +1119,37 @@ def load_mcp_tools_for_agent(agent_id: str) -> List[BaseTool]:
 
     # 1. Load Composio tools
     if composio_keys:
-        composio_api_key = os.environ.get("COMPOSIO_API_KEY", "")
+        composio_api_key = None
+        user_email = ""
+        if user_id:
+            try:
+                settings_resp = client.table("agent_settings").select("value").eq("user_id", user_id).eq("key", "composio_api_key").maybe_single().execute()
+                if settings_resp.data:
+                    composio_api_key = settings_resp.data.get("value")
+            except Exception as e:
+                logger.error(f"Failed to fetch user Composio API key from agent_settings: {e}")
+
+            try:
+                user_resp = client.auth.admin.get_user_by_id(user_id)
+                if user_resp and hasattr(user_resp, "data") and user_resp.data:
+                    # In newer supabase python versions, it may return a dict or response object
+                    user_email = getattr(user_resp.data, "email", "") or user_resp.data.get("email", "")
+                elif user_resp and hasattr(user_resp, "user") and user_resp.user:
+                    user_email = getattr(user_resp.user, "email", "")
+            except Exception as e:
+                logger.debug(f"Failed to fetch user email via auth.admin API: {e}")
+
+        if not composio_api_key:
+            is_tayyab = (str(user_email).strip().lower() == "tayyab@gmail.com")
+            composio_api_key = os.environ.get("COMPOSIO_API_KEY", "") if is_tayyab else ""
+            
         if composio_api_key:
             try:
                 from composio import Composio
                 from composio_langchain import LangchainProvider
                 composio = Composio(api_key=composio_api_key, provider=LangchainProvider())
-                comp_tools = composio.tools.get(user_id="default", tools=composio_keys)
+                active_user_id = user_id or "default"
+                comp_tools = composio.tools.get(user_id=active_user_id, tools=composio_keys)
                 loaded_tools.extend(comp_tools)
                 logger.info(f"Loaded {len(comp_tools)} Composio tools")
                 try:

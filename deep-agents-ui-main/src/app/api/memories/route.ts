@@ -40,13 +40,50 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Query Pinecone
-    const apiKey = process.env.PINECONE_API_KEY;
+    let apiKey = "";
+    try {
+      const { data: settingRow } = await supabase
+        .from("agent_settings")
+        .select("value")
+        .eq("user_id", user.id)
+        .eq("key", "pinecone_api_key")
+        .maybeSingle();
+      if (settingRow?.value) {
+        apiKey = settingRow.value.trim();
+      }
+    } catch (err) {
+      console.error("Failed to query user's pinecone_api_key from agent_settings:", err);
+    }
+
+    if (!apiKey) {
+      apiKey = process.env.PINECONE_API_KEY || "";
+    }
+
     if (!apiKey) {
       return NextResponse.json({ error: "PINECONE_API_KEY is not configured" }, { status: 500 });
     }
 
     const pc = new Pinecone({ apiKey });
-    const indexName = process.env.PINECONE_INDEX_NAME || "memories";
+
+    let indexName = "";
+    try {
+      const { data: indexRow } = await supabase
+        .from("agent_settings")
+        .select("value")
+        .eq("user_id", user.id)
+        .eq("key", "pinecone_index_name")
+        .maybeSingle();
+      if (indexRow?.value) {
+        indexName = indexRow.value.trim();
+      }
+    } catch (err) {
+      console.error("Failed to query user's pinecone_index_name from agent_settings:", err);
+    }
+
+    if (!indexName) {
+      indexName = process.env.PINECONE_INDEX_NAME || "memories";
+    }
+
     const index = pc.index(indexName);
 
     let matches: any[] = [];
@@ -165,13 +202,50 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get("id");
     const workflowId = searchParams.get("workflow_id");
 
-    const apiKey = process.env.PINECONE_API_KEY;
+    let apiKey = "";
+    try {
+      const { data: settingRow } = await supabase
+        .from("agent_settings")
+        .select("value")
+        .eq("user_id", user.id)
+        .eq("key", "pinecone_api_key")
+        .maybeSingle();
+      if (settingRow?.value) {
+        apiKey = settingRow.value.trim();
+      }
+    } catch (err) {
+      console.error("Failed to query user's pinecone_api_key from agent_settings:", err);
+    }
+
+    if (!apiKey) {
+      apiKey = process.env.PINECONE_API_KEY || "";
+    }
+
     if (!apiKey) {
       return NextResponse.json({ error: "PINECONE_API_KEY is not configured" }, { status: 500 });
     }
 
     const pc = new Pinecone({ apiKey });
-    const indexName = process.env.PINECONE_INDEX_NAME || "memories";
+
+    let indexName = "";
+    try {
+      const { data: indexRow } = await supabase
+        .from("agent_settings")
+        .select("value")
+        .eq("user_id", user.id)
+        .eq("key", "pinecone_index_name")
+        .maybeSingle();
+      if (indexRow?.value) {
+        indexName = indexRow.value.trim();
+      }
+    } catch (err) {
+      console.error("Failed to query user's pinecone_index_name from agent_settings:", err);
+    }
+
+    if (!indexName) {
+      indexName = process.env.PINECONE_INDEX_NAME || "memories";
+    }
+
     const index = pc.index(indexName);
 
     if (id) {

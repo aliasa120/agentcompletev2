@@ -1,16 +1,44 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
+    }
+  );
+}
+
 import { triggerAgentReload } from "@/lib/agent-reloader";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 // GET /api/workflows/[id]
 export async function GET(_req: Request, { params }: RouteParams) {
+
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
   const { id } = await params;
   try {
     const { data, error } = await supabase
@@ -30,6 +58,14 @@ export async function GET(_req: Request, { params }: RouteParams) {
 
 // PATCH /api/workflows/[id]
 export async function PATCH(req: Request, { params }: RouteParams) {
+
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
   const { id } = await params;
   try {
     const body = await req.json();
@@ -60,6 +96,14 @@ export async function PATCH(req: Request, { params }: RouteParams) {
 
 // DELETE /api/workflows/[id]
 export async function DELETE(_req: Request, { params }: RouteParams) {
+
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
   const { id } = await params;
   try {
     const { error } = await supabase.from("workflows").delete().eq("id", id);

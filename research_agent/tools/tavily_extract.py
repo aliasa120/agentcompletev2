@@ -49,7 +49,8 @@ def tavily_extract(urls: List[str], query: str = "") -> str:
     urls = urls[:2]  # enforce 2-URL cap
 
     # ── Attempt 1: Tavily ────────────────────────────────────────────────────
-    tavily_key = os.environ.get("TAVILY_API_KEY", "")
+    from research_agent.tools.provider_engine import get_user_api_key
+    tavily_key = get_user_api_key("tavily_api_key", "TAVILY_API_KEY")
     if tavily_key:
         try:
             from tavily import TavilyClient

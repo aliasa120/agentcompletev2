@@ -1,14 +1,34 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
+    }
+  );
+}
+
 import { triggerAgentReload } from "@/lib/agent-reloader";
 import { writeFile, unlink } from "fs/promises";
 import { join } from "path";
 import { existsSync, mkdirSync } from "fs";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+
 
 // Repo root — two levels up from deep-agents-ui-main
 const REPO_ROOT = join(process.cwd(), "..");
@@ -16,6 +36,14 @@ const REF_DIR = join(REPO_ROOT, "reference images");
 
 // GET /api/design-assets — list all design assets from DB
 export async function GET() {
+
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
   try {
     const { data } = await supabase
       .from("design_assets")
@@ -31,6 +59,14 @@ export async function GET() {
 // POST /api/design-assets — upload a new or replace existing image
 // Body: FormData with: file (File), label (string), asset_key? (string, optional — if omitted creates new)
 export async function POST(req: Request) {
+
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -97,6 +133,7 @@ export async function POST(req: Request) {
       const { data: created, error } = await supabase
         .from("design_assets")
         .insert({
+          user_id: user.id,
           asset_key: assetKey,
           label,
           file_path: filePath,
@@ -125,6 +162,14 @@ export async function POST(req: Request) {
 // DELETE /api/design-assets — delete asset from DB and disk
 // Body: { asset_key: string }
 export async function DELETE(req: Request) {
+
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
   try {
     const { asset_key } = await req.json();
     if (!asset_key) return NextResponse.json({ error: "asset_key required" }, { status: 400 });

@@ -48,8 +48,10 @@ import os
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Optional
+from contextvars import ContextVar
+from typing import Optional, Any, Callable
 from langchain_core.tools import BaseTool
+active_user_id: ContextVar[Optional[str]] = ContextVar("active_user_id", default=None)
 
 from .provider_registry import (
     get_provider_api_key,
@@ -66,8 +68,8 @@ import redis
 import json
 
 _CACHE_TTL_SECONDS = 60  # refresh from Supabase every 60 s
-_settings_cache: dict[str, str] = {}
-_cache_loaded_at: float = 0.0
+_settings_cache: dict[str, dict[str, str]] = {}
+_cache_loaded_at: dict[str, float] = {}
 _redis_client: Optional[Any] = None
 
 def get_redis_client() -> Optional[Any]:
@@ -93,20 +95,22 @@ def get_redis_client() -> Optional[Any]:
     return _redis_client if _redis_client is not False else None
 
 
-def _fetch_settings_from_supabase() -> dict[str, str]:
+def _fetch_settings_from_supabase(user_id: Optional[str] = None) -> dict[str, str]:
     """Pull agent_settings from Supabase synchronously. Returns {} on failure.
 
-    Only fetches non-secret settings (provider/model selection, retry counts).
-    API keys are NEVER stored in Supabase — they come from env only.
+    Only fetches non-secret settings for the given user_id.
     """
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
         if not url or not key:
             return {}
         client = create_client(url, key)
-        resp = client.table("agent_settings").select("key,value").execute()
+        params = {}
+        if user_id:
+            params["p_user_id"] = str(user_id)
+        resp = client.rpc("get_user_settings_admin", params).execute()
         return {row["key"]: row["value"] for row in (resp.data or [])}
     except Exception as e:
         logger.warning(f"[provider_engine] Supabase settings fetch failed: {e}")
@@ -137,21 +141,26 @@ def run_in_thread(func, *args, **kwargs):
     finally:
         if skip_token is not None:
             try:
+                from blockbuster.blockbuster import blockbuster_skip
                 blockbuster_skip.reset(skip_token)
             except Exception:
                 pass
 
 
-def get_settings() -> dict[str, str]:
+def get_settings(user_id: Optional[str] = None) -> dict[str, str]:
     """Return provider settings. Checks local Redis cache first.
     If Redis is down or cache misses, falls back to Supabase and seeds Redis.
     """
     global _settings_cache, _cache_loaded_at
     
+    uid = user_id or active_user_id.get()
+    uid_str = str(uid) if uid else "all"
+    redis_key = f"agent_settings:{uid_str}"
+    
     r_client = get_redis_client()
     if r_client:
         try:
-            cached = r_client.get("agent_settings:all")
+            cached = r_client.get(redis_key)
             if cached:
                 try:
                     data = json.loads(cached)
@@ -160,37 +169,66 @@ def get_settings() -> dict[str, str]:
                 except Exception:
                     pass
             
-            fresh = run_in_thread(_fetch_settings_from_supabase)
+            fresh = run_in_thread(_fetch_settings_from_supabase, uid)
             if fresh:
                 try:
-                    r_client.setex("agent_settings:all", 3600, json.dumps(fresh))
+                    r_client.setex(redis_key, 3600, json.dumps(fresh))
                 except Exception as e:
                     logger.warning(f"[provider_engine] Failed to write settings to Redis: {e}")
                 return fresh
         except Exception as e:
             logger.warning(f"[provider_engine] Redis operation failed: {e}")
-
+ 
     now = time.time()
-    if now - _cache_loaded_at >= 10 or not _settings_cache:
-        fresh = run_in_thread(_fetch_settings_from_supabase)
+    loaded_at = _cache_loaded_at.get(uid_str, 0.0)
+    if now - loaded_at >= 10 or uid_str not in _settings_cache:
+        fresh = run_in_thread(_fetch_settings_from_supabase, uid)
         if fresh:
-            _settings_cache = fresh
-            _cache_loaded_at = now
-            logger.debug("[provider_engine] Settings cache refreshed from Supabase (fallback).")
-    return _settings_cache
+            _settings_cache[uid_str] = fresh
+            _cache_loaded_at[uid_str] = now
+            logger.debug(f"[provider_engine] Settings cache refreshed from Supabase (fallback) for user {uid_str}.")
+    return _settings_cache.get(uid_str, {})
 
 
-def invalidate_settings_cache() -> None:
+def invalidate_settings_cache(user_id: Optional[str] = None) -> None:
     """Force next call to get_settings() to re-fetch from Supabase and update Redis."""
     global _cache_loaded_at
-    _cache_loaded_at = 0.0
+    uid_str = str(user_id) if user_id else "all"
+    if uid_str in _cache_loaded_at:
+        _cache_loaded_at[uid_str] = 0.0
     r_client = get_redis_client()
     if r_client:
         try:
-            r_client.delete("agent_settings:all")
-            logger.debug("[provider_engine] Redis settings cache invalidated.")
+            r_client.delete(f"agent_settings:{uid_str}")
+            logger.debug(f"[provider_engine] Redis settings cache invalidated for user {uid_str}.")
         except Exception as e:
-            logger.warning(f"[provider_engine] Failed to delete settings cache in Redis: {e}")
+            logger.warning(f"[provider_engine] Failed to delete settings cache in Redis for {uid_str}: {e}")
+
+
+def get_user_api_key(
+    settings_key: str,
+    env_fallback: str = "",
+    user_id: Optional[str] = None,
+) -> str:
+    """Fetch an API key from user's agent_settings, falling back to process env vars if empty.
+
+    This enables per-user key injection, with fallback to environment variables
+    for local deployment compatibility.
+
+    Args:
+      settings_key:  The key name in agent_settings table (e.g. 'tavily_api_key').
+      env_fallback:  The environment variable to fall back to (e.g. 'TAVILY_API_KEY').
+      user_id:       Optional explicit user ID; uses active_user_id ContextVar if None.
+
+    Returns:
+      The resolved API key string.
+    """
+    uid = user_id or active_user_id.get()
+    settings = get_settings(uid)
+    val = settings.get(settings_key, "").strip()
+    if not val and env_fallback:
+        val = os.environ.get(env_fallback, "").strip()
+    return val
 
 
 
@@ -205,62 +243,37 @@ def get_retry_delay() -> int:
 
 # ── Agent defaults ─────────────────────────────────────────────────────────────
 
-_AGENT_DEFAULTS: dict[str, dict[str, str]] = {
-    "main_agent": {
-        "provider": "openrouter",
-        "model": "google/gemini-2.5-flash",
-    },
-    "analyzer": {
-        "provider": "openrouter",
-        "model": "google/gemini-2.5-flash",
-    },
-    "feeder": {
-        "provider": "openrouter",
-        "model": "google/gemini-2.5-flash",
-    },
-    # Subagents: default to same model as main_agent — configurable in UI
-    "research_subagent": {
-        "provider": "openrouter",
-        "model": "google/gemini-2.5-flash",
-    },
-    "content_subagent": {
-        "provider": "openrouter",
-        "model": "google/gemini-2.5-flash",
-    },
-    # Vector indexing: default to OpenRouter/Gemini 2.5 Flash
-    "vector_indexing": {
-        "provider": "openrouter",
-        "model": "google/gemini-2.5-flash",
-    },
-    # Mem0 extraction settings
-    "mem0_extraction": {
-        "provider": "openrouter",
-        "model": "google/gemini-2.5-flash",
-    },
+_AGENT_DEFAULTS = {
+    "main_agent":        {"provider": "openrouter", "model": "google/gemini-2.5-flash"},
+    "analyzer":          {"provider": "openrouter", "model": "google/gemini-2.5-flash"},
+    "feeder":            {"provider": "openrouter", "model": "google/gemini-2.5-flash"},
+    "research_subagent": {"provider": "openrouter", "model": "google/gemini-2.5-flash"},
+    "content_subagent":  {"provider": "openrouter", "model": "google/gemini-2.5-flash"},
 }
 
 
 # ── Per-Agent LLM Config ───────────────────────────────────────────────────────
 
-def get_llm_config(agent: str) -> tuple[str, str, str]:
+def get_llm_config(agent: str, user_id: Optional[str] = None) -> tuple[str, str, str]:
     """Return (base_url, api_key, model) for the given agent.
 
     Resolution order:
       1. Provider name → from Supabase agent_settings (e.g. "main_agent_provider")
       2. Model name    → from Supabase agent_settings (e.g. "main_agent_model")
-      3. base_url      → from PROVIDER_REGISTRY (via env var for dynamic providers)
-      4. api_key       → ALWAYS from environment variables (never Supabase)
+      3. base_url      → from PROVIDER_REGISTRY
+      4. api_key       → agent_settings[agent_settings_key] for the user (no fallback)
 
     Falls back to hardcoded _AGENT_DEFAULTS if Supabase has nothing configured.
 
     Args:
-        agent: One of "main_agent", "analyzer", "feeder",
-               "research_subagent", "content_subagent"
+      agent: One of "main_agent", "analyzer", "feeder",
+             "research_subagent", "content_subagent"
+      user_id: Optional UUID of the user.
 
     Returns:
-        (base_url, api_key, model) ready to pass to ChatOpenAI / httpx
+      (base_url, api_key, model) ready to pass to ChatOpenAI / httpx
     """
-    settings = get_settings()
+    settings = get_settings(user_id)
     defaults = _AGENT_DEFAULTS.get(agent, _AGENT_DEFAULTS["main_agent"])
 
     provider = settings.get(f"{agent}_provider", defaults["provider"]).strip().lower()
@@ -277,12 +290,13 @@ def get_llm_config(agent: str) -> tuple[str, str, str]:
     if needs_v1 and not base_url.endswith("/v1"):
         base_url = base_url + "/v1"
 
-    if actual_provider == "openrouter":
-        api_key = settings.get("openrouter_client_api_key", "").strip()
-        if not api_key:
-            api_key = get_provider_api_key("openrouter")
+    # Resolve API key: check user's agent_settings first (per-user SaaS key).
+    # No fallback to env vars. Uses agent_settings_key from registry.
+    agent_settings_key = cfg.get("agent_settings_key", "") if cfg else ""
+    if agent_settings_key:
+        api_key = get_user_api_key(agent_settings_key, user_id=user_id)
     else:
-        api_key = get_provider_api_key(actual_provider)
+        api_key = ""
 
     if not model:
         model = defaults["model"]
@@ -292,9 +306,7 @@ def get_llm_config(agent: str) -> tuple[str, str, str]:
 
     if not api_key:
         logger.warning(
-            f"[provider_engine] ⚠️ No API key found for provider '{actual_provider}' "
-            f"(env var: {get_provider_config(actual_provider).get('env_key', '?')}). "
-            f"Set it in your .env file."
+            f"[provider_engine] ⚠️ No API key found in user settings for provider '{actual_provider}'."
         )
 
     logger.debug(
@@ -492,20 +504,43 @@ def get_ordered_providers(category: str) -> list[dict]:
     return [row for row in rows if row.get("enabled", True)]
 
 
-def _fetch_active_mcp_connections() -> list[dict]:
+def _get_user_composio_api_key(user_id: Optional[str] = None) -> Optional[str]:
+    """Fetch the Composio API key for the current user.
+
+    Uses the shared get_settings() path which:
+      - Resolves user_id from the active_user_id ContextVar if not explicitly provided
+      - Checks Redis cache first (fast path)
+      - Falls back to Supabase only on cache miss
+    """
+    try:
+        # get_settings() already reads active_user_id ContextVar internally
+        settings = get_settings(user_id)
+        api_key = settings.get("composio_api_key")
+        if api_key:
+            return api_key
+    except Exception as e:
+        logger.error(f"Error fetching user Composio API key: {e}")
+    return None
+
+def _fetch_active_mcp_connections(user_id: Optional[str] = None) -> list[dict]:
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_ANON_KEY", "")
         if url and key:
             client = create_client(url, key)
-            resp = client.table("mcp_connections").select("*").eq("status", "active").execute()
-            return resp.data or []
-    except Exception:
-        pass
+            resp = client.rpc("get_backend_bootstrap_data").execute()
+            bootstrap = resp.data or {}
+            all_conns = bootstrap.get("mcp_connections") or []
+            active_conns = [c for c in all_conns if c.get("status") == "active"]
+            if user_id:
+                active_conns = [c for c in active_conns if c.get("user_id") == user_id]
+            return active_conns
+    except Exception as e:
+        logger.error(f"Error fetching active MCP connections: {e}")
     return []
 
-async def load_mcp_tool_by_key(tool_key: str) -> list[BaseTool]:
+async def load_mcp_tool_by_key(tool_key: str, user_id: Optional[str] = None) -> list[BaseTool]:
     """Find and load a specific MCP tool by its key from active connections.
 
     Strategy:
@@ -525,7 +560,11 @@ async def load_mcp_tool_by_key(tool_key: str) -> list[BaseTool]:
         if tool_obj:
             return [tool_obj]
 
-    connections = run_in_thread(_fetch_active_mcp_connections)
+    connections = run_in_thread(lambda: _fetch_active_mcp_connections(user_id))
+
+    # Resolve user_id from ContextVar if not explicitly provided
+    if not user_id:
+        user_id = active_user_id.get()
 
     # ── Stage 1: DB-cache lookup (fast path) ──────────────────────────────────
     for conn in connections:
@@ -542,13 +581,30 @@ async def load_mcp_tool_by_key(tool_key: str) -> list[BaseTool]:
                     from research_agent.tools.mcp_loader import load_manual_mcp_tool
                     return await load_manual_mcp_tool(conn.get("mcp_url"), tool_key)
                 else:
-                    composio_api_key = os.environ.get("COMPOSIO_API_KEY", "")
+                    # Resolve Composio API key: explicit user_id → ContextVar → env fallback
+                    composio_api_key = _get_user_composio_api_key(user_id)
+                    if not composio_api_key:
+                        composio_api_key = os.environ.get("COMPOSIO_API_KEY", "")
                     if composio_api_key:
                         try:
-                            from composio import Composio
-                            from composio_langchain import LangchainProvider
-                            composio = Composio(api_key=composio_api_key, provider=LangchainProvider())
-                            return await asyncio.to_thread(composio.tools.get, user_id="default", tools=[tool_key])
+                            try:
+                                from blockbuster.blockbuster import blockbuster_skip
+                                skip_token = blockbuster_skip.set(True)
+                            except Exception:
+                                skip_token = None
+
+                            try:
+                                from composio import Composio
+                                from composio_langchain import LangchainProvider
+                                composio = Composio(api_key=composio_api_key, provider=LangchainProvider())
+                                composio_user_id = user_id or "default"
+                                return await asyncio.to_thread(composio.tools.get, user_id=composio_user_id, tools=[tool_key])
+                            finally:
+                                if skip_token is not None:
+                                    try:
+                                        blockbuster_skip.reset(skip_token)
+                                    except Exception:
+                                        pass
                         except Exception as e:
                             logger.error(f"Failed to load Composio tool '{tool_key}': {e}", exc_info=True)
                             try:
@@ -689,73 +745,199 @@ async def execute_unified_pipeline(
     """Execute the prioritized list of providers for a tool category.
 
     Tries each enabled provider in order of priority_order.
-    Falls back to the next provider on failure.
-    Supports both built-in adapters and MCP tools.
+    Falls back to the next provider on failure, with schema adaptation feedback.
+    Supports built-in adapters, manual/Composio MCP tools, and built-in tools.
     """
-    providers = get_ordered_providers(category)
+    # Extract user_id from config
+    config = kwargs.get("config")
+    user_id = None
+    if config:
+        if isinstance(config, dict):
+            user_id = config.get("configurable", {}).get("user_id")
+        else:
+            user_id = getattr(config, "get", lambda *a: None)("configurable", {}).get("user_id")
+    if user_id:
+        active_user_id.set(user_id)
+
+    # 1. Fetch user-specific configs from agent_settings
+    providers = []
+    uid = user_id or active_user_id.get()
+    settings = get_settings(uid)
+    configs_str = settings.get("unified_tool_configs", "").strip()
+    if configs_str:
+        try:
+            all_configs = json.loads(configs_str)
+            if isinstance(all_configs, list):
+                providers = [p for p in all_configs if p.get("tool_category") == category and p.get("enabled", True)]
+                providers.sort(key=lambda x: x.get("priority_order", 999))
+        except Exception as e:
+            logger.error(f"[pipeline] Failed to parse unified_tool_configs JSON: {e}")
+
+    # Fallback to global/default providers if user config is empty
+    if not providers:
+        providers = get_ordered_providers(category)
+
     if not providers:
         providers = [
             {"provider_key": k, "fallback_on_error": True, "enabled": True}
             for k in default_provider_keys
         ]
 
-    errors = []
-    for idx, prov in enumerate(providers):
-        key = prov.get("provider_key")
-        fallback_on_error = prov.get("fallback_on_error", True)
-
-        logger.info(f"[pipeline] Trying provider {idx+1}/{len(providers)}: {key} (fallback={fallback_on_error})")
-
-        fn = None
-        is_mcp = False
-
-        if key in built_in_map:
-            fn = built_in_map[key]
-        else:
-            is_mcp = True
-
+    # Helper to check schema match
+    def is_kwargs_matching_tool_schema(tool, input_kwargs) -> bool:
         try:
-            if not is_mcp:
-                result = await asyncio.wait_for(fn(**kwargs), timeout=timeout_seconds)
-                logger.info(f"[pipeline] ✅ Provider '{key}' succeeded!")
-                prefix = ""
-                if idx > 0:
-                    prefix = f"⚡ [Fallback: {key} used after previous providers failed]\n\n"
-                return f"{prefix}{result}"
+            args = getattr(tool, "args", {})
+            if not args:
+                return True
+            schema = getattr(tool, "args_schema", None)
+            required_fields = []
+            if schema and hasattr(schema, "schema"):
+                required_fields = schema.schema().get("required", [])
+            elif schema and hasattr(schema, "__fields__"):
+                required_fields = [k for k, v in schema.__fields__.items() if getattr(v, "required", False)]
+            
+            for field in required_fields:
+                if field not in input_kwargs and field != "config":
+                    return False
+            return True
+        except Exception:
+            return True
+
+    # 2. Resolve tools for each provider key
+    resolved_tools = []
+    for prov in providers:
+        key = prov.get("provider_key")
+        tool_obj = None
+        if key not in built_in_map:
+            # Check if it is manual/Composio MCP tool
+            mcp_list = await load_mcp_tool_by_key(key)
+            if mcp_list:
+                tool_obj = mcp_list[0]
             else:
-                tools = await load_mcp_tool_by_key(key)
-                if not tools:
-                    raise RuntimeError(f"MCP tool '{key}' not found or connection offline")
+                # Check if it is built-in tool function in tools module
+                import research_agent.tools as ratools
+                if hasattr(ratools, key):
+                    tool_obj = getattr(ratools, key)
+        resolved_tools.append(tool_obj)
 
-                tool = tools[0]
-                tool_args = {}
-                if "query" in kwargs and kwargs["query"]:
-                    tool_args["query"] = kwargs["query"]
-                if "urls" in kwargs and kwargs["urls"]:
-                    tool_args["urls"] = kwargs["urls"]
-                    if "url" not in tool_args:
-                        tool_args["url"] = kwargs["urls"][0]
-
-                result = await asyncio.wait_for(tool.ainvoke(tool_args), timeout=timeout_seconds)
-                res_str = str(result)
-                logger.info(f"[pipeline] ✅ MCP Provider '{key}' succeeded!")
-                prefix = ""
-                if idx > 0:
-                    prefix = f"⚡ [Fallback MCP: {key} used after previous providers failed]\n\n"
-                return f"{prefix}{res_str}"
-
-        except Exception as e:
-            msg = f"Provider '{key}' failed: {e}"
-            logger.warning(f"[pipeline] ⚠️ {msg}")
-            errors.append(msg)
-            if not fallback_on_error:
-                logger.error(f"[pipeline] Fallback disabled for '{key}'. Aborting.")
+    # 3. Match kwargs to find the active provider index
+    matched_idx = -1
+    for idx, tool_obj in enumerate(resolved_tools):
+        if tool_obj:
+            if is_kwargs_matching_tool_schema(tool_obj, kwargs):
+                matched_idx = idx
+                break
+        else:
+            # Statically built-in presets (e.g. tavily, linkup)
+            # They match standard search/extract kwargs (query/urls)
+            if "query" in kwargs or "urls" in kwargs:
+                matched_idx = idx
                 break
 
-    summary = "; ".join(errors)
-    return (
-        f"⚠️ All tool providers failed. "
-        f"Errors: {summary}. "
-        "Please proceed with the information you have or skip this step."
-    )
+    if matched_idx == -1:
+        matched_idx = 0
+
+    prov = providers[matched_idx]
+    key = prov.get("provider_key")
+    fallback_on_error = prov.get("fallback_on_error", True)
+
+    logger.info(f"[pipeline] Executing matched provider {matched_idx+1}/{len(providers)}: {key}")
+
+    fn = None
+    is_mcp = False
+    is_builtin_tool = False
+
+    if key in built_in_map:
+        fn = built_in_map[key]
+    else:
+        # Resolve to tool_obj
+        tool_obj = resolved_tools[matched_idx]
+        if tool_obj:
+            fn = tool_obj
+            # Check if it is a built-in tool (starts with builtin name or loaded from research_agent.tools)
+            import research_agent.tools as ratools
+            if hasattr(ratools, key):
+                is_builtin_tool = True
+            else:
+                is_mcp = True
+        else:
+            return f"❌ Tool '{key}' not found or connection offline"
+
+    try:
+        if is_builtin_tool:
+            tool_args = {}
+            try:
+                for param_name in getattr(fn, "args", {}):
+                    if param_name in kwargs:
+                        tool_args[param_name] = kwargs[param_name]
+                    elif param_name == "config":
+                        tool_args["config"] = config
+            except Exception:
+                pass
+            if not tool_args:
+                # Filter out system args
+                tool_args = {k: v for k, v in kwargs.items() if k not in ["config"]}
+            
+            result = await asyncio.wait_for(fn.ainvoke(tool_args), timeout=timeout_seconds)
+            logger.info(f"[pipeline] ✅ Builtin Tool '{key}' succeeded!")
+            return str(result)
+            
+        elif is_mcp:
+            tool_args = {}
+            if "query" in kwargs and kwargs["query"]:
+                tool_args["query"] = kwargs["query"]
+            if "urls" in kwargs and kwargs["urls"]:
+                tool_args["urls"] = kwargs["urls"]
+                if "url" not in tool_args:
+                    tool_args["url"] = kwargs["urls"][0]
+            # Try parsing other custom parameters for MCP tools
+            try:
+                for param_name in getattr(fn, "args", {}):
+                    if param_name in kwargs and param_name not in tool_args:
+                        tool_args[param_name] = kwargs[param_name]
+            except Exception:
+                pass
+
+            result = await asyncio.wait_for(fn.ainvoke(tool_args), timeout=timeout_seconds)
+            res_str = str(result)
+            logger.info(f"[pipeline] ✅ MCP Provider '{key}' succeeded!")
+            return res_str
+            
+        else:
+            # Built-in map presets
+            # Strip config from kwargs before calling preset functions
+            preset_args = {k: v for k, v in kwargs.items() if k not in ["config"]}
+            result = await asyncio.wait_for(fn(**preset_args), timeout=timeout_seconds)
+            logger.info(f"[pipeline] ✅ Preset Provider '{key}' succeeded!")
+            return str(result)
+
+    except Exception as e:
+        msg = f"Provider '{key}' failed: {e}"
+        logger.warning(f"[pipeline] ⚠️ {msg}")
+        
+        if fallback_on_error and (matched_idx + 1 < len(providers)):
+            next_prov = providers[matched_idx + 1]
+            next_key = next_prov.get("provider_key")
+            
+            # Extract schema description for agent adaptation
+            next_schema = "query: str"
+            next_tool_obj = resolved_tools[matched_idx + 1]
+            if next_tool_obj:
+                try:
+                    next_schema = str(next_tool_obj.args)
+                except Exception:
+                    pass
+            elif next_key in ["linkup", "parallel", "tavily", "exa"]:
+                next_schema = "{query: str}"
+
+            return (
+                f"❌ Provider '{key}' failed: {e}. "
+                f"Next fallback provider is '{next_key}'. "
+                f"Please invoke this tool again with arguments matching the schema of '{next_key}': {next_schema}."
+            )
+        else:
+            return (
+                f"❌ Provider '{key}' failed and no further fallback is available. "
+                f"Error: {e}"
+            )
 

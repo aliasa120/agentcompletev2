@@ -17,6 +17,7 @@ interface Skill {
   source: string;
   created_at: string;
   created_by_agent_id?: string | null;
+  parent_skill_key?: string | null;
 }
 
 function SkillCard({
@@ -93,6 +94,14 @@ function SkillCard({
             placeholder="Skill name..."
           />
           <div className="flex flex-wrap items-center gap-2 mt-0.5">
+            {skill.parent_skill_key && (
+              <>
+                <span className="text-[10px] font-semibold bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
+                  Subskill of: {skill.parent_skill_key}
+                </span>
+                <span className="text-muted-foreground/30">•</span>
+              </>
+            )}
             <span className="text-[10px] text-muted-foreground">
               Created by: <span className="font-semibold text-foreground">{creatorAgent}</span>
             </span>
@@ -146,7 +155,7 @@ function SkillCard({
               onChange={e => setContent(e.target.value)}
               rows={16}
               placeholder="# Skill: Your Skill Name&#10;&#10;## Instructions&#10;..."
-              className="w-full rounded-lg border border-input bg-muted/20 px-3 py-2.5 text-xs font-mono
+              className="w-full rounded-lg border border-input bg-background text-foreground px-3 py-2.5 text-xs font-mono
                 leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-primary/50 min-h-[200px]"
             />
           </div>
@@ -164,6 +173,7 @@ export function SkillsSection() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [newSkillKey, setNewSkillKey] = useState("");
   const [newSkillLabel, setNewSkillLabel] = useState("");
+  const [newSkillParentKey, setNewSkillParentKey] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
 
   const fetchSkills = async () => {
@@ -198,10 +208,12 @@ export function SkillsSection() {
           description: "",
           content: `# Skill: ${newSkillLabel}\n\n## Instructions\n\nDescribe your skill instructions here...\n`,
           source: "user",
+          parent_skill_key: newSkillParentKey || null,
         }),
       });
       setNewSkillKey("");
       setNewSkillLabel("");
+      setNewSkillParentKey("");
       setShowCreateForm(false);
       fetchSkills();
     } finally {
@@ -273,7 +285,7 @@ export function SkillsSection() {
       {showCreateForm && (
         <div className="rounded-xl border bg-muted/10 p-4 space-y-3">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Create New Skill</p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Skill Key (slug)</label>
               <Input value={newSkillKey} onChange={e => setNewSkillKey(e.target.value)}
@@ -283,6 +295,19 @@ export function SkillsSection() {
               <label className="text-xs text-muted-foreground mb-1 block">Display Label</label>
               <Input value={newSkillLabel} onChange={e => setNewSkillLabel(e.target.value)}
                 placeholder="My Skill Name" className="h-8 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Parent Skill (Optional)</label>
+              <select
+                value={newSkillParentKey}
+                onChange={e => setNewSkillParentKey(e.target.value)}
+                className="w-full h-8 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="">None (Main Skill)</option>
+                {skills.filter(s => !s.parent_skill_key).map(s => (
+                  <option key={s.skill_key} value={s.skill_key}>{s.label}</option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="flex gap-2">

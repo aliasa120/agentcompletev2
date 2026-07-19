@@ -11,6 +11,7 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
+    "./node_modules/@relume_io/relume-ui/**/*.{js,ts,jsx,tsx,css}",
     "./node_modules/streamdown/dist/*.js",
     "./node_modules/@streamdown/code/dist/*.js",
     "./node_modules/@streamdown/math/dist/*.js",
@@ -111,6 +112,9 @@ export default {
         xs: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
       },
       backgroundColor: {
+        "background-primary": "var(--background)",
+        "background-secondary": "var(--bg-secondary)",
+        "background-tertiary": "var(--bg-tertiary)",
         secondary: "var(--bg-secondary)",
         "secondary-hover": "var(--bg-secondary_hover)",
         tertiary: "var(--bg-tertiary)",
@@ -134,6 +138,8 @@ export default {
         "warning-strong": "var(--bg-warning-strong)",
       },
       borderColor: {
+        "border-primary": "var(--border-primary)",
+        "border-secondary": "var(--border-secondary)",
         secondary: "var(--border-secondary)",
         tertiary: "var(--border-tertiary)",
         error: "var(--border-error)",
@@ -151,6 +157,9 @@ export default {
         "status-red": "var(--border-status-red)",
       },
       textColor: {
+        "text-primary": "var(--text-primary)",
+        "text-secondary": "var(--text-secondary)",
+        "text-placeholder": "var(--text-placeholder)",
         secondary: "var(--text-secondary)",
         tertiary: "var(--text-tertiary)",
         quaternary: "var(--text-quaternary)",

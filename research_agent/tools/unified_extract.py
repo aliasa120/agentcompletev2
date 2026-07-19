@@ -20,9 +20,10 @@ logger = logging.getLogger("unified_extract")
 
 async def _call_tavily(urls: List[str], query: str = "", **_) -> str:
     """Adapter: call Tavily extract. Ignores kwargs not relevant to Tavily."""
-    tavily_key = os.environ.get("TAVILY_API_KEY", "")
+    from .provider_engine import get_user_api_key
+    tavily_key = get_user_api_key("tavily_api_key", "TAVILY_API_KEY")
     if not tavily_key:
-        raise RuntimeError("TAVILY_API_KEY not set.")
+        raise RuntimeError("tavily_api_key not set in user settings or TAVILY_API_KEY env.")
     try:
         from tavily import TavilyClient
     except ImportError:
@@ -49,9 +50,10 @@ async def _call_tavily(urls: List[str], query: str = "", **_) -> str:
 
 async def _call_exa(urls: List[str], query: str = "", **_) -> str:
     """Adapter: call Exa AI extract. Ignores kwargs not relevant to Exa."""
-    exa_key = os.environ.get("EXA_API_KEY", "")
+    from .provider_engine import get_user_api_key
+    exa_key = get_user_api_key("exa_api_key", "EXA_API_KEY")
     if not exa_key:
-        raise RuntimeError("EXA_API_KEY not set.")
+        raise RuntimeError("exa_api_key not set in user settings or EXA_API_KEY env.")
     try:
         from exa_py import Exa as _ExaClient
     except ImportError:
@@ -74,9 +76,10 @@ async def _call_exa(urls: List[str], query: str = "", **_) -> str:
 
 async def _call_linkup(urls: List[str], **_) -> str:
     """Adapter: call Linkup extract (search for url content)."""
-    linkup_key = os.environ.get("LINKUP_API_KEY", "")
+    from .provider_engine import get_user_api_key
+    linkup_key = get_user_api_key("linkup_api_key", "LINKUP_API_KEY")
     if not linkup_key:
-        raise RuntimeError("LINKUP_API_KEY not set.")
+        raise RuntimeError("linkup_api_key not set in user settings or LINKUP_API_KEY env.")
     try:
         from linkup import LinkupClient
     except ImportError:
@@ -107,10 +110,10 @@ _PROVIDER_MAP = {
 }
 
 
-# ── LangGraph Tool ─────────────────────────────────────────────────────────────
+from langchain_core.runnables import RunnableConfig
 
 @tool(parse_docstring=True)
-def unified_extract(urls: List[str], query: str = "") -> str:
+def unified_extract(urls: List[str], query: str = "", config: RunnableConfig = None) -> str:
     """Extract full article content from URLs.
 
     Provider selection, priority, retry count, and fallback logic are
@@ -128,6 +131,7 @@ def unified_extract(urls: List[str], query: str = "") -> str:
     Args:
         urls: List of 1-2 credible news URLs to extract. Max 2 URLs per call.
         query: Optional keyword string — helps Tavily rerank chunks by relevance.
+        config: Optional LangChain runnable configuration.
 
     Returns:
         Full extracted markdown content for each URL, separated by dividers.
@@ -152,6 +156,7 @@ def unified_extract(urls: List[str], query: str = "") -> str:
             timeout_seconds=30,
             urls=urls,
             query=query,
+            config=config,
         )
     )
 

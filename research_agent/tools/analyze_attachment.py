@@ -37,7 +37,12 @@ def analyze_attachment(filename: str, query: str, config: RunnableConfig) -> str
     print(f"[analyze_attachment] Tool called for file: {filename}, query: {query}")
     lower_filename = filename.lower()
 
+    from research_agent.tools.provider_engine import active_user_id
     configurable = config.get("configurable", {})
+    user_id = configurable.get("user_id")
+    if user_id:
+        active_user_id.set(user_id)
+
     thread_id = configurable.get("thread_id")
     
     if not thread_id:
@@ -93,7 +98,7 @@ def analyze_attachment(filename: str, query: str, config: RunnableConfig) -> str
 
     # 3. Call Omni Fallback to process the media with the user's specific query
     from research_agent.tools.provider_engine import _fetch_settings_from_supabase, get_settings
-    settings = _fetch_settings_from_supabase() or get_settings()
+    settings = _fetch_settings_from_supabase(user_id) or get_settings(user_id)
     omni_provider = settings.get("omni_provider", "gemini").strip().lower()
     omni_model = settings.get("omni_model", "gemini-3.1-flash-lite").strip()
 
@@ -130,9 +135,10 @@ def analyze_attachment(filename: str, query: str, config: RunnableConfig) -> str
     )
 
     if omni_provider == "gemini":
-        gemini_key = os.environ.get("GEMINI_API_KEY")
+        from research_agent.tools.provider_engine import get_user_api_key
+        gemini_key = get_user_api_key("gemini_client_api_key", user_id=user_id)
         if not gemini_key:
-            return "❌ Error: GEMINI_API_KEY environment variable is not set on backend."
+            return "❌ Error: gemini_client_api_key is not set in user settings."
         
         try:
             from google import genai
@@ -176,15 +182,15 @@ def analyze_attachment(filename: str, query: str, config: RunnableConfig) -> str
         if needs_v1 and not gateway_base.endswith("/v1"):
             gateway_base = gateway_base + "/v1"
             
-        if actual_provider == "openrouter":
-            api_key = settings.get("openrouter_client_api_key", "").strip()
-            if not api_key:
-                api_key = get_provider_api_key("openrouter")
+        from research_agent.tools.provider_engine import get_user_api_key
+        agent_settings_key = cfg.get("agent_settings_key", "") if cfg else ""
+        if agent_settings_key:
+            api_key = get_user_api_key(agent_settings_key, user_id=user_id)
         else:
-            api_key = get_provider_api_key(actual_provider)
+            api_key = ""
             
         if not api_key:
-            return f"❌ Error: API key config missing for provider '{actual_provider}'."
+            return f"❌ Error: API key config missing in user settings for provider '{actual_provider}'."
 
         # Build multimodal content parts
         content_parts = []

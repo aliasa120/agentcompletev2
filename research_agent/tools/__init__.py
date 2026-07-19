@@ -31,6 +31,7 @@ from .list_skills import list_skills, build_skills_index
 from .manage_skill import manage_skill
 from .cronjob import cronjob
 from .search_conversation_history import search_conversation_history
+from .mem0_tools import search_memories
 
 # ── Dynamic Tool Routing ──────────────────────────────────────────────────
 from .dynamic_router import list_tools, load_tools, unload_unused_tools, build_tools_index, call_tool
@@ -66,6 +67,7 @@ __all__ = [
     "cronjob",
     "search_conversation_history",
     "build_skills_index",
+    "search_memories",
     # ── Raw providers (not exposed to agent directly) ─────────────────────────
     "linkup_search",
     "tavily_extract",

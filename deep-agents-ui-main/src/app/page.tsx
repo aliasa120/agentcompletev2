@@ -158,10 +158,11 @@ function HomePageInner({ config }: HomePageInnerProps) {
   const handleDeleteThread = useCallback(
     async (threadIdToDelete: string, status: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      const apiKey =
-        config.langsmithApiKey || process.env.NEXT_PUBLIC_LANGSMITH_API_KEY || "";
+      const isLocal = config.deploymentUrl.includes("localhost") || config.deploymentUrl.includes("127.0.0.1");
+      const apiKey = (!isLocal && (config.langsmithApiKey || process.env.NEXT_PUBLIC_LANGSMITH_API_KEY)) || "";
       const clientObj = new Client({
         apiUrl: config.deploymentUrl,
+        apiKey: apiKey || undefined,
         defaultHeaders: apiKey ? { "X-Api-Key": apiKey } : {},
       });
       if (confirm("Are you sure you want to delete this chat thread?")) {
@@ -688,7 +689,33 @@ function HomePageInner({ config }: HomePageInnerProps) {
 
           {/* Thread — new UI design, now backed by proven @langchain/langgraph-sdk/react */}
           <main className="flex flex-1 flex-col overflow-hidden h-full w-full min-h-0">
-            <Thread onStartAgent={handleStartAgent} />
+            {workflows.length === 0 ? (
+              <div className="flex flex-col items-center justify-center flex-1 p-8 text-center bg-gradient-to-b from-background to-muted/20">
+                <div className="max-w-md p-8 border border-primary/20 rounded-2xl bg-card shadow-lg flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Zap className="h-7 w-7 text-primary animate-pulse" />
+                  </div>
+                  <h1 className="text-xl font-bold text-foreground">Set Up Your Workspace</h1>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Start by creating a workflow and attaching an AI agent. This workspace is private and completely isolated to your account.
+                  </p>
+                  <div className="flex flex-col gap-2 w-full mt-2">
+                    <Link href="/agent-settings?tab=workflows" className="w-full">
+                      <Button className="w-full h-9 text-xs font-semibold bg-primary hover:bg-primary/95 shadow">
+                        Create Your First Workflow
+                      </Button>
+                    </Link>
+                    <Link href="/agent-settings?tab=tools" className="w-full">
+                      <Button variant="outline" className="w-full h-9 text-xs font-semibold hover:bg-muted">
+                        Configure Integration API Keys
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <Thread onStartAgent={handleStartAgent} />
+            )}
           </main>
         </div>
       </div>

@@ -17,6 +17,7 @@ const BUILTIN_TOOLS = [
   { key: "publish_to_wordpress", label: "WordPress Publish", desc: "WP REST API" },
   { key: "youtube_transcript", label: "YouTube Transcript", desc: "Get video transcripts without keys via youtube-transcript.ai" },
   { key: "search_conversation_history", label: "Search History", desc: "Retrieve memories and history via Postgres FTS" },
+  { key: "search_memories", label: "Get memories from mem0", desc: "Retrieve long-term facts and entities using Mem0 Pinecone Vector DB" },
   { key: "list_tools", label: "List Tools", desc: "Discover tools via semantic search" },
   { key: "load_tools", label: "Load Tools", desc: "Load parameters and schemas on demand" },
   { key: "call_tool", label: "Call Tool", desc: "Execute dynamically routed tools" },
@@ -37,6 +38,11 @@ export function BuiltinToolsPanel({ onReloadAgent }: { onReloadAgent?: () => voi
           .eq("key", "builtin_tools_loading_modes")
           .single();
         if (error) {
+          if (error.code === "PGRST116") {
+            // Row not found in fresh/truncated database — expected
+            setBuiltinModes({});
+            return;
+          }
           if (error.code === "PGRST303" || error.message?.includes("JWT expired")) {
             await supabase.auth.signOut().catch(() => {});
             for (let i = 0; i < localStorage.length; i++) {
@@ -50,7 +56,13 @@ export function BuiltinToolsPanel({ onReloadAgent }: { onReloadAgent?: () => voi
               .single();
             data = retry.data;
             error = retry.error;
-            if (error) console.error("Error loading built-in tool modes after retry:", error);
+            if (error) {
+              if (error.code !== "PGRST116") {
+                console.error("Error loading built-in tool modes after retry:", error);
+              } else {
+                setBuiltinModes({});
+              }
+            }
           } else {
             console.error("Error loading built-in tool modes:", error);
           }

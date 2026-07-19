@@ -14,6 +14,7 @@ import logging
 from typing import Optional
 
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
 
 logger = logging.getLogger("list_skills")
 
@@ -25,7 +26,7 @@ def _get_supabase_client():
     """Lazy-init a Supabase client."""
     from supabase import create_client
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    key = os.environ.get("SUPABASE_ANON_KEY", "")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
     if not url or not key:
         raise RuntimeError("SUPABASE_URL and SUPABASE_ANON_KEY must be set")
     return create_client(url, key)
@@ -51,41 +52,39 @@ def build_skills_index(agent_id: Optional[str] = None) -> str:
         # ── Step 1: Check which skills are assigned to this agent ─────────
         attach_all_skills = False
         assigned_skill_keys: Optional[list[str]] = None
+        user_id_val = None
 
         if agent_id:
             try:
-                agent_resp = client.table("agent_configs") \
-                    .select("attach_all_skills") \
-                    .eq("id", agent_id) \
-                    .execute()
-                if agent_resp.data and len(agent_resp.data) > 0:
-                    attach_all_skills = bool(agent_resp.data[0].get("attach_all_skills", False))
+                bootstrap_resp = client.rpc("get_backend_bootstrap_data").execute()
+                bootstrap = bootstrap_resp.data or {}
+
+                # Resolve attach_all_skills and user_id from bootstrap agent_configs
+                configs = bootstrap.get("agent_configs") or []
+                for cfg in configs:
+                    if str(cfg.get("id")) == str(agent_id):
+                        attach_all_skills = bool(cfg.get("attach_all_skills", False))
+                        user_id_val = cfg.get("user_id")
+                        break
+
+                # Resolve assigned skill keys from bootstrap agent_tool_assignments
+                assignments = bootstrap.get("agent_tool_assignments") or []
+                assigned_skill_keys = [
+                    a["tool_key"] for a in assignments
+                    if str(a.get("agent_id")) == str(agent_id)
+                    and a.get("tool_type") == "skill"
+                    and a.get("enabled")
+                ]
+
+                logger.info(
+                    f"[build_skills_index] Agent {agent_id[:8]}... has attach_all_skills={attach_all_skills}, "
+                    f"assigned skills: {assigned_skill_keys}"
+                )
             except Exception as e:
-                logger.warning(f"[build_skills_index] Failed to fetch agent config: {e}")
+                logger.warning(f"[build_skills_index] Failed to fetch agent config via bootstrap RPC: {e}")
 
-            try:
-                resp = client.table("agent_tool_assignments") \
-                    .select("tool_key") \
-                    .eq("agent_id", agent_id) \
-                    .eq("tool_type", "skill") \
-                    .eq("enabled", True) \
-                    .execute()
-
-                if resp.data is not None:
-                    assigned_skill_keys = [r["tool_key"] for r in resp.data]
-                    logger.info(
-                        f"[build_skills_index] Agent {agent_id[:8]}... has "
-                        f"{len(assigned_skill_keys)} assigned skills: {assigned_skill_keys}"
-                    )
-            except Exception as e:
-                logger.warning(f"[build_skills_index] Failed to check skill assignments: {e}")
-
-        # ── Step 2: Load skill metadata ───────────────────────────────────
-        resp = client.table("skills_library") \
-            .select("skill_key, label, description, category, created_by_agent_id") \
-            .eq("state", "active") \
-            .order("category") \
-            .execute()
+        # Call list_skills_admin RPC to bypass RLS
+        resp = client.rpc("list_skills_admin", {"p_user_id": user_id_val}).execute()
         all_active_skills = resp.data or []
 
         if agent_id:
@@ -107,9 +106,12 @@ def build_skills_index(agent_id: Optional[str] = None) -> str:
         if not skills:
             return ""
 
-        # Group by category
+        # Group by category, separating parent and subskills
+        parent_skills = [s for s in skills if not s.get("parent_skill_key")]
+        subskills = [s for s in skills if s.get("parent_skill_key")]
+
         by_category: dict[str, list[dict]] = {}
-        for s in skills:
+        for s in parent_skills:
             cat = s.get("category", "general") or "general"
             by_category.setdefault(cat, []).append(s)
 
@@ -124,6 +126,10 @@ def build_skills_index(agent_id: Optional[str] = None) -> str:
                     lines.append(f"    - {name}: {desc}")
                 else:
                     lines.append(f"    - {name}")
+                
+                matching_subs = [sub for sub in subskills if sub.get("parent_skill_key") == name]
+                if matching_subs:
+                    lines.append(f"      (subskills: {', '.join(sub.get('skill_key') for sub in matching_subs)})")
 
         index_body = "\n".join(lines)
         filter_note = (
@@ -162,7 +168,7 @@ def build_skills_index(agent_id: Optional[str] = None) -> str:
 
 
 @tool(parse_docstring=True)
-def list_skills(category: Optional[str] = None, agent_id: Optional[str] = None) -> str:
+def list_skills(category: Optional[str] = None, agent_id: Optional[str] = None, config: Optional[RunnableConfig] = None) -> str:
     """List all available skills with their names, descriptions, and categories.
 
     Use this to discover what specialized knowledge is available before
@@ -174,44 +180,58 @@ def list_skills(category: Optional[str] = None, agent_id: Optional[str] = None) 
                   (e.g. 'research', 'content', 'publishing', 'general').
         agent_id: Optional agent ID filter — if provided, only lists skills
                   assigned to this specific agent.
+        config: LangChain runnable configuration (automatically injected).
     """
     try:
         client = _get_supabase_client()
         
+        configurable = config.get("configurable", {}) if config else {}
+        user_id_val = configurable.get("user_id")
+
+        # Fall back to active_user_id ContextVar (set by ResilientChatModel on every LLM invocation)
+        if not user_id_val:
+            try:
+                from research_agent.tools.provider_engine import active_user_id as _active_uid
+                user_id_val = _active_uid.get()
+            except Exception:
+                pass
+
+        # Resolve user_id, attach_all_skills, and assigned_skill_keys from bootstrap RPC (bypasses RLS)
         attach_all_skills = False
         assigned_skill_keys = []
+
         if agent_id:
             try:
-                agent_resp = client.table("agent_configs") \
-                    .select("attach_all_skills") \
-                    .eq("id", agent_id) \
-                    .execute()
-                if agent_resp.data and len(agent_resp.data) > 0:
-                    attach_all_skills = bool(agent_resp.data[0].get("attach_all_skills", False))
+                bootstrap_resp = client.rpc("get_backend_bootstrap_data").execute()
+                bootstrap = bootstrap_resp.data or {}
+
+                # Resolve user_id and attach_all_skills from bootstrap agent_configs
+                configs = bootstrap.get("agent_configs") or []
+                for cfg in configs:
+                    if str(cfg.get("id")) == str(agent_id):
+                        attach_all_skills = bool(cfg.get("attach_all_skills", False))
+                        if not user_id_val:
+                            user_id_val = cfg.get("user_id")
+                        break
+
+                # Resolve assigned skill keys from bootstrap agent_tool_assignments
+                assignments = bootstrap.get("agent_tool_assignments") or []
+                assigned_skill_keys = [
+                    a["tool_key"] for a in assignments
+                    if str(a.get("agent_id")) == str(agent_id)
+                    and a.get("tool_type") == "skill"
+                    and a.get("enabled")
+                ]
             except Exception as e:
-                logger.warning(f"[list_skills] Failed to fetch agent config: {e}")
+                logger.warning(f"[list_skills] Failed to fetch agent configs via bootstrap RPC: {e}")
 
-            try:
-                assign_resp = client.table("agent_tool_assignments") \
-                    .select("tool_key") \
-                    .eq("agent_id", agent_id) \
-                    .eq("tool_type", "skill") \
-                    .eq("enabled", True) \
-                    .execute()
-                if assign_resp.data:
-                    assigned_skill_keys = [r["tool_key"] for r in assign_resp.data]
-            except Exception as e:
-                logger.warning(f"[list_skills] Failed to check skill assignments: {e}")
-
-        query = client.table("skills_library") \
-            .select("skill_key, label, description, category, use_count, state, created_by, created_by_agent_id") \
-            .eq("state", "active")
-
-        if category:
-            query = query.eq("category", category)
-
-        resp = query.order("category").execute()
+        # Call list_skills_admin RPC to bypass RLS
+        resp = client.rpc("list_skills_admin", {"p_user_id": user_id_val}).execute()
         all_active_skills = resp.data or []
+
+        # Filter by category if provided
+        if category:
+            all_active_skills = [s for s in all_active_skills if s.get("category") == category]
 
         if agent_id:
             skills = []
@@ -241,9 +261,19 @@ def list_skills(category: Optional[str] = None, agent_id: Optional[str] = None) 
                 return f"No active skills found in category '{category}'."
             return "No skills found in the skills library. You can create one with manage_skill(action='create')."
 
-        # Group by category for display
+        # Separate main and subskills
+        parent_skills = [s for s in skills if not s.get("parent_skill_key")]
+        subskills = [s for s in skills if s.get("parent_skill_key")]
+
+        # Group main skills by category
         by_category: dict[str, list[dict]] = {}
-        for s in skills:
+        for s in parent_skills:
+            cat = s.get("category", "general") or "general"
+            by_category.setdefault(cat, []).append(s)
+
+        # Include orphan subskills (if parent is not visible)
+        orphan_subs = [s for s in subskills if not any(p.get("skill_key") == s.get("parent_skill_key") for p in parent_skills)]
+        for s in orphan_subs:
             cat = s.get("category", "general") or "general"
             by_category.setdefault(cat, []).append(s)
 
@@ -256,10 +286,23 @@ def list_skills(category: Optional[str] = None, agent_id: Optional[str] = None) 
                 desc = s.get("description", "")[:100]
                 uses = s.get("use_count", 0)
                 creator = s.get("created_by", "user")
+                
                 lines.append(f"    • {name} ({label})")
                 if desc:
                     lines.append(f"      {desc}")
                 lines.append(f"      Uses: {uses} | Created by: {creator}")
+                
+                # Render subskills nested under their parent
+                matching_subs = [sub for sub in subskills if sub.get("parent_skill_key") == name]
+                if matching_subs:
+                    lines.append("      ↳ Subskills:")
+                    for sub in sorted(matching_subs, key=lambda x: x.get("skill_key", "")):
+                        sub_name = sub.get("skill_key", "unknown")
+                        sub_label = sub.get("label", sub_name)
+                        sub_desc = sub.get("description", "")[:100]
+                        lines.append(f"        * {sub_name} ({sub_label})")
+                        if sub_desc:
+                            lines.append(f"          {sub_desc}")
             lines.append("")
 
         lines.append(

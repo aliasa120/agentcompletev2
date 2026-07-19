@@ -295,29 +295,37 @@ def get_allowed_routing_tools(agent_id: str) -> Dict[str, set[str]]:
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
         if not url or not key:
             return result
         client = create_client(url, key)
 
-        # Get assigned tools for this agent
-        resp = client.table("agent_tool_assignments") \
-            .select("*") \
-            .eq("agent_id", agent_id) \
-            .eq("enabled", True) \
-            .execute()
+        # Call get_backend_bootstrap_data RPC to bypass RLS
+        bootstrap_resp = client.rpc("get_backend_bootstrap_data").execute()
+        bootstrap = bootstrap_resp.data or {}
 
-        assignments = resp.data or []
+        # Filter assignments for this agent
+        all_assignments = bootstrap.get("agent_tool_assignments") or []
+        assignments = [a for a in all_assignments if a.get("agent_id") == agent_id and a.get("enabled") == True]
         if not assignments:
             return result
 
-        # Fetch agent settings from Supabase
-        try:
-            settings_resp = client.table("agent_settings").select("key,value").execute()
-            db_settings = {row["key"]: row["value"] for row in (settings_resp.data or [])}
-        except Exception as e:
-            logger.warning(f"Failed to fetch agent settings: {e}")
-            db_settings = {}
+        # Resolve user_id from agent_configs
+        all_configs = bootstrap.get("agent_configs") or []
+        agent_cfg = next((c for c in all_configs if c.get("id") == agent_id), None)
+        user_id = agent_cfg.get("user_id") if agent_cfg else None
+
+        # Filter settings by user_id
+        all_settings = bootstrap.get("agent_settings") or []
+        db_settings = {}
+        for row in all_settings:
+            row_uid = row.get("user_id")
+            if user_id:
+                if row_uid == user_id or not row_uid:
+                    db_settings[row["key"]] = row["value"]
+            else:
+                if not row_uid:
+                    db_settings[row["key"]] = row["value"]
 
         super_enabled = db_settings.get("super_indexing_enabled", "true").lower() == "true"
         normal_enabled = db_settings.get("normal_indexing_enabled", "true").lower() == "true"
@@ -330,22 +338,20 @@ def get_allowed_routing_tools(agent_id: str) -> Dict[str, set[str]]:
             builtin_loading_modes = {}
 
         # Fetch global MCP tool settings
-        try:
-            mcp_settings_resp = client.table("mcp_tool_settings").select("tool_key, loading_mode").execute()
-            mcp_tool_modes = {row["tool_key"]: row["loading_mode"] for row in (mcp_settings_resp.data or [])}
-        except Exception as e:
-            logger.warning(f"Failed to fetch mcp_tool_settings: {e}")
-            mcp_tool_modes = {}
+        all_mcp_settings = bootstrap.get("mcp_tool_settings") or []
+        mcp_tool_modes = {row["tool_key"]: row["loading_mode"] for row in all_mcp_settings}
 
         for a in assignments:
             t_key = a.get("tool_key")
             t_type = a.get("tool_type")
 
             # Resolve global loading mode
-            if t_type == "builtin":
-                mode = builtin_loading_modes.get(t_key, "primary")
-            else:  # mcp
-                mode = mcp_tool_modes.get(t_key, "primary")
+            mode = a.get("loading_mode")
+            if not mode:
+                if t_type == "builtin":
+                    mode = builtin_loading_modes.get(t_key, "primary")
+                else:  # mcp
+                    mode = mcp_tool_modes.get(t_key, "primary")
 
             if t_key in ["list_tools", "load_tools", "call_tool"]:
                 mode = "primary"
@@ -395,6 +401,10 @@ def build_tools_index(agent_id: str) -> str:
             return ""
         client = create_client(url, key)
 
+        # Call get_backend_bootstrap_data RPC to bypass RLS
+        bootstrap_resp = client.rpc("get_backend_bootstrap_data").execute()
+        bootstrap = bootstrap_resp.data or {}
+
         allowed = get_allowed_routing_tools(agent_id)
         normal_keys = allowed.get("normal", set())
         super_keys = allowed.get("super", set())
@@ -402,13 +412,9 @@ def build_tools_index(agent_id: str) -> str:
         if not normal_keys and not super_keys:
             return ""
 
-        # Get assigned tools for this agent to check types (builtin vs mcp)
-        resp = client.table("agent_tool_assignments") \
-            .select("*") \
-            .eq("agent_id", agent_id) \
-            .eq("enabled", True) \
-            .execute()
-        assignments = resp.data or []
+        # Get assigned tools for this agent
+        all_assignments = bootstrap.get("agent_tool_assignments") or []
+        assignments = [a for a in all_assignments if a.get("agent_id") == agent_id and a.get("enabled") == True]
 
         prompt_sections = []
 
@@ -430,8 +436,8 @@ def build_tools_index(agent_id: str) -> str:
             # Resolve MCP tool descriptions from connections metadata
             if mcp_keys:
                 try:
-                    conn_resp = client.table("mcp_connections").select("available_tools").eq("status", "active").execute()
-                    for conn in (conn_resp.data or []):
+                    active_conns = bootstrap.get("mcp_connections") or []
+                    for conn in active_conns:
                         available = conn.get("available_tools") or []
                         for t in available:
                             if isinstance(t, dict):
@@ -461,12 +467,7 @@ def build_tools_index(agent_id: str) -> str:
 
         # ── 2. Compile Super Index Prompt Block ──
         if super_keys:
-            try:
-                conn_resp = client.table("mcp_connections").select("*").eq("status", "active").execute()
-                active_conns = conn_resp.data or []
-            except Exception as e:
-                logger.warning(f"Error fetching active MCP connections: {e}")
-                active_conns = []
+            active_conns = bootstrap.get("mcp_connections") or []
 
             mcp_super_counts = {}
             for conn in active_conns:
@@ -525,7 +526,12 @@ def build_tools_index(agent_id: str) -> str:
 
 
 @tool(parse_docstring=True)
-def list_tools(query: Optional[str] = None, mcp_name: Optional[str] = None, agent_id: Optional[str] = None) -> str:
+def list_tools(
+    query: Optional[str] = None,
+    mcp_name: Optional[str] = None,
+    agent_id: Optional[str] = None,
+    config: Optional[Any] = None,
+) -> str:
     """Perform tool discovery.
 
     If mcp_name is provided, retrieves all active tools for that specific MCP connection
@@ -544,28 +550,25 @@ def list_tools(query: Optional[str] = None, mcp_name: Optional[str] = None, agen
         if url and key:
             client = create_client(url, key)
 
+        # Call get_backend_bootstrap_data RPC to bypass RLS
+        bootstrap = {}
+        if client:
+            try:
+                bootstrap_resp = client.rpc("get_backend_bootstrap_data").execute()
+                bootstrap = bootstrap_resp.data or {}
+            except Exception as e:
+                logger.warning(f"Failed to fetch bootstrap data in list_tools: {e}")
+
         # 1. Handle MCP Connection discovery if mcp_name is provided
         if mcp_name and client:
             # Retrieve assigned tools for the agent to filter
             assigned_keys = None
             if agent_id:
-                try:
-                    resp = client.table("agent_tool_assignments") \
-                        .select("tool_key") \
-                        .eq("agent_id", agent_id) \
-                        .eq("enabled", True) \
-                        .execute()
-                    assigned_keys = {row["tool_key"] for row in (resp.data or [])}
-                except Exception as e:
-                    logger.warning(f"Error fetching agent tool assignments for list_tools: {e}")
+                all_assignments = bootstrap.get("agent_tool_assignments") or []
+                assigned_keys = {a["tool_key"] for a in all_assignments if a.get("agent_id") == agent_id and a.get("enabled") == True}
 
-            # Retrieve active MCP connections
-            try:
-                conn_resp = client.table("mcp_connections").select("*").eq("status", "active").execute()
-                active_conns = conn_resp.data or []
-            except Exception as e:
-                logger.warning(f"Error fetching active MCP connections: {e}")
-                active_conns = []
+            # Retrieve active MCP connections from bootstrap
+            active_conns = bootstrap.get("mcp_connections") or []
 
             # Find the one matching mcp_name
             target_conn = None
@@ -619,8 +622,8 @@ def list_tools(query: Optional[str] = None, mcp_name: Optional[str] = None, agen
         mcp_tools = []
         if client:
             try:
-                conn_resp = client.table("mcp_connections").select("available_tools").eq("status", "active").execute()
-                for conn in (conn_resp.data or []):
+                active_conns = bootstrap.get("mcp_connections") or []
+                for conn in active_conns:
                     available = conn.get("available_tools") or []
                     for t in available:
                         if isinstance(t, dict):
@@ -729,7 +732,11 @@ def list_tools(query: Optional[str] = None, mcp_name: Optional[str] = None, agen
 
 
 @tool(parse_docstring=True)
-def load_tools(tool_names: List[str], agent_id: Optional[str] = None) -> str:
+def load_tools(
+    tool_names: List[str],
+    agent_id: Optional[str] = None,
+    config: Optional[Any] = None,
+) -> str:
     """Load the complete JSON schemas for the specified tool names.
 
     Fetches full schemas (parameters, types, required fields) from the master registry.
@@ -739,6 +746,11 @@ def load_tools(tool_names: List[str], agent_id: Optional[str] = None) -> str:
         tool_names: List of tool names to load (e.g. ['think_tool', 'unified_search'])
     """
     schemas = {}
+    user_id = None
+    if config:
+        configurable = config.configurable if hasattr(config, "configurable") else config.get("configurable", {})
+        user_id = configurable.get("user_id")
+
     not_found = []
 
     allowed_tools = None
@@ -759,7 +771,7 @@ def load_tools(tool_names: List[str], agent_id: Optional[str] = None) -> str:
             try:
                 from research_agent.tools.provider_engine import load_mcp_tool_by_key
                 from research_agent.tools.mcp_loader import run_sync
-                mcp_tools = run_sync(load_mcp_tool_by_key(name))
+                mcp_tools = run_sync(load_mcp_tool_by_key(name, user_id))
                 if mcp_tools:
                     tool_obj = mcp_tools[0]
             except Exception as e:
@@ -827,6 +839,10 @@ def call_tool(
     """
     from langchain_core.runnables import RunnableConfig
     tool_name = tool_name.strip()
+    user_id = None
+    if config:
+        configurable = config.configurable if hasattr(config, "configurable") else config.get("configurable", {})
+        user_id = configurable.get("user_id")
     
     # Security/Access check: if agent_id is passed, the tool MUST be in the allowed list
     if agent_id:
@@ -863,7 +879,7 @@ def call_tool(
         from research_agent.tools.provider_engine import load_mcp_tool_by_key
         from research_agent.tools.mcp_loader import run_sync
 
-        mcp_tools = run_sync(load_mcp_tool_by_key(tool_name))
+        mcp_tools = run_sync(load_mcp_tool_by_key(tool_name, user_id))
         if mcp_tools:
             mcp_tool_obj = mcp_tools[0]
             # MCP StructuredTools from langchain_mcp_adapters are async-only.

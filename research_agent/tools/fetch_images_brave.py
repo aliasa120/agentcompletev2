@@ -28,10 +28,11 @@ def fetch_images_brave(query: str, count: int = 10) -> str:
         Pick the image whose title and source best matches the story being written.
         Returns a skip message if no images are found or the API key is missing.
     """
-    api_key = os.environ.get("BRAVE_API_KEY", "")
+    from research_agent.tools.provider_engine import get_user_api_key
+    api_key = get_user_api_key("brave_api_key", "BRAVE_API_KEY")
     if not api_key:
         return (
-            "BRAVE_API_KEY not set. Cannot fetch images via Brave. "
+            "brave_api_key not set in user settings or BRAVE_API_KEY env. Cannot fetch images via Brave. "
             "Skip the image pipeline steps."
         )
 

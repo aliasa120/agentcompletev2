@@ -117,12 +117,11 @@ function EmptyState() {
 function getLangGraphClient(): Client | null {
   const config = getConfig();
   if (!config) return null;
-  const apiKey =
-    config.langsmithApiKey ||
-    process.env.NEXT_PUBLIC_LANGSMITH_API_KEY ||
-    "";
+  const isLocal = config.deploymentUrl.includes("localhost") || config.deploymentUrl.includes("127.0.0.1");
+  const apiKey = (!isLocal && (config.langsmithApiKey || process.env.NEXT_PUBLIC_LANGSMITH_API_KEY)) || "";
   return new Client({
     apiUrl: config.deploymentUrl,
+    apiKey: apiKey || undefined,
     defaultHeaders: apiKey ? { "X-Api-Key": apiKey } : {},
   });
 }

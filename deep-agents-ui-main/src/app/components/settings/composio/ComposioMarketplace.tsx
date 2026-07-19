@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   Search, ExternalLink, CheckCircle2, Loader2, Link2, Unlink,
-  Globe, AlertCircle, AlertTriangle
+  Globe, AlertCircle, AlertTriangle, Key, ShieldCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,10 @@ export function ComposioMarketplace({
   const [connecting, setConnecting] = useState<string | null>(null);
   const [connectErrors, setConnectErrors] = useState<Record<string, string>>({});
   const [noKey, setNoKey] = useState(false);
+  const [customApiKey, setCustomApiKey] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
+  const [isKeyConfigured, setIsKeyConfigured] = useState(false);
+  const [showKeyInput, setShowKeyInput] = useState(false);
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const fetchToolkits = async (searchQuery = "", cat = "all", sortOrder = "name-asc", pageNum = 1, append = false) => {
@@ -44,7 +48,7 @@ export function ComposioMarketplace({
     try {
       const res = await fetch(`/api/mcp/composio/toolkits?q=${encodeURIComponent(searchQuery)}&category=${encodeURIComponent(cat)}&sort=${sortOrder}&page=${pageNum}&limit=24`);
       const data = await res.json();
-      if (data.error?.includes("COMPOSIO_API_KEY not set")) {
+      if (data.error?.includes("not set")) {
         setNoKey(true);
       } else {
         setNoKey(false);
@@ -57,7 +61,50 @@ export function ComposioMarketplace({
     }
   };
 
-  useEffect(() => { fetchToolkits(query, category, sort, 1); }, []);
+  const loadSettings = async () => {
+    try {
+      const res = await fetch("/api/user-settings");
+      const data = await res.json();
+      if (data.settings?.composio_api_key) {
+        setCustomApiKey(data.settings.composio_api_key);
+        setIsKeyConfigured(true);
+        setNoKey(false);
+        // Fetch list as soon as we have a key
+        fetchToolkits(query, category, sort, 1);
+      } else {
+        setIsKeyConfigured(false);
+        // Check if there is a global fallback key
+        fetchToolkits(query, category, sort, 1);
+      }
+    } catch (e) {
+      console.error("Failed to load user settings:", e);
+      fetchToolkits(query, category, sort, 1);
+    }
+  };
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const handleSaveApiKey = async () => {
+    setSavingKey(true);
+    try {
+      const res = await fetch("/api/user-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ composio_api_key: customApiKey }),
+      });
+      if (res.ok) {
+        setIsKeyConfigured(!!customApiKey);
+        setShowKeyInput(false);
+        fetchToolkits(query, category, sort, 1);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSavingKey(false);
+    }
+  };
 
   const handleSearch = (q: string) => {
     setQuery(q);
@@ -122,23 +169,6 @@ export function ComposioMarketplace({
     await onRefresh();
     if (onReloadAgent) onReloadAgent();
   };
-
-  if (noKey) {
-    return (
-      <div className="rounded-xl border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-8 text-center">
-        <AlertCircle className="h-8 w-8 text-orange-500 mx-auto mb-3" />
-        <p className="font-semibold text-orange-700 dark:text-orange-400 mb-1">Composio API Key Required</p>
-        <p className="text-sm text-orange-600 dark:text-orange-500 mb-4">
-          Add <code className="bg-orange-100 dark:bg-orange-900/50 px-1 rounded font-mono text-xs">COMPOSIO_API_KEY</code> to your{" "}
-          <code className="font-mono text-xs bg-orange-100 dark:bg-orange-900/50 px-1 rounded">.env</code> file
-        </p>
-        <a href="https://app.composio.dev" target="_blank" rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-700 dark:text-orange-400 hover:underline">
-          Get free API key at composio.dev <ExternalLink className="h-3.5 w-3.5" />
-        </a>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">
@@ -238,4 +268,5 @@ export function ComposioMarketplace({
       )}
     </div>
   );
+
 }

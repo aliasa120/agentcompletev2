@@ -1,13 +1,30 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
 const COMPOSIO_API_KEY = process.env.COMPOSIO_API_KEY ?? "";
 const COMPOSIO_BASE = "https://backend.composio.dev/api/v3";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
+    }
+  );
+}
 
 // Helper: check if a connection status string means "active"
 function isActiveStatus(status: string): boolean {
@@ -16,13 +33,13 @@ function isActiveStatus(status: string): boolean {
 }
 
 // Helper: fetch available tools for a toolkit slug from Composio
-async function fetchToolsForSlug(slug: string): Promise<{ tool_key: string; tool_name: string }[]> {
-  if (!slug) return [];
+async function fetchToolsForSlug(slug: string, apiKey: string): Promise<{ tool_key: string; tool_name: string }[]> {
+  if (!slug || !apiKey) return [];
   try {
     const toolsRes = await fetch(
       `${COMPOSIO_BASE}/tools?toolkit_slug=${encodeURIComponent(slug)}&limit=100`,
       {
-        headers: { "x-api-key": COMPOSIO_API_KEY },
+        headers: { "x-api-key": apiKey },
         signal: AbortSignal.timeout(8000),
       }
     );
@@ -41,23 +58,42 @@ async function fetchToolsForSlug(slug: string): Promise<{ tool_key: string; tool
 // GET /api/mcp/composio/connections — List active connections
 export async function GET(req: Request) {
   try {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Fetch user's custom Composio key
+    const { data: userSettings } = await supabase
+      .from("agent_settings")
+      .select("value")
+      .eq("user_id", user.id)
+      .eq("key", "composio_api_key")
+      .maybeSingle();
+
+    const isTayyab = user.email === "tayyab@gmail.com";
+    const apiKey = userSettings?.value?.trim() || (isTayyab ? COMPOSIO_API_KEY : "");
+
     // 1. Load cached connections from Supabase first
     const { data: cached } = await supabase
       .from("mcp_connections")
       .select("*")
       .eq("connection_type", "composio")
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
     const { searchParams } = new URL(req.url);
     const shouldSync = searchParams.get("sync") === "true";
 
     // 2. Sync from Composio API if requested and key is set
-    if (shouldSync && COMPOSIO_API_KEY) {
+    if (shouldSync && apiKey) {
       try {
         const res = await fetch(
-          `${COMPOSIO_BASE}/connected_accounts?page=1&limit=100`,
+          `${COMPOSIO_BASE}/connected_accounts?page=1&limit=100&user_id=${encodeURIComponent(user.id)}`,
           {
-            headers: { "x-api-key": COMPOSIO_API_KEY },
+            headers: { "x-api-key": apiKey },
             signal: AbortSignal.timeout(10000),
           }
         );
@@ -89,11 +125,12 @@ export async function GET(req: Request) {
               const existing = cached?.find((c) => c.composio_conn_id === acc.id);
               toolsList = existing?.available_tools ?? [];
               if (!toolsList || toolsList.length === 0) {
-                toolsList = await fetchToolsForSlug(toolkitSlug);
+                toolsList = await fetchToolsForSlug(toolkitSlug, apiKey);
               }
             }
 
             return {
+              user_id: user.id,
               connection_type: "composio",
               toolkit_slug: toolkitSlug,
               label,
@@ -109,7 +146,7 @@ export async function GET(req: Request) {
           if (upsertData.length > 0) {
             // Perform bulk upsert in a single database call
             await supabase.from("mcp_connections").upsert(upsertData, {
-              onConflict: "composio_conn_id",
+              onConflict: "user_id,composio_conn_id",
             });
           }
 
@@ -120,7 +157,11 @@ export async function GET(req: Request) {
             .map((c) => c.id);
 
           if (toDelete.length > 0) {
-            await supabase.from("mcp_connections").delete().in("id", toDelete);
+            await supabase
+              .from("mcp_connections")
+              .delete()
+              .eq("user_id", user.id)
+              .in("id", toDelete);
           }
         }
       } catch (syncErr) {
@@ -132,6 +173,7 @@ export async function GET(req: Request) {
         .from("mcp_connections")
         .select("*")
         .eq("connection_type", "composio")
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       return NextResponse.json({ connections: synced ?? [] });
@@ -148,14 +190,32 @@ export async function GET(req: Request) {
 
 // POST /api/mcp/composio/connections — Initiate OAuth connection for a toolkit
 export async function POST(req: Request) {
-  if (!COMPOSIO_API_KEY) {
-    return NextResponse.json(
-      { error: "COMPOSIO_API_KEY not configured. Add it to your .env file." },
-      { status: 400 }
-    );
-  }
-
   try {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Fetch user's custom Composio key
+    const { data: userSettings } = await supabase
+      .from("agent_settings")
+      .select("value")
+      .eq("user_id", user.id)
+      .eq("key", "composio_api_key")
+      .maybeSingle();
+
+    const isTayyab = user.email === "tayyab@gmail.com";
+    const apiKey = userSettings?.value?.trim() || (isTayyab ? COMPOSIO_API_KEY : "");
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "Composio API key not configured. Add it in your profile settings." },
+        { status: 400 }
+      );
+    }
+
     const { toolkit_slug, redirect_url } = await req.json();
     if (!toolkit_slug) {
       return NextResponse.json({ error: "toolkit_slug is required" }, { status: 400 });
@@ -163,19 +223,20 @@ export async function POST(req: Request) {
 
     // Identify auth requirements first to handle no-auth toolkits instantly
     const tkRes = await fetch(`${COMPOSIO_BASE}/toolkits/${encodeURIComponent(toolkit_slug)}`, {
-      headers: { "x-api-key": COMPOSIO_API_KEY }
+      headers: { "x-api-key": apiKey }
     });
     
     if (tkRes.ok) {
       const tkData = await tkRes.json();
       const details = tkData.auth_config_details ?? [];
       if (details.length > 0 && details[0].mode === "NO_AUTH") {
-        const toolsList = await fetchToolsForSlug(toolkit_slug);
+        const toolsList = await fetchToolsForSlug(toolkit_slug, apiKey);
         const label = tkData.name ?? tkData.slug ?? toolkit_slug;
         const connId = `no_auth_${toolkit_slug}`;
 
         await supabase.from("mcp_connections").upsert(
           {
+            user_id: user.id,
             connection_type: "composio",
             toolkit_slug,
             label,
@@ -184,7 +245,7 @@ export async function POST(req: Request) {
             available_tools: toolsList,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: "composio_conn_id" }
+          { onConflict: "user_id,composio_conn_id" }
         );
 
         return NextResponse.json({ success: true, instant: true });
@@ -194,14 +255,13 @@ export async function POST(req: Request) {
     // 1. Check if auth config exists for this toolkit slug
     const listRes = await fetch(
       `${COMPOSIO_BASE}/auth_configs?toolkit_slug=${encodeURIComponent(toolkit_slug)}&show_disabled=false`,
-      { headers: { "x-api-key": COMPOSIO_API_KEY } }
+      { headers: { "x-api-key": apiKey } }
     );
     let auth_config_id = "";
     if (listRes.ok) {
       const listData = await listRes.json();
       const items: Record<string, string>[] = listData.items ?? [];
       if (items.length > 0) {
-        // Prefer composio-managed, then pick the most recent
         const managed = items.filter((a) => a.is_composio_managed);
         const preferred = managed.length > 0 ? managed : items;
         preferred.sort(
@@ -218,7 +278,7 @@ export async function POST(req: Request) {
       const createRes = await fetch(`${COMPOSIO_BASE}/auth_configs`, {
         method: "POST",
         headers: {
-          "x-api-key": COMPOSIO_API_KEY,
+          "x-api-key": apiKey,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -235,18 +295,15 @@ export async function POST(req: Request) {
         const createData = await createRes.json();
         auth_config_id = createData.auth_config?.id ?? createData.id ?? "";
       } else {
-        // Managed auth failed (likely because it requires custom credentials/API key)
-        // Fall back to creating a custom auth config
         try {
           const tkRes = await fetch(`${COMPOSIO_BASE}/toolkits/${encodeURIComponent(toolkit_slug)}`, {
-            headers: { "x-api-key": COMPOSIO_API_KEY }
+            headers: { "x-api-key": apiKey }
           });
           let authScheme = "API_KEY";
           if (tkRes.ok) {
             const tkData = await tkRes.json();
             const details = tkData.auth_config_details ?? [];
             if (details.length > 0) {
-              // Find the first scheme that has no required fields for auth_config_creation (e.g. API_KEY, BASIC)
               const simpleScheme = details.find(
                 (d: any) =>
                   !d.fields?.auth_config_creation?.required ||
@@ -263,7 +320,7 @@ export async function POST(req: Request) {
           const customCreateRes = await fetch(`${COMPOSIO_BASE}/auth_configs`, {
             method: "POST",
             headers: {
-              "x-api-key": COMPOSIO_API_KEY,
+              "x-api-key": apiKey,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
@@ -325,11 +382,11 @@ export async function POST(req: Request) {
     const res = await fetch(`${COMPOSIO_BASE}/connected_accounts/link`, {
       method: "POST",
       headers: {
-        "x-api-key": COMPOSIO_API_KEY,
+        "x-api-key": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        user_id: "default",
+        user_id: user.id, // User-scoped connection
         auth_config_id,
         callbackUrl,
       }),
@@ -372,6 +429,24 @@ export async function POST(req: Request) {
 // DELETE /api/mcp/composio/connections — disconnect
 export async function DELETE(req: Request) {
   try {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Fetch user's custom Composio key
+    const { data: userSettings } = await supabase
+      .from("agent_settings")
+      .select("value")
+      .eq("user_id", user.id)
+      .eq("key", "composio_api_key")
+      .maybeSingle();
+
+    const isTayyab = user.email === "tayyab@gmail.com";
+    const apiKey = userSettings?.value?.trim() || (isTayyab ? COMPOSIO_API_KEY : "");
+
     const { connection_id } = await req.json();
     if (!connection_id) {
       return NextResponse.json({ error: "connection_id required" }, { status: 400 });
@@ -382,6 +457,7 @@ export async function DELETE(req: Request) {
       .from("mcp_connections")
       .select("*")
       .eq("composio_conn_id", connection_id)
+      .eq("user_id", user.id)
       .maybeSingle();
 
     if (conn && conn.available_tools && Array.isArray(conn.available_tools)) {
@@ -398,14 +474,15 @@ export async function DELETE(req: Request) {
     await supabase
       .from("mcp_connections")
       .delete()
-      .eq("composio_conn_id", connection_id);
+      .eq("composio_conn_id", connection_id)
+      .eq("user_id", user.id);
 
     // Delete connection from Composio if key set
-    if (COMPOSIO_API_KEY) {
+    if (apiKey) {
       try {
         await fetch(`${COMPOSIO_BASE}/connected_accounts/${connection_id}`, {
           method: "DELETE",
-          headers: { "x-api-key": COMPOSIO_API_KEY },
+          headers: { "x-api-key": apiKey },
         });
       } catch {
         // Ignore errors — local delete already done

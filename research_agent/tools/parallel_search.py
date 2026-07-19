@@ -38,9 +38,10 @@ def parallel_search(query: str) -> str:
     if not _PARALLEL_AVAILABLE:
         return "❌ parallel-web SDK not installed. Run: uv add parallel-web"
 
-    api_key = os.environ.get("PARALLEL_API_KEY", "")
+    from research_agent.tools.provider_engine import get_user_api_key
+    api_key = get_user_api_key("parallel_api_key", "PARALLEL_API_KEY")
     if not api_key:
-        return "❌ PARALLEL_API_KEY not set in environment."
+        return "❌ PARALLEL_API_KEY not set in environment or user settings."
 
     try:
         client = _ParallelClient(api_key=api_key)

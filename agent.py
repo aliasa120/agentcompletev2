@@ -137,6 +137,22 @@ class ResilientChatModel(ChatOpenAI):
     agent_config_id: str = ""  # UUID from agent_configs table; when set, dynamic reload reads per-workflow settings
     is_omni_call: bool = False
 
+    def _set_active_user_from_config(self, *args, **kwargs):
+        config = kwargs.get("config")
+        if not config:
+            for arg in args:
+                if isinstance(arg, dict) and "configurable" in arg:
+                    config = arg
+                    break
+        
+        user_id = None
+        if config and isinstance(config, dict):
+            user_id = config.get("configurable", {}).get("user_id")
+            
+        if user_id:
+            from research_agent.tools.provider_engine import active_user_id
+            active_user_id.set(user_id)
+
     def _resolve_dynamic_fields(self):
         """Dynamic resolution of settings from Supabase.
 
@@ -287,15 +303,19 @@ class ResilientChatModel(ChatOpenAI):
 
             opts = ClientOptions(postgrest_client_timeout=300, storage_client_timeout=300)
             client = create_client(url, key, options=opts)
-            resp = client.table("agent_configs").select("provider,model").eq("id", self.agent_config_id).single().execute()
+            resp = client.rpc("get_agent_config_admin", {"p_agent_config_id": self.agent_config_id}).execute()
             if not resp.data:
                 raise RuntimeError(f"agent_config_id {self.agent_config_id} not found")
 
             provider = (resp.data.get("provider") or "openrouter").strip().lower()
             model_name = (resp.data.get("model") or "").strip()
+            user_id = resp.data.get("user_id")
+
+            # Save user_id on the model instance for user context propagation
+            object.__setattr__(self, "user_id", user_id)
 
             # Resolve base_url and api_key using provider registry
-            db_settings = get_settings()
+            db_settings = get_settings(user_id)
 
             actual_provider = provider
             if actual_provider not in get_all_provider_names():
@@ -310,6 +330,10 @@ class ResilientChatModel(ChatOpenAI):
                 api_key = db_settings.get("openrouter_client_api_key", "").strip()
                 if not api_key:
                     api_key = get_provider_api_key("openrouter")
+            elif actual_provider == "gemini":
+                api_key = db_settings.get("gemini_client_api_key", "").strip()
+                if not api_key:
+                    api_key = get_provider_api_key("gemini")
             else:
                 api_key = get_provider_api_key(actual_provider)
 
@@ -363,7 +387,11 @@ class ResilientChatModel(ChatOpenAI):
                 print(f"[Preflight][Caps] Redis get error: {e}")
 
         # Resolve via OpenRouter Direct API
-        db_settings = get_settings()
+        user_id = getattr(self, "user_id", None)
+        if not user_id:
+            from research_agent.tools.provider_engine import active_user_id
+            user_id = active_user_id.get()
+        db_settings = get_settings(user_id)
 
         caps = {
             "vision": False,
@@ -456,7 +484,15 @@ class ResilientChatModel(ChatOpenAI):
         from google.genai import types
         from research_agent.tools.provider_engine import get_settings
 
-        api_key = os.environ.get("GEMINI_API_KEY")
+        user_id = getattr(self, "user_id", None)
+        if not user_id:
+            from research_agent.tools.provider_engine import active_user_id
+            user_id = active_user_id.get()
+        db_settings = get_settings(user_id)
+        api_key = db_settings.get("gemini_client_api_key", "").strip()
+        if not api_key:
+            api_key = os.environ.get("GEMINI_API_KEY")
+
         if not api_key:
             return "[Error: GEMINI_API_KEY environment variable is not set]"
 
@@ -522,7 +558,11 @@ class ResilientChatModel(ChatOpenAI):
 
         try:
             client = genai.Client(api_key=api_key)
-            db_settings = get_settings()
+            user_id = getattr(self, "user_id", None)
+            if not user_id:
+                from research_agent.tools.provider_engine import active_user_id
+                user_id = active_user_id.get()
+            db_settings = get_settings(user_id)
             model_id = db_settings.get("omni_model", "gemini-3.1-flash-lite").strip()
             if "/" in model_id:
                 model_id = model_id.split("/")[-1]
@@ -548,7 +588,11 @@ class ResilientChatModel(ChatOpenAI):
     def _run_omni_gateway(self, prompt: str, block: dict) -> str:
         """Call Omni Model through OpenRouter gateway."""
         from research_agent.tools.provider_engine import get_settings, get_provider_base_url, get_provider_api_key
-        db_settings = get_settings()
+        user_id = getattr(self, "user_id", None)
+        if not user_id:
+            from research_agent.tools.provider_engine import active_user_id
+            user_id = active_user_id.get()
+        db_settings = get_settings(user_id)
         
         omni_provider = db_settings.get("omni_provider", "openrouter").strip().lower()
         omni_model = db_settings.get("omni_model", "google/gemini-2.5-flash").strip()
@@ -589,7 +633,11 @@ class ResilientChatModel(ChatOpenAI):
     async def _run_omni_gateway_async(self, prompt: str, block: dict) -> str:
         """Call Omni Model through gateway asynchronously."""
         from research_agent.tools.provider_engine import get_settings, get_provider_base_url, get_provider_api_key
-        db_settings = get_settings()
+        user_id = getattr(self, "user_id", None)
+        if not user_id:
+            from research_agent.tools.provider_engine import active_user_id
+            user_id = active_user_id.get()
+        db_settings = get_settings(user_id)
         
         omni_provider = db_settings.get("omni_provider", "openrouter").strip().lower()
         omni_model = db_settings.get("omni_model", "google/gemini-2.5-flash").strip()
@@ -644,11 +692,16 @@ class ResilientChatModel(ChatOpenAI):
         supports_pdf = caps.get("pdf", False)
         print(f"[Preflight] Capabilities → image={supports_image}, audio={supports_audio}, video={supports_video}, pdf={supports_pdf}")
 
+        user_id = getattr(self, "user_id", None)
+        if not user_id:
+            from research_agent.tools.provider_engine import active_user_id
+            user_id = active_user_id.get()
+
         from research_agent.tools.provider_engine import get_settings
-        db_settings = get_settings()
+        db_settings = get_settings(user_id)
         omni_provider = db_settings.get("omni_provider", "openrouter").strip().lower()
         omni_model = db_settings.get("omni_model", "google/gemini-2.5-flash").strip()
-        print(f"[Preflight] Omni provider: {omni_provider} | Omni model: {omni_model}")
+        print(f"[Preflight] Resolved user_id: {user_id} | Omni provider: {omni_provider} | Omni model: {omni_model}")
 
         IMAGE_EXTRACT = """You are the image-extraction module in an automated multimodal pipeline. Your only function is to convert the attached image into precise, literal, machine-readable text for another AI system to use as context. You are not the assistant answering an end user — do not address anyone, ask questions, or add opinions.
 
@@ -911,8 +964,13 @@ NOTES: [any contradictions, formatting anomalies, low-confidence OCR areas, or f
         supports_video = caps.get("videoInput", False)
         supports_pdf = caps.get("pdf", False)
 
+        user_id = getattr(self, "user_id", None)
+        if not user_id:
+            from research_agent.tools.provider_engine import active_user_id
+            user_id = active_user_id.get()
+
         from research_agent.tools.provider_engine import get_settings
-        db_settings = await loop.run_in_executor(None, get_settings)
+        db_settings = await loop.run_in_executor(None, get_settings, user_id)
         omni_provider = db_settings.get("omni_provider", "openrouter").strip().lower()
         omni_model = db_settings.get("omni_model", "google/gemini-2.5-flash").strip()
 
@@ -1184,6 +1242,7 @@ NOTES: [any contradictions, formatting anomalies, low-confidence OCR areas, or f
         Guard: if streaming already started (tokens sent), do NOT retry — that would
         send duplicate content to the frontend. Only retry before first token.
         """
+        self._set_active_user_from_config(*args, **kwargs)
         self._resolve_dynamic_fields()
         args_list = list(args)
         if len(args_list) > 0:
@@ -1223,6 +1282,7 @@ NOTES: [any contradictions, formatting anomalies, low-confidence OCR areas, or f
                     await asyncio.sleep(delay)
 
     async def ainvoke(self, *args, **kwargs):
+        self._set_active_user_from_config(*args, **kwargs)
         self._resolve_dynamic_fields()
         args_list = list(args)
         if len(args_list) > 0:
@@ -1252,6 +1312,7 @@ NOTES: [any contradictions, formatting anomalies, low-confidence OCR areas, or f
                     await asyncio.sleep(delay)
 
     def invoke(self, *args, **kwargs):
+        self._set_active_user_from_config(*args, **kwargs)
         self._resolve_dynamic_fields()
         args_list = list(args)
         if len(args_list) > 0:
@@ -1412,12 +1473,16 @@ def _get_agent_system_prompt_with_images(client, agent_id: str, base_prompt: str
     
     return SystemMessage(content=content_blocks)
 
-def _bind_agent_id_to_list_skills(list_skills_tool, agent_id: str):
+def _bind_agent_id_to_list_skills(list_skills_tool, agent_id: str, user_id: str = ""):
     from langchain_core.tools import tool
     from typing import Optional
+    from langchain_core.runnables import RunnableConfig
     
     @tool("list_skills")
-    def list_skills_bound(category: Optional[str] = None) -> str:
+    def list_skills_bound(
+        category: Optional[str] = None,
+        config: Optional[RunnableConfig] = None,
+    ) -> str:
         """List all available skills with their names, descriptions, and categories.
 
         Use this to discover what specialized knowledge is available to you before
@@ -1428,15 +1493,25 @@ def _bind_agent_id_to_list_skills(list_skills_tool, agent_id: str):
             category: Optional filter — only show skills in this category
                       (e.g. 'research', 'content', 'publishing', 'general').
         """
-        return list_skills_tool.func(category=category, agent_id=agent_id)
+        # Inject compile-time user_id into configurable if not already present
+        if user_id and config is not None and not config.get("configurable", {}).get("user_id"):
+            config = {**config, "configurable": {**config.get("configurable", {}), "user_id": user_id}}
+        elif user_id and config is None:
+            config = {"configurable": {"user_id": user_id}}
+        return list_skills_tool.func(category=category, agent_id=agent_id, config=config)
     return list_skills_bound
 
 
-def _bind_agent_id_to_read_skill(read_skill_tool, agent_id: str):
+def _bind_agent_id_to_read_skill(read_skill_tool, agent_id: str, user_id: str = ""):
     from langchain_core.tools import tool
+    from typing import Optional
+    from langchain_core.runnables import RunnableConfig
     
     @tool("read_skill")
-    def read_skill_bound(skill_name: str) -> str:
+    def read_skill_bound(
+        skill_name: str,
+        config: Optional[RunnableConfig] = None,
+    ) -> str:
         """Load a skill instruction file from disk and return its full content.
 
         Call this at the START of any task that uses a named skill.
@@ -1449,13 +1524,18 @@ def _bind_agent_id_to_read_skill(read_skill_tool, agent_id: str):
             skill_name: The name of the skill directory (e.g. "blog_post_writer").
                         Must match a folder inside research_agent/skills/.
         """
-        return read_skill_tool.func(skill_name=skill_name, agent_id=agent_id)
+        if user_id and config is not None and not config.get("configurable", {}).get("user_id"):
+            config = {**config, "configurable": {**config.get("configurable", {}), "user_id": user_id}}
+        elif user_id and config is None:
+            config = {"configurable": {"user_id": user_id}}
+        return read_skill_tool.func(skill_name=skill_name, agent_id=agent_id, config=config)
     return read_skill_bound
 
 
-def _bind_agent_id_to_manage_skill(manage_skill_tool, agent_id: str):
+def _bind_agent_id_to_manage_skill(manage_skill_tool, agent_id: str, user_id: str = ""):
     from langchain_core.tools import tool
     from typing import Optional
+    from langchain_core.runnables import RunnableConfig
     
     @tool("manage_skill")
     def manage_skill_bound(
@@ -1465,6 +1545,7 @@ def _bind_agent_id_to_manage_skill(manage_skill_tool, agent_id: str):
         description: Optional[str] = None,
         content: Optional[str] = None,
         category: Optional[str] = "general",
+        config: Optional[RunnableConfig] = None,
     ) -> str:
         """Create, update, or archive a skill in the skills library.
 
@@ -1482,6 +1563,10 @@ def _bind_agent_id_to_manage_skill(manage_skill_tool, agent_id: str):
                      Required for 'create', optional for 'update'.
             category: Skill category (e.g. 'research', 'content', 'publishing', 'general').
         """
+        if user_id and config is not None and not config.get("configurable", {}).get("user_id"):
+            config = {**config, "configurable": {**config.get("configurable", {}), "user_id": user_id}}
+        elif user_id and config is None:
+            config = {"configurable": {"user_id": user_id}}
         return manage_skill_tool.func(
             action=action,
             skill_key=skill_key,
@@ -1490,6 +1575,7 @@ def _bind_agent_id_to_manage_skill(manage_skill_tool, agent_id: str):
             content=content,
             category=category,
             agent_id=agent_id,
+            config=config,
         )
     return manage_skill_bound
 
@@ -1497,9 +1583,14 @@ def _bind_agent_id_to_manage_skill(manage_skill_tool, agent_id: str):
 def _bind_agent_id_to_list_tools(list_tools_tool, agent_id: str):
     from langchain_core.tools import tool
     from typing import Optional
+    from langchain_core.runnables import RunnableConfig
     
     @tool("list_tools")
-    def list_tools_bound(query: Optional[str] = None, mcp_name: Optional[str] = None) -> str:
+    def list_tools_bound(
+        query: Optional[str] = None,
+        mcp_name: Optional[str] = None,
+        config: Optional[RunnableConfig] = None,
+    ) -> str:
         """Perform a search or discovery to find tools.
 
         If mcp_name is provided, retrieves all active tools for that specific MCP connection
@@ -1510,16 +1601,17 @@ def _bind_agent_id_to_list_tools(list_tools_tool, agent_id: str):
             query: Natural language query describing what task you need to perform (optional).
             mcp_name: The name of the MCP connection (e.g., 'googledocs', 'gmail') to list its tools (optional).
         """
-        return list_tools_tool.func(query=query, mcp_name=mcp_name, agent_id=agent_id)
+        return list_tools_tool.func(query=query, mcp_name=mcp_name, agent_id=agent_id, config=config)
     return list_tools_bound
 
 
-def _bind_agent_id_to_load_tools(load_tools_tool, agent_id: str):
+def _bind_agent_id_to_load_tools(load_tools_tool, agent_id: str, user_id: str = ""):
     from langchain_core.tools import tool
-    from typing import List
+    from langchain_core.runnables import RunnableConfig
+    from typing import List, Optional
     
     @tool("load_tools")
-    def load_tools_bound(tool_names: List[str]) -> str:
+    def load_tools_bound(tool_names: List[str], config: Optional[RunnableConfig] = None) -> str:
         """Load the complete JSON schemas for the specified tool names.
 
         Fetches full schemas (parameters, types, required fields) from the master registry.
@@ -1528,11 +1620,15 @@ def _bind_agent_id_to_load_tools(load_tools_tool, agent_id: str):
         Args:
             tool_names: List of tool names to load (e.g. ['think_tool', 'unified_search'])
         """
-        return load_tools_tool.func(tool_names=tool_names, agent_id=agent_id)
+        if user_id and config is not None and not config.get("configurable", {}).get("user_id"):
+            config = {**config, "configurable": {**config.get("configurable", {}), "user_id": user_id}}
+        elif user_id and config is None:
+            config = {"configurable": {"user_id": user_id}}
+        return load_tools_tool.func(tool_names=tool_names, agent_id=agent_id, config=config)
     return load_tools_bound
 
 
-def _bind_agent_id_to_call_tool(call_tool_tool, agent_id: str):
+def _bind_agent_id_to_call_tool(call_tool_tool, agent_id: str, user_id: str = ""):
     from langchain_core.tools import tool
     from typing import Dict, Any, Optional
     from langchain_core.runnables import RunnableConfig
@@ -1553,6 +1649,10 @@ def _bind_agent_id_to_call_tool(call_tool_tool, agent_id: str):
             tool_name: The name of the tool to execute (e.g. 'publish_to_wordpress')
             arguments: A dictionary of arguments to pass to the tool (e.g. {'blog_post_markdown': '...', 'category_id': 1})
         """
+        if user_id and config is not None and not config.get("configurable", {}).get("user_id"):
+            config = {**config, "configurable": {**config.get("configurable", {}), "user_id": user_id}}
+        elif user_id and config is None:
+            config = {"configurable": {"user_id": user_id}}
         return call_tool_tool.func(tool_name=tool_name, arguments=arguments, agent_id=agent_id, config=config)
     return call_tool_bound
 
@@ -1582,9 +1682,15 @@ def load_dynamic_agents_by_workflow():
         except Exception as e:
             print(f"[agent] [WARNING] Pinecone synchronization failed: {e}")
 
-        # 1. Fetch all active workflows (scheduler status is checked by cron_scheduler.py)
-        workflows_resp = client.table("workflows").select("*").eq("is_active", True).execute()
-        workflows = workflows_resp.data or []
+        # 1. Fetch bootstrap data via RLS-secure RPC
+        try:
+            bootstrap_resp = client.rpc("get_backend_bootstrap_data").execute()
+            bootstrap = bootstrap_resp.data or {}
+        except Exception as e:
+            print(f"[agent] Failed to fetch bootstrap data: {e}")
+            return {}
+
+        workflows = bootstrap.get("workflows") or []
         if not workflows:
             print("[agent] No workflows found in database.")
             return {}
@@ -1597,30 +1703,12 @@ def load_dynamic_agents_by_workflow():
         if not default_workflow_id and workflows:
             default_workflow_id = workflows[0]["id"]
 
-        # 2. Fetch enabled agent configurations
-        resp = client.table("agent_configs").select("*").eq("enabled", True).order("sort_order").execute()
-        configs = resp.data or []
+        # 2. Extract configurations, tool assignments, and mappings
+        configs = bootstrap.get("agent_configs") or []
+        assignments = bootstrap.get("agent_tool_assignments") or []
+        mappings = bootstrap.get("workflow_agent_assignments") or []
 
-        # 3. Load tool assignments
-        assign_resp = client.table("agent_tool_assignments").select("*").eq("enabled", True).execute()
-        assignments = assign_resp.data or []
-
-        # 3.5 Load workflow-agent assignments (many-to-many)
-        try:
-            mappings_resp = client.table("workflow_agent_assignments").select("*").execute()
-            mappings = mappings_resp.data or []
-        except Exception as e:
-            print(f"[agent] [WARNING] Failed to fetch workflow_agent_assignments (using legacy workflow_id fallback): {e}")
-            mappings = []
-
-        # Fetch agent settings from Supabase
-        try:
-            settings_resp = client.table("agent_settings").select("key,value").execute()
-            db_settings = {row["key"]: row["value"] for row in (settings_resp.data or [])}
-        except Exception as e:
-            print(f"[agent] Failed to fetch agent settings: {e}")
-            db_settings = {}
-
+        db_settings = {row["key"]: row["value"] for row in (bootstrap.get("agent_settings") or [])}
         super_enabled = db_settings.get("super_indexing_enabled", "true").lower() == "true"
         normal_enabled = db_settings.get("normal_indexing_enabled", "true").lower() == "true"
 
@@ -1633,12 +1721,7 @@ def load_dynamic_agents_by_workflow():
             builtin_loading_modes = {}
 
         # Fetch global MCP tool settings
-        try:
-            mcp_settings_resp = client.table("mcp_tool_settings").select("tool_key, loading_mode").execute()
-            mcp_tool_modes = {row["tool_key"]: row["loading_mode"] for row in (mcp_settings_resp.data or [])}
-        except Exception as e:
-            print(f"[agent] Failed to fetch mcp_tool_settings: {e}")
-            mcp_tool_modes = {}
+        mcp_tool_modes = {row["tool_key"]: row["loading_mode"] for row in (bootstrap.get("mcp_tool_settings") or [])}
 
         # Tool lookup for built-in tools
         from research_agent.tools import (
@@ -1660,6 +1743,7 @@ def load_dynamic_agents_by_workflow():
             cronjob,
             search_conversation_history,
             analyze_attachment,
+            search_memories,
         )
 
         tool_lookup = {
@@ -1684,6 +1768,7 @@ def load_dynamic_agents_by_workflow():
             "cronjob": cronjob,
             "search_conversation_history": search_conversation_history,
             "analyze_attachment": analyze_attachment,
+            "search_memories": search_memories,
         }
 
         tool_assignments_by_agent = {}
@@ -1696,9 +1781,10 @@ def load_dynamic_agents_by_workflow():
         def make_dynamic_unified_tool(t_key: str):
             from langchain_core.tools import StructuredTool
             from research_agent.tools.provider_engine import execute_unified_pipeline
+            from langchain_core.runnables import RunnableConfig
             category = t_key.replace("unified_", "")
 
-            async def _run_dynamic_tool(query: str = "", urls: list[str] = [], **kwargs) -> str:
+            async def _run_dynamic_tool(query: str = "", urls: list[str] = [], config: RunnableConfig = None, **kwargs) -> str:
                 return await execute_unified_pipeline(
                     category=category,
                     built_in_map={},
@@ -1706,6 +1792,7 @@ def load_dynamic_agents_by_workflow():
                     max_retries=3,
                     query=query,
                     urls=urls,
+                    config=config,
                     **kwargs
                 )
 
@@ -1813,10 +1900,12 @@ def load_dynamic_agents_by_workflow():
                 t_key = a.get("tool_key")
                 
                 # Resolve global loading mode
-                if t_type == "builtin":
-                    loading_mode = builtin_loading_modes.get(t_key, "primary")
-                else:  # mcp
-                    loading_mode = mcp_tool_modes.get(t_key, "primary")
+                loading_mode = a.get("loading_mode")
+                if not loading_mode:
+                    if t_type == "builtin":
+                        loading_mode = builtin_loading_modes.get(t_key, "primary")
+                    else:  # mcp
+                        loading_mode = mcp_tool_modes.get(t_key, "primary")
 
                 if t_key in ["list_tools", "load_tools", "call_tool"]:
                     loading_mode = "primary"
@@ -1837,18 +1926,19 @@ def load_dynamic_agents_by_workflow():
                 if t_type == "builtin":
                     if t_key in tool_lookup:
                         tool_func = tool_lookup[t_key]
+                        main_user_id = main_cfg.get("user_id", "")
                         if t_key == "list_skills":
-                            tool_func = _bind_agent_id_to_list_skills(list_skills, main_id)
+                            tool_func = _bind_agent_id_to_list_skills(list_skills, main_id, user_id=main_user_id)
                         elif t_key == "read_skill":
-                            tool_func = _bind_agent_id_to_read_skill(read_skill, main_id)
+                            tool_func = _bind_agent_id_to_read_skill(read_skill, main_id, user_id=main_user_id)
                         elif t_key == "manage_skill":
-                            tool_func = _bind_agent_id_to_manage_skill(manage_skill, main_id)
+                            tool_func = _bind_agent_id_to_manage_skill(manage_skill, main_id, user_id=main_user_id)
                         elif t_key == "list_tools":
                             tool_func = _bind_agent_id_to_list_tools(list_tools, main_id)
                         elif t_key == "load_tools":
-                            tool_func = _bind_agent_id_to_load_tools(load_tools, main_id)
+                            tool_func = _bind_agent_id_to_load_tools(load_tools, main_id, user_id=main_user_id)
                         elif t_key == "call_tool":
-                            tool_func = _bind_agent_id_to_call_tool(call_tool, main_id)
+                            tool_func = _bind_agent_id_to_call_tool(call_tool, main_id, user_id=main_user_id)
                         
                         # Apply bindings
                         bindings = bindings_by_tool.get(t_key) or {}
@@ -1939,10 +2029,12 @@ def load_dynamic_agents_by_workflow():
                     t_key = a.get("tool_key")
                     
                     # Resolve global loading mode
-                    if t_type == "builtin":
-                        loading_mode = builtin_loading_modes.get(t_key, "primary")
-                    else:  # mcp
-                        loading_mode = mcp_tool_modes.get(t_key, "primary")
+                    loading_mode = a.get("loading_mode")
+                    if not loading_mode:
+                        if t_type == "builtin":
+                            loading_mode = builtin_loading_modes.get(t_key, "primary")
+                        else:  # mcp
+                            loading_mode = mcp_tool_modes.get(t_key, "primary")
 
                     if t_key in ["list_tools", "load_tools", "call_tool"]:
                         loading_mode = "primary"
@@ -1963,18 +2055,19 @@ def load_dynamic_agents_by_workflow():
                     if t_type == "builtin":
                         if t_key in tool_lookup:
                             tool_func = tool_lookup[t_key]
+                            sub_user_id = sub.get("user_id", "")
                             if t_key == "list_skills":
-                                tool_func = _bind_agent_id_to_list_skills(list_skills, sub_id)
+                                tool_func = _bind_agent_id_to_list_skills(list_skills, sub_id, user_id=sub_user_id)
                             elif t_key == "read_skill":
-                                tool_func = _bind_agent_id_to_read_skill(read_skill, sub_id)
+                                tool_func = _bind_agent_id_to_read_skill(read_skill, sub_id, user_id=sub_user_id)
                             elif t_key == "manage_skill":
-                                tool_func = _bind_agent_id_to_manage_skill(manage_skill, sub_id)
+                                tool_func = _bind_agent_id_to_manage_skill(manage_skill, sub_id, user_id=sub_user_id)
                             elif t_key == "list_tools":
                                 tool_func = _bind_agent_id_to_list_tools(list_tools, sub_id)
                             elif t_key == "load_tools":
-                                tool_func = _bind_agent_id_to_load_tools(load_tools, sub_id)
+                                tool_func = _bind_agent_id_to_load_tools(load_tools, sub_id, user_id=sub_user_id)
                             elif t_key == "call_tool":
-                                tool_func = _bind_agent_id_to_call_tool(call_tool, sub_id)
+                                tool_func = _bind_agent_id_to_call_tool(call_tool, sub_id, user_id=sub_user_id)
                             
                             # Apply bindings
                             bindings = sub_bindings_by_tool.get(t_key) or {}
@@ -2159,15 +2252,7 @@ def save_chat_history(state, config: RunnableConfig):
                     title = msg_content[:50] + ("..." if len(msg_content) > 50 else "")
                     break
 
-            client.table("sessions").upsert({
-                "id": session_uuid,
-                "workflow_id": workflow_id,
-                "title": title
-            }, on_conflict="id").execute()
-
-            # Delete existing messages and write fresh history to maintain order and structure
-            client.table("messages").delete().eq("session_id", session_uuid).execute()
-
+            # Build list of serialized messages
             rows_to_insert = []
             for msg in messages:
                 role = "user"
@@ -2204,15 +2289,22 @@ def save_chat_history(state, config: RunnableConfig):
                     })
 
                 rows_to_insert.append({
-                    "session_id": session_uuid,
                     "role": role,
                     "content": content,
                     "tool_calls": serializable_tool_calls
                 })
 
-            if rows_to_insert:
-                client.table("messages").insert(rows_to_insert).execute()
-                print(f"[agent] Synchronized {len(rows_to_insert)} messages to Supabase for session {session_uuid}")
+            params = {
+                "p_session_id": session_uuid,
+                "p_workflow_id": workflow_id,
+                "p_title": title,
+                "p_messages": rows_to_insert
+            }
+            if user_id:
+                params["p_user_id"] = str(user_id)
+
+            client.rpc("sync_chat_history_admin", params).execute()
+            print(f"[agent] Synchronized {len(rows_to_insert)} messages to Supabase for session {session_uuid} via RPC")
 
     except Exception as e:
         print(f"[agent] Error syncing chat history to Supabase: {e}")
@@ -2258,13 +2350,15 @@ def save_chat_history(state, config: RunnableConfig):
                 {"role": "user", "content": user_text},
                 {"role": "assistant", "content": ai_text}
             ]
-            def run_mem0_in_background(data, scope):
+            def run_mem0_in_background(data, scope, uid):
                 try:
                     from research_agent.tools.mem0_provider import get_mem0_client
-                    mem0_client = get_mem0_client()
+                    mem0_client = get_mem0_client(uid)
                     if mem0_client is not None:
                         mem0_client.add(data, user_id=scope)
                         print(f"[agent] Successfully added turn to Mem0 in background.")
+                    else:
+                        print(f"[agent] Mem0 client could not be initialized (disabled or missing config) in background.")
                 except Exception as bg_err:
                     print(f"[agent] Error writing to Mem0 in background: {bg_err}")
 
@@ -2272,7 +2366,7 @@ def save_chat_history(state, config: RunnableConfig):
             print(f"[agent] Spawning background thread to initialize Mem0 and add turn for scope {scope_id}...")
             thread = threading.Thread(
                 target=run_mem0_in_background,
-                args=(mem0_data, scope_id)
+                args=(mem0_data, scope_id, user_id)
             )
             thread.daemon = True
             thread.start()
@@ -2415,6 +2509,6 @@ else:
     def route_fallback(state, config):
         return "static_fallback"
         
-    builder.add_conditional_edges(START, route_fallback, {"static_fallback": "static_fallback"})  # triggered reload for Composio update 2
+    builder.add_conditional_edges(START, route_fallback, {"static_fallback": "static_fallback"})  # triggered reload for RPC bootstrap update
     agent = builder.compile()
 

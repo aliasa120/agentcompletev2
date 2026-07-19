@@ -1,12 +1,31 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { testSseMcp, testStdioMcp } from "../../manual/test/route";
-import { resolveNpmPackage, mapCommonEnvVariables } from "../../manual/route";
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
+    }
+  );
+}
+
+import { testSseMcp, testStdioMcp, resolveNpmPackage, mapCommonEnvVariables } from "@/lib/mcp-tester";
+
+// Supabase client is initialized per-request using getSupabaseClient(cookieStore)
 
 /**
  * POST /api/mcp/smithery/connect
@@ -24,6 +43,12 @@ const supabase = createClient(
  * or headers according to the server's configSchema x-from metadata.
  */
 export async function POST(req: Request) {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   let body: any;
   try {
     body = await req.json();
@@ -41,9 +66,9 @@ export async function POST(req: Request) {
   }
 
   if (mode === "local") {
-    return handleLocalConnect(body);
+    return handleLocalConnect(body, supabase, user);
   } else if (mode === "remote") {
-    return handleRemoteConnect(body);
+    return handleRemoteConnect(body, supabase, user);
   }
 
   return NextResponse.json({ success: false, error: `Unknown mode: ${mode}` }, { status: 400 });
@@ -54,12 +79,16 @@ export async function POST(req: Request) {
  * The install_config (command + args) comes from the smithery_server_installs table.
  * User credentials are stored as env vars in the mcp_url JSON.
  */
-async function handleLocalConnect(body: {
-  qualifiedName: string;
-  displayName: string;
-  userCredentials: Record<string, string>;
-  label?: string;
-}) {
+async function handleLocalConnect(
+  body: {
+    qualifiedName: string;
+    displayName: string;
+    userCredentials: Record<string, string>;
+    label?: string;
+  },
+  supabase: any,
+  user: any
+) {
   const { qualifiedName, displayName, userCredentials, label } = body;
 
   // Fetch the install config from the DB
@@ -191,8 +220,7 @@ async function handleLocalConnect(body: {
 
   // Check if a connection with this toolkit_slug already exists to prevent duplicates
   const { data: existingConn } = await supabase
-    .from("mcp_connections")
-    .select("id")
+    .from("mcp_connections").select("id").eq("user_id", user.id)
     .eq("toolkit_slug", qualifiedName)
     .maybeSingle();
 
@@ -218,6 +246,7 @@ async function handleLocalConnect(body: {
     const { data, error } = await supabase
       .from("mcp_connections")
       .insert({
+        user_id: user.id,
         label: label ?? `Smithery: ${displayName}`,
         toolkit_slug: qualifiedName,
         connection_type: "manual",
@@ -308,13 +337,17 @@ function mapConfigSchema(configSchema: any) {
  *   "auth_required"  → OAuth flow — open setupUrl popup, poll until connected
  *   "input_required" → API key required — show configSchema form, re-submit with values
  */
-async function handleRemoteConnect(body: {
-  qualifiedName: string;
-  displayName: string;
-  smitheryApiKey: string;
-  label?: string;
-  config?: any; // User-provided API key values (input_required flow)
-}) {
+async function handleRemoteConnect(
+  body: {
+    qualifiedName: string;
+    displayName: string;
+    smitheryApiKey: string;
+    label?: string;
+    config?: any;
+  },
+  supabase: any,
+  user: any
+) {
   const { qualifiedName, displayName, smitheryApiKey, label, config } = body;
 
   if (!smitheryApiKey?.trim()) {
@@ -505,6 +538,7 @@ async function handleRemoteConnect(body: {
   const { data: conn, error: insertError } = await supabase
     .from("mcp_connections")
     .insert({
+      user_id: user.id,
       label: label ?? `Smithery (Remote): ${displayName}`,
       toolkit_slug: qualifiedName,
       connection_type: "manual",
@@ -536,6 +570,12 @@ async function handleRemoteConnect(body: {
  * Polls the connection status on Smithery. Auto-activates the connection in DB once state is "connected".
  */
 export async function GET(req: Request) {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   const { searchParams } = new URL(req.url);
   const namespace = searchParams.get("namespace");
   const connectionId = searchParams.get("connectionId");
@@ -568,8 +608,7 @@ export async function GET(req: Request) {
       // Auto-activate connection in DB and fetch tools
       try {
         const { data: inactiveConns } = await supabase
-          .from("mcp_connections")
-          .select("id, mcp_url")
+          .from("mcp_connections").select("id, mcp_url").eq("user_id", user.id)
           .eq("connection_type", "manual")
           .eq("status", "inactive");
         

@@ -23,16 +23,18 @@ from .provider_engine import get_settings
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _wp_auth() -> tuple[str, str]:
-    """Return (username, app_password) from environment."""
+    """Return (username, app_password) from user settings or environment."""
+    from .provider_engine import get_user_api_key
     return (
-        os.environ.get("WP_USERNAME", ""),
-        os.environ.get("WP_APP_PASSWORD", ""),
+        get_user_api_key("wp_username", "WP_USERNAME"),
+        get_user_api_key("wp_app_password", "WP_APP_PASSWORD"),
     )
 
 
 def _wp_base() -> str:
-    """Return the WP REST API base URL."""
-    site = os.environ.get("WP_SITE_URL", "").rstrip("/")
+    """Return the WP REST API base URL from user settings or environment."""
+    from .provider_engine import get_user_api_key
+    site = get_user_api_key("wp_site_url", "WP_SITE_URL").rstrip("/")
     return f"{site}/wp-json/wp/v2"
 
 

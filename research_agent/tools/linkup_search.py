@@ -13,7 +13,8 @@ from typing_extensions import Annotated
 # Lazy import so a missing key doesn't crash at import time
 def _get_linkup_client():
     from linkup import LinkupClient
-    return LinkupClient(api_key=os.environ.get("LINKUP_API_KEY", ""))
+    from research_agent.tools.provider_engine import get_user_api_key
+    return LinkupClient(api_key=get_user_api_key("linkup_api_key", "LINKUP_API_KEY"))
 
 
 @tool(parse_docstring=True)
@@ -42,7 +43,8 @@ def linkup_search(
         Sourced answer with inline citations and source URLs.
     """
     # ── Attempt 1: Linkup ───────────────────────────────────────────────────
-    linkup_key = os.environ.get("LINKUP_API_KEY", "")
+    from research_agent.tools.provider_engine import get_user_api_key
+    linkup_key = get_user_api_key("linkup_api_key", "LINKUP_API_KEY")
     if linkup_key:
         try:
             client = _get_linkup_client()

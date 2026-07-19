@@ -898,6 +898,24 @@ function LLMProvidersPanel() {
 
 
 
+const ALL_BUILTIN_TOOLS = [
+  { key: "think_tool", label: "Think Tool", badge: "Built-in" },
+  { key: "fetch_images_brave", label: "Brave Image Search", badge: "Built-in" },
+  { key: "view_candidate_images", label: "View Candidates", badge: "Built-in" },
+  { key: "create_post_image", label: "Image Generator", badge: "Built-in" },
+  { key: "read_skill", label: "Read Skill", badge: "Built-in" },
+  { key: "save_posts_to_supabase", label: "Save to DB", badge: "Built-in" },
+  { key: "get_wordpress_categories", label: "WP Categories", badge: "Built-in" },
+  { key: "publish_to_wordpress", label: "WordPress Publish", badge: "Built-in" },
+  { key: "youtube_transcript", label: "YouTube Transcript", badge: "Built-in" },
+  { key: "search_conversation_history", label: "Search History", badge: "Built-in" },
+  { key: "list_tools", label: "List Tools", badge: "Built-in" },
+  { key: "load_tools", label: "Load Tools", badge: "Built-in" },
+  { key: "call_tool", label: "Call Tool", badge: "Built-in" },
+  { key: "cronjob", label: "Cron Scheduler", badge: "Built-in" },
+  { key: "analyze_attachment", label: "Analyze Attachment", badge: "Built-in" },
+];
+
 export function ProviderOrderingSection({
   globalSettings,
   setGlobalSetting,
@@ -925,19 +943,47 @@ export function ProviderOrderingSection({
       const data = await res.json();
       setProviders(data.providers ?? []);
 
-      // Fetch MCP connections to extract available tools
-      const mcpRes = await fetch("/api/mcp/composio/connections");
-      const mcpData = await mcpRes.json();
       const options: MCPToolOption[] = [];
-      (mcpData.connections ?? []).forEach((conn: any) => {
-        (conn.available_tools ?? []).forEach((t: any) => {
-          options.push({
-            key: t.tool_key,
-            label: t.tool_name ?? t.tool_key,
-            badge: conn.label || conn.toolkit_slug || "Connected MCP",
+
+      // 1. Fetch Composio connections
+      try {
+        const mcpRes = await fetch("/api/mcp/composio/connections");
+        const mcpData = await mcpRes.json();
+        (mcpData.connections ?? []).forEach((conn: any) => {
+          (conn.available_tools ?? []).forEach((t: any) => {
+            options.push({
+              key: t.tool_key,
+              label: t.tool_name ?? t.tool_key,
+              badge: conn.label || conn.toolkit_slug || "Composio",
+            });
           });
         });
+      } catch (err) {
+        console.error("Failed to fetch Composio tools:", err);
+      }
+
+      // 2. Fetch Manual MCP connections
+      try {
+        const manualRes = await fetch("/api/mcp/manual?sync=false");
+        const manualData = await manualRes.json();
+        (manualData.connections ?? []).forEach((conn: any) => {
+          (conn.available_tools ?? []).forEach((t: any) => {
+            options.push({
+              key: t.tool_key,
+              label: t.tool_name ?? t.tool_key,
+              badge: conn.label || conn.name || "Manual MCP",
+            });
+          });
+        });
+      } catch (err) {
+        console.error("Failed to fetch Manual MCP tools:", err);
+      }
+
+      // 3. Add all other built-in tools
+      ALL_BUILTIN_TOOLS.forEach(t => {
+        options.push(t);
       });
+
       setMcpTools(options);
     } catch (e) {
       console.error(e);

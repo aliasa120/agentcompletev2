@@ -33,7 +33,7 @@ from feeder_agent.agent import run_feeder_dedup_agent
 
 
 # --- Settings from Supabase -----------------------------------------------
-def load_settings() -> dict:
+def load_settings(user_id: str = None) -> dict:
     defaults = {
         "batch_size": 30,
         "max_age_minutes": 60,      # default: last 60 minutes of news
@@ -42,19 +42,53 @@ def load_settings() -> dict:
         "feeder_auto_trigger_enabled": "false",
         "feeder_auto_trigger_interval_minutes": 30,  # default: 30 minutes
     }
+    # 1. Try per-user agent_settings first (feeder_* keys)
+    if user_id:
+        try:
+            from research_agent.tools.provider_engine import get_settings as _get_agent_settings
+            user_settings = _get_agent_settings(user_id)
+            for k, setting_key in [
+                ("batch_size", "feeder_batch_size"),
+                ("max_age_minutes", "feeder_max_age_minutes"),
+                ("cluster_threshold", "feeder_cluster_threshold"),
+                ("agent_db_title_limit", "feeder_agent_db_title_limit"),
+                ("feeder_auto_trigger_enabled", "feeder_auto_trigger_enabled"),
+                ("feeder_auto_trigger_interval_minutes", "feeder_auto_trigger_interval_minutes"),
+            ]:
+                if setting_key in user_settings:
+                    v = user_settings[setting_key]
+                    if k in ("batch_size", "max_age_minutes", "cluster_threshold",
+                             "agent_db_title_limit", "feeder_auto_trigger_interval_minutes"):
+                        try:
+                            defaults[k] = int(float(v))
+                        except (ValueError, TypeError):
+                            pass
+                    else:
+                        defaults[k] = v
+        except Exception as e:
+            print(f"Warning: Could not load user agent_settings for feeder: {e}")
+
+    # 2. Fallback: global feeder_settings table
     try:
         res = supabase_client.table("feeder_settings").select("key,value").execute()
         for row in (res.data or []):
             k, v = row["key"], row["value"]
+            # Only apply global setting if NOT already set by user's agent_settings
             if k in ("batch_size", "max_age_minutes", "cluster_threshold",
                      "agent_db_title_limit", "feeder_auto_trigger_interval_minutes"):
-                defaults[k] = int(float(v))
+                if k not in ["batch_size"] or not user_id:  # respect user override
+                    try:
+                        defaults[k] = int(float(v))
+                    except (ValueError, TypeError):
+                        pass
             elif k == "feeder_auto_trigger_interval_hours":  # legacy: convert hours -> minutes
-                defaults["feeder_auto_trigger_interval_minutes"] = int(float(v) * 60)
+                if not user_id:
+                    defaults["feeder_auto_trigger_interval_minutes"] = int(float(v) * 60)
             elif k == "feeder_auto_trigger_enabled":
-                defaults[k] = v
+                if not user_id:
+                    defaults[k] = v
     except Exception as e:
-        print(f"Warning: Could not load settings: {e}")
+        print(f"Warning: Could not load global feeder settings: {e}")
     return defaults
 
 
@@ -151,8 +185,36 @@ def _log_drop(layer: str, article_title: str, reason: str):
 
 
 # --- Main Pipeline ---------------------------------------------------------
-def run_feeder_pipeline(workflow_id: str = None) -> tuple[list[FeederArticle], list[tuple[FeederArticle, str]]]:
-    settings = load_settings()
+def run_feeder_pipeline(workflow_id: str = None, user_id: str = None) -> tuple[list["FeederArticle"], list[tuple["FeederArticle", str]]]:
+    """Run the full feeder deduplication pipeline.
+
+    Args:
+        workflow_id: Scope the run to a specific workflow.
+        user_id: The authenticated user's UUID. When provided, per-user API keys
+                 and feeder settings from agent_settings are used instead of global env.
+    """
+    # Inject user_id into ContextVar so all tool calls use per-user keys
+    _token = None
+    if user_id:
+        try:
+            from research_agent.tools.provider_engine import active_user_id
+            _token = active_user_id.set(user_id)
+        except Exception:
+            pass
+
+    try:
+        return _run_feeder_pipeline_inner(workflow_id=workflow_id, user_id=user_id)
+    finally:
+        if _token is not None:
+            try:
+                from research_agent.tools.provider_engine import active_user_id
+                active_user_id.reset(_token)
+            except Exception:
+                pass
+
+
+def _run_feeder_pipeline_inner(workflow_id: str = None, user_id: str = None) -> tuple[list["FeederArticle"], list[tuple["FeederArticle", str]]]:
+    settings = load_settings(user_id)
     batch_size      = settings["batch_size"]
     max_age_minutes = settings["max_age_minutes"]   # always use minutes, no legacy override
     cluster_thr     = settings["cluster_threshold"]

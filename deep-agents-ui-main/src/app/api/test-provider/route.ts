@@ -1,59 +1,80 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
-/**
- * Test API connectivity for a given provider.
- * Reads API keys from process.env (same .env file as the Python backend).
- *
- * Rate limited: max 1 request per provider per 10 seconds.
- */
-
-type Provider = "linkup" | "parallel" | "tavily" | "exa" | "kie" | "gemini_flash";
+type Provider =
+  | "openrouter"
+  | "gemini"
+  | "tavily"
+  | "linkup"
+  | "exa"
+  | "brave";
 
 // In-memory rate limiting: provider -> last test timestamp
 const _lastTest: Record<string, number> = {};
-const RATE_LIMIT_MS = 10_000; // 10 seconds
+const RATE_LIMIT_MS = 5000; // 5 seconds for convenience
 
-async function testLinkup(): Promise<{ latency_ms: number }> {
-  const key = process.env.LINKUP_API_KEY;
-  if (!key) throw new Error("LINKUP_API_KEY not set in environment.");
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
+    }
+  );
+}
+
+// Helper to fetch key from Supabase agent_settings for the user
+async function getUserKey(supabase: any, userId: string, keyName: string): Promise<string> {
+  const { data, error } = await supabase
+    .from("agent_settings")
+    .select("value")
+    .eq("user_id", userId)
+    .eq("key", keyName)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`Error loading key ${keyName}:`, error);
+    return "";
+  }
+  return data?.value?.trim() || "";
+}
+
+// ── Test Implementations ───────────────────────────────────────────────────────
+
+async function testOpenRouter(key: string): Promise<{ latency_ms: number }> {
   const start = Date.now();
-  const resp = await fetch("https://api.linkup.so/v1/search", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ q: "test", depth: "standard", outputType: "sourcedAnswer" }),
+  const resp = await fetch("https://openrouter.ai/api/v1/models", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${key}` },
     signal: AbortSignal.timeout(10_000),
   });
-  if (resp.status === 401 || resp.status === 403) throw new Error(`Auth error: ${resp.status}`);
+  if (resp.status === 401 || resp.status === 403) throw new Error("Invalid OpenRouter key");
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return { latency_ms: Date.now() - start };
 }
 
-async function testParallel(): Promise<{ latency_ms: number }> {
-  const key = process.env.PARALLEL_API_KEY;
-  if (!key) throw new Error("PARALLEL_API_KEY not set in environment.");
+async function testGemini(key: string): Promise<{ latency_ms: number }> {
   const start = Date.now();
-  const resp = await fetch("https://api.parallel.ai/v1beta/search", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": key,           // Parallel AI uses x-api-key, NOT Authorization Bearer
-    },
-    body: JSON.stringify({
-      objective: "test connectivity",
-      search_queries: ["test"],
-      mode: "fast",
-      excerpts: { max_chars_per_result: 100 },
-    }),
+  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`, {
+    method: "GET",
     signal: AbortSignal.timeout(10_000),
   });
-  if (resp.status === 401 || resp.status === 403) throw new Error(`Auth error: ${resp.status}`);
+  if (resp.status === 400 || resp.status === 403) throw new Error("Invalid Gemini API key");
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return { latency_ms: Date.now() - start };
 }
 
-async function testTavily(): Promise<{ latency_ms: number }> {
-  const key = process.env.TAVILY_API_KEY;
-  if (!key) throw new Error("TAVILY_API_KEY not set in environment.");
+async function testTavily(key: string): Promise<{ latency_ms: number }> {
   const start = Date.now();
   const resp = await fetch("https://api.tavily.com/extract", {
     method: "POST",
@@ -61,14 +82,25 @@ async function testTavily(): Promise<{ latency_ms: number }> {
     body: JSON.stringify({ urls: ["https://example.com"], extract_depth: "basic" }),
     signal: AbortSignal.timeout(10_000),
   });
-  if (resp.status === 401 || resp.status === 403) throw new Error(`Auth error: ${resp.status}`);
+  if (resp.status === 401 || resp.status === 403) throw new Error("Invalid Tavily key");
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return { latency_ms: Date.now() - start };
 }
 
-async function testExa(): Promise<{ latency_ms: number }> {
-  const key = process.env.EXA_API_KEY;
-  if (!key) throw new Error("EXA_API_KEY not set in environment.");
+async function testLinkup(key: string): Promise<{ latency_ms: number }> {
+  const start = Date.now();
+  const resp = await fetch("https://api.linkup.so/v1/search", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ q: "test", depth: "standard", outputType: "sourcedAnswer" }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (resp.status === 401 || resp.status === 403) throw new Error("Invalid Linkup key");
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return { latency_ms: Date.now() - start };
+}
+
+async function testExa(key: string): Promise<{ latency_ms: number }> {
   const start = Date.now();
   const resp = await fetch("https://api.exa.ai/contents", {
     method: "POST",
@@ -76,55 +108,54 @@ async function testExa(): Promise<{ latency_ms: number }> {
     body: JSON.stringify({ ids: ["https://example.com"], text: true }),
     signal: AbortSignal.timeout(10_000),
   });
-  if (resp.status === 401 || resp.status === 403) throw new Error(`Auth error: ${resp.status}`);
+  if (resp.status === 401 || resp.status === 403) throw new Error("Invalid Exa AI key");
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return { latency_ms: Date.now() - start };
 }
 
-async function testKie(): Promise<{ latency_ms: number }> {
-  const key = process.env.KIE_API_KEY;
-  if (!key) throw new Error("KIE_API_KEY not set in environment.");
+async function testBrave(key: string): Promise<{ latency_ms: number }> {
   const start = Date.now();
-  // Use account info endpoint to verify auth without actually generating an image
-  const resp = await fetch("https://api.kie.ai/api/v1/user/info", {
+  const resp = await fetch("https://api.search.brave.com/res/v1/web/search?q=test", {
     method: "GET",
-    headers: { Authorization: `Bearer ${key}` },
+    headers: {
+      "Accept": "application/json",
+      "Accept-Encoding": "gzip",
+      "X-Subscription-Token": key,
+    },
     signal: AbortSignal.timeout(10_000),
   });
-  if (resp.status === 401 || resp.status === 403) throw new Error(`Auth error: ${resp.status}`);
+  if (resp.status === 401 || resp.status === 403) throw new Error("Invalid Brave Search key");
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return { latency_ms: Date.now() - start };
 }
 
-async function testGeminiFlash(): Promise<{ latency_ms: number }> {
-  const key = process.env.AI_GATEWAY_API_KEY;
-  if (!key) throw new Error("AI_GATEWAY_API_KEY not set in environment.");
-  const start = Date.now();
-  const resp = await fetch("https://ai-gateway.vercel.sh/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash-image",
-      messages: [{ role: "user", content: "Say 'ok' only." }],
-      max_tokens: 5,
-    }),
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (resp.status === 401 || resp.status === 403) throw new Error(`Auth error: ${resp.status}`);
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return { latency_ms: Date.now() - start };
-}
+const PROVIDER_KEY_MAP: Record<Provider, string> = {
+  openrouter: "openrouter_client_api_key",
+  gemini: "gemini_client_api_key",
+  tavily: "tavily_api_key",
+  linkup: "linkup_api_key",
+  exa: "exa_api_key",
+  brave: "brave_api_key",
+};
 
-const PROVIDER_TESTS: Record<Provider, () => Promise<{ latency_ms: number }>> = {
-  linkup: testLinkup,
-  parallel: testParallel,
+const PROVIDER_TEST_FUNCS: Record<Provider, (key: string) => Promise<{ latency_ms: number }>> = {
+  openrouter: testOpenRouter,
+  gemini: testGemini,
   tavily: testTavily,
+  linkup: testLinkup,
   exa: testExa,
-  kie: testKie,
-  gemini_flash: testGeminiFlash,
+  brave: testBrave,
 };
 
 export async function POST(request: NextRequest) {
+  // Auth check
+  const cookieStore = await cookies();
+  const supabase = getSupabaseClient(cookieStore);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   let provider: Provider;
   try {
     const body = await request.json();
@@ -133,32 +164,42 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Invalid JSON body." }, { status: 400 });
   }
 
-  if (!provider || !PROVIDER_TESTS[provider]) {
+  const keyName = PROVIDER_KEY_MAP[provider];
+  const testFunc = PROVIDER_TEST_FUNCS[provider];
+
+  if (!provider || !keyName || !testFunc) {
     return NextResponse.json(
-      { success: false, error: `Unknown provider: ${provider}. Valid: ${Object.keys(PROVIDER_TESTS).join(", ")}` },
+      { success: false, error: `Unsupported test provider: ${provider}` },
       { status: 400 }
     );
   }
 
-  // Rate limit: 1 request per provider per 10s
+  // Rate limit
   const now = Date.now();
-  const last = _lastTest[provider] ?? 0;
+  const last = _lastTest[`${user.id}:${provider}`] ?? 0;
   const elapsed = now - last;
   if (elapsed < RATE_LIMIT_MS) {
     const wait = Math.ceil((RATE_LIMIT_MS - elapsed) / 1000);
     return NextResponse.json(
-      { success: false, error: `Rate limited. Wait ${wait}s before testing ${provider} again.` },
+      { success: false, error: `Wait ${wait}s before testing ${provider} again.` },
       { status: 429 }
     );
   }
+  _lastTest[`${user.id}:${provider}`] = now;
 
-  _lastTest[provider] = now;
+  // Retrieve key from user settings
+  const key = await getUserKey(supabase, user.id, keyName);
+  if (!key) {
+    return NextResponse.json({
+      success: false,
+      error: `API key for ${provider} (${keyName}) is not set in your settings. Please save it first.`,
+    });
+  }
 
   try {
-    const { latency_ms } = await PROVIDER_TESTS[provider]();
-    return NextResponse.json({ success: true, latency_ms, provider });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ success: false, error: message, provider }, { status: 200 });
+    const { latency_ms } = await testFunc(key);
+    return NextResponse.json({ success: true, latency_ms });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message || "Test connection failed" });
   }
 }

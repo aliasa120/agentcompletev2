@@ -33,9 +33,10 @@ def exa_extract(urls: List[str]) -> str:
     if not _EXA_AVAILABLE:
         return "❌ exa-py SDK not installed. Run: uv add exa-py"
 
-    api_key = os.environ.get("EXA_API_KEY", "")
+    from research_agent.tools.provider_engine import get_user_api_key
+    api_key = get_user_api_key("exa_api_key", "EXA_API_KEY")
     if not api_key:
-        return "❌ EXA_API_KEY not set in environment."
+        return "❌ EXA_API_KEY not set in environment or user settings."
 
     urls = urls[:2]  # enforce 2-URL cap
 
