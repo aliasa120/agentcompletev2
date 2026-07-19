@@ -1,12 +1,32 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
+    }
+  );
+}
+
 import { execSync } from "child_process";
 import path from "path";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+
 
 interface PythonParseResult {
   schedule: any;
@@ -44,6 +64,14 @@ except Exception as e:
 
 // GET /api/scheduled-tasks — list all scheduled tasks
 export async function GET() {
+
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
   try {
     const { data: tasks, error } = await supabase
       .from("agent_scheduled_tasks")
@@ -62,6 +90,14 @@ export async function GET() {
 
 // POST /api/scheduled-tasks — create a new scheduled task
 export async function POST(req: Request) {
+
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
   try {
     const body = await req.json();
     const {
@@ -109,6 +145,7 @@ export async function POST(req: Request) {
     const { data, error } = await supabase
       .from("agent_scheduled_tasks")
       .insert({
+        user_id: user.id,
         name: taskName,
         prompt: prompt ?? null,
         schedule: parsedSchedule,

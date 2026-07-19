@@ -10,6 +10,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuTrigger,
+} from "@relume_io/relume-ui";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,6 +26,7 @@ interface ToolAssignment {
   tool_label: string;
   enabled: boolean;
   parameter_bindings?: Record<string, { value: any; decide_by_ai: boolean }>;
+  isAutoAttached?: boolean;
 }
 
 interface AgentConfig {
@@ -37,6 +45,7 @@ interface AgentConfig {
   is_builtin: boolean;
   agent_tool_assignments: ToolAssignment[];
   attach_all_skills?: boolean;
+  avatar_url?: string | null;
 }
 
 interface Skill {
@@ -44,6 +53,7 @@ interface Skill {
   skill_key: string;
   label: string;
   description: string;
+  created_by_agent_id?: string | null;
 }
 
 interface MCPConnection {
@@ -62,6 +72,7 @@ const BUILTIN_TOOLS = [
   { tool_key: "unified_extract",         tool_label: "URL Extractor",        category: "Search" },
   { tool_key: "youtube_transcript",      tool_label: "YouTube Transcript",    category: "Search" },
   { tool_key: "search_conversation_history", tool_label: "Search History",    category: "Search" },
+  { tool_key: "search_memories",          tool_label: "Search Memories",      category: "Search" },
   { tool_key: "think_tool",             tool_label: "Think Tool",            category: "Reasoning" },
   { tool_key: "fetch_images_brave",      tool_label: "Brave Image Search",   category: "Images" },
   { tool_key: "view_candidate_images",   tool_label: "View Candidate Images", category: "Images" },
@@ -246,6 +257,8 @@ function ToolAssignmentPanel({
   mcpConnections,
   toolSettings,
   builtinModes,
+  attachAllSkills,
+  agentId,
 }: {
   assigned: ToolAssignment[];
   onChange: (tools: ToolAssignment[]) => void;
@@ -253,6 +266,8 @@ function ToolAssignmentPanel({
   mcpConnections: MCPConnection[];
   toolSettings: ToolSetting[];
   builtinModes: Record<string, string>;
+  attachAllSkills: boolean;
+  agentId: string;
 }) {
   const [selectedSource, setSelectedSource] = useState<string>("");
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
@@ -356,16 +371,36 @@ function ToolAssignmentPanel({
     setExpandedToolKey(null);
   };
 
+  // Compute Auto-Attached Skills
+  const autoSkills: ToolAssignment[] = attachAllSkills
+    ? skills
+        .filter(s => (s.created_by_agent_id === null || s.created_by_agent_id === undefined || s.created_by_agent_id === agentId))
+        .map(s => ({
+          tool_type: "skill",
+          tool_key: s.skill_key,
+          tool_label: s.label,
+          enabled: true,
+          isAutoAttached: true,
+        }))
+    : [];
+
+  // Filter out any auto-attached skills that are already manually assigned to avoid duplicates
+  const filteredAutoSkills = autoSkills.filter(
+    as => !assigned.some(a => a.tool_key === as.tool_key)
+  );
+
+  const displayedTools = [...assigned, ...filteredAutoSkills];
+
   // Get available tools to add from selected source
   const getAvailableTools = () => {
     if (selectedSource === "builtin") {
       return BUILTIN_TOOLS
-        .filter(t => !assigned.some(a => a.tool_key === t.tool_key))
+        .filter(t => !displayedTools.some(a => a.tool_key === t.tool_key))
         .map(t => ({ key: t.tool_key, label: t.tool_label, type: "builtin" }));
     }
     if (selectedSource === "skill") {
       return skills
-        .filter(s => !assigned.some(a => a.tool_key === s.skill_key))
+        .filter(s => !displayedTools.some(a => a.tool_key === s.skill_key))
         .map(s => ({ key: s.skill_key, label: s.label, type: "skill" }));
     }
     if (selectedSource?.startsWith("mcp:")) {
@@ -377,7 +412,7 @@ function ToolAssignmentPanel({
         return !setting || setting.enabled;
       }) ?? [];
       return enabledMcpTools
-        .filter(t => !assigned.some(a => a.tool_key === t.tool_key))
+        .filter(t => !displayedTools.some(a => a.tool_key === t.tool_key))
         .map(t => ({ key: t.tool_key, label: t.tool_name ?? t.tool_key, type: "mcp" }));
     }
     return [];
@@ -420,7 +455,7 @@ function ToolAssignmentPanel({
               className="rounded border-input text-primary focus:ring-primary h-4 w-4 cursor-pointer"
             />
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-              <Wrench className="h-3 w-3 text-primary" /> Attached Tools & Skills ({assigned.length})
+              <Wrench className="h-3 w-3 text-primary" /> Attached Tools & Skills ({displayedTools.length})
             </span>
           </div>
 
@@ -437,27 +472,29 @@ function ToolAssignmentPanel({
           )}
         </div>
 
-        {assigned.length === 0 ? (
+        {displayedTools.length === 0 ? (
           <div className="text-center py-6 border border-dashed rounded-lg bg-muted/5 text-muted-foreground text-xs italic">
             No tools attached to this agent. Select a source below to add tools.
           </div>
         ) : (
           <div className="border rounded-lg bg-card/50 overflow-hidden">
             <div className="max-h-[350px] overflow-y-auto divide-y">
-              {assigned.map(t => {
+              {displayedTools.map(t => {
                 const isSelected = selectedKeys.includes(t.tool_key);
                 const hasBindings = t.parameter_bindings && Object.keys(t.parameter_bindings).length > 0;
+                const isAuto = !!t.isAutoAttached;
                 return (
                   <div key={t.tool_key} className="flex flex-col">
                     <div
                       className={`flex items-center justify-between p-2 hover:bg-muted/30 transition-colors ${
                         isSelected ? "bg-primary/5" : ""
-                      }`}
+                      } ${isAuto ? "opacity-90 bg-muted/10" : ""}`}
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <input
                           type="checkbox"
                           checked={isSelected}
+                          disabled={isAuto}
                           onChange={(e) => {
                             if (e.target.checked) {
                               setSelectedKeys(prev => [...prev, t.tool_key]);
@@ -465,7 +502,7 @@ function ToolAssignmentPanel({
                               setSelectedKeys(prev => prev.filter(k => k !== t.tool_key));
                             }
                           }}
-                          className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
+                          className={`rounded border-input text-primary focus:ring-primary h-3.5 w-3.5 ${isAuto ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                         />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
@@ -481,6 +518,11 @@ function ToolAssignmentPanel({
                             }`}>
                               {t.tool_type}
                             </span>
+                            {isAuto && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+                                Auto
+                              </span>
+                            )}
                             {renderLoadingModeBadge(t.tool_key, t.tool_type)}
                             {hasBindings && (
                               <span className="text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
@@ -495,19 +537,21 @@ function ToolAssignmentPanel({
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
+                          disabled={isAuto}
                           onClick={() => handleToggleExpand(t.tool_key)}
                           className={`p-1 rounded-full hover:bg-foreground/10 transition-colors ${
                             expandedToolKey === t.tool_key ? "text-primary bg-primary/10" : "text-muted-foreground"
-                          }`}
-                          title="Configure parameter bindings"
+                          } ${isAuto ? "opacity-50 cursor-not-allowed" : ""}`}
+                          title={isAuto ? "Auto-attached skill cannot be customized here" : "Configure parameter bindings"}
                         >
                           <Sliders className="h-3.5 w-3.5" />
                         </button>
                         <button
                           type="button"
+                          disabled={isAuto}
                           onClick={() => removeTool(t.tool_key)}
-                          className="p-1 rounded-full hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors mr-1"
-                          title="Detach tool"
+                          className={`p-1 rounded-full hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors mr-1 ${isAuto ? "opacity-50 cursor-not-allowed" : ""}`}
+                          title={isAuto ? "Auto-attached skill cannot be detached" : "Detach tool"}
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -751,6 +795,7 @@ function AgentEditorCard({
   onSave,
   onDelete,
   builtinModes,
+  onClose,
 }: {
   agent: AgentConfig;
   skills: Skill[];
@@ -761,6 +806,7 @@ function AgentEditorCard({
   onSave: (id: string, data: Partial<AgentConfig> & { tool_keys: ToolAssignment[]; workflow_ids?: string[] }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   builtinModes: Record<string, string>;
+  onClose: () => void;
 }) {
   const [name, setName] = useState(agent.name);
   const [description, setDescription] = useState(agent.description);
@@ -768,6 +814,7 @@ function AgentEditorCard({
   const [provider, setProvider] = useState(agent.provider || "vercel");
   const [model, setModel] = useState(agent.model || "xiaomi/mimo-v2.5-pro");
   const [attachAllSkills, setAttachAllSkills] = useState(agent.attach_all_skills ?? false);
+  const [avatarUrl, setAvatarUrl] = useState(agent.avatar_url || "");
   const initialWorkflowIds = React.useMemo(() => {
     const list = (agent.workflow_agent_assignments ?? []).map((w: any) => w.workflow_id).filter(Boolean);
     if (agent.workflow_id && !list.includes(agent.workflow_id)) {
@@ -817,6 +864,7 @@ function AgentEditorCard({
     provider !== (agent.provider || "vercel") ||
     model !== (agent.model || "xiaomi/mimo-v2.5-pro") ||
     attachAllSkills !== (agent.attach_all_skills ?? false) ||
+    avatarUrl !== (agent.avatar_url || "") ||
     JSON.stringify([...workflowIds].sort()) !== JSON.stringify([...initialWorkflowIds].sort()) ||
     JSON.stringify(tools.map(t => t.tool_key).sort()) !==
     JSON.stringify((agent.agent_tool_assignments ?? []).map(t => t.tool_key).sort());
@@ -833,6 +881,7 @@ function AgentEditorCard({
         workflow_ids: workflowIds,
         tool_keys: tools,
         attach_all_skills: attachAllSkills,
+        avatar_url: avatarUrl || null,
       });
       setSavedOk(true);
       setTimeout(() => setSavedOk(false), 3000);
@@ -848,6 +897,7 @@ function AgentEditorCard({
     setProvider(agent.provider || "vercel");
     setModel(agent.model || "xiaomi/mimo-v2.5-pro");
     setAttachAllSkills(agent.attach_all_skills ?? false);
+    setAvatarUrl(agent.avatar_url || "");
     setWorkflowIds(initialWorkflowIds);
     setTools(agent.agent_tool_assignments ?? []);
   };
@@ -863,230 +913,356 @@ function AgentEditorCard({
     }
   };
 
+  const selectedWorkflows = workflows.filter(wf => workflowIds.includes(wf.id));
+
   return (
-    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-4 border-b bg-muted/20">
-        <GripVertical className="h-4 w-4 text-muted-foreground/40 cursor-grab" />
-        <div className="flex-1 min-w-0">
-          <Input
-            value={name}
-            onChange={e => setName(e.target.value)}
-            className="h-8 text-sm font-semibold bg-transparent border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-            placeholder="Agent name..."
-          />
+    <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      {/* Back Button & Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
+        <div className="flex items-center gap-4">
+          <div className="size-16 rounded-full border-2 border-primary/20 bg-muted/30 p-0.5 flex items-center justify-center flex-shrink-0">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={name} className="size-full rounded-full object-cover" />
+            ) : (
+              <div className="size-full rounded-full bg-primary/5 flex items-center justify-center font-bold text-lg text-primary tracking-wide">
+                {name ? name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "AG"}
+              </div>
+            )}
+          </div>
+          <div>
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground font-semibold transition-colors w-fit mb-1"
+            >
+              &larr; Back to {agent.agent_type === "main" ? "Main Agents" : "Subagents"}
+            </button>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-foreground sm:text-2xl">{name || "Unnamed Agent"}</h1>
+              {agent.is_builtin && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                  Built-in
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-        {agent.is_builtin && (
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-            Built-in
-          </span>
-        )}
-        <div className="flex items-center gap-1.5 ml-auto">
-          {savedOk && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          {savedOk && (
+            <span className="text-xs text-emerald-500 font-medium flex items-center gap-1 mr-2">
+              <CheckCircle2 className="h-4 w-4" /> Saved
+            </span>
+          )}
           <Button
             size="sm"
-            variant="ghost"
+            variant="outline"
             onClick={handleReset}
             disabled={!isDirty}
-            className="h-7 px-2 text-xs"
+            className="h-9 px-3.5 text-xs gap-1.5 rounded-lg"
           >
-            <RotateCcw className="h-3 w-3" />
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reset
           </Button>
           <Button
             size="sm"
             onClick={handleSave}
             disabled={saving || !isDirty}
-            className="h-7 px-3 text-xs gap-1.5"
+            className="h-9 px-4.5 text-xs gap-1.5 font-semibold rounded-lg"
           >
-            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-            Save
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Save Changes
           </Button>
           <Button
             size="sm"
             variant={confirmDelete ? "destructive" : "ghost"}
             onClick={handleDelete}
             disabled={deleting}
-            className="h-7 px-2 text-xs"
+            className="h-9 px-3 text-xs gap-1.5 rounded-lg"
           >
             {deleting
-              ? <Loader2 className="h-3 w-3 animate-spin" />
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : confirmDelete
                 ? <span>Confirm</span>
-                : <Trash2 className="h-3 w-3" />
+                : <Trash2 className="h-3.5 w-3.5" />
             }
           </Button>
         </div>
       </div>
 
-      <div className="p-5 space-y-4">
-        {/* Description & Workflow */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Description</label>
-            <Input
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Brief description of this agent's role..."
-              className="h-8 text-sm"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Workflow Associations</label>
-            <div className="flex flex-wrap gap-2 border rounded-md p-2 bg-background min-h-8">
-              {workflows.map(wf => {
-                const isChecked = workflowIds.includes(wf.id);
-                return (
-                  <label key={wf.id} className="flex items-center gap-1.5 text-xs font-medium cursor-pointer bg-muted/40 px-2 py-0.5 rounded hover:bg-muted/70 transition-colors select-none">
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => {
-                        if (isChecked) {
-                          setWorkflowIds(prev => prev.filter(id => id !== wf.id));
-                        } else {
-                          setWorkflowIds(prev => [...prev, wf.id]);
-                        }
-                      }}
-                      className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
-                    />
-                    <span>{wf.name}</span>
-                  </label>
-                );
-              })}
-              {workflows.length === 0 && <span className="text-xs text-muted-foreground italic">No workflows created yet</span>}
+      {/* Main Settings Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left Column - Core Settings */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* Card 1: Identity & Scope */}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
+            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Identity & Scope</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Agent Name</label>
+                <Input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Enter agent name..."
+                  className="h-9 text-xs bg-background"
+                />
+              </div>
+              
+              {/* Workflow associations dropdown instead of checkboxes! */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground block">
+                  Workflow Associations
+                </label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-lg border border-input bg-background px-3 py-1.5 text-left text-xs focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all hover:bg-muted/10">
+                      {selectedWorkflows.length === 0 ? (
+                        <span className="text-muted-foreground">Select workflows...</span>
+                      ) : (
+                        selectedWorkflows.map(wf => (
+                          <span
+                            key={wf.id}
+                            className="inline-flex items-center gap-1 bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded text-[11px] font-medium"
+                          >
+                            {wf.name}
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setWorkflowIds(prev => prev.filter(id => id !== wf.id));
+                              }}
+                              className="hover:text-destructive cursor-pointer text-[10px] font-bold ml-0.5"
+                            >
+                              ×
+                            </span>
+                          </span>
+                        ))
+                      )}
+                      <span className="ml-auto text-muted-foreground/60 text-[10px]">▼</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-[300px] max-h-[250px] overflow-y-auto" align="start">
+                    {workflows.map(wf => {
+                      const isChecked = workflowIds.includes(wf.id);
+                      return (
+                        <DropdownMenuCheckboxItem
+                          key={wf.id}
+                          checked={isChecked}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setWorkflowIds(prev => [...prev, wf.id]);
+                            } else {
+                              setWorkflowIds(prev => prev.filter(id => id !== wf.id));
+                            }
+                          }}
+                        >
+                          {wf.name}
+                        </DropdownMenuCheckboxItem>
+                      );
+                    })}
+                    {workflows.length === 0 && (
+                      <div className="p-2 text-xs text-muted-foreground italic text-center">
+                        No workflows available
+                      </div>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Skills Auto-Attachment</label>
-            <div className="flex items-center justify-between border rounded-md p-2 bg-background h-8">
-              <span className="text-[11px] font-medium text-muted-foreground">Attach General & Self Skills</span>
-              <button
-                type="button"
-                onClick={() => setAttachAllSkills(!attachAllSkills)}
-                className="text-primary hover:opacity-85 focus:outline-none"
-              >
-                {attachAllSkills ? <ToggleRight className="h-6 w-6 text-primary" /> : <ToggleLeft className="h-6 w-6 text-muted-foreground" />}
-              </button>
-            </div>
-          </div>
-        </div>
 
-        {/* Model Selection */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-b py-3.5 bg-muted/5 rounded-lg px-3">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">LLM Provider</label>
-            <select
-              value={provider}
-              onChange={e => {
-                const newProv = e.target.value;
-                setProvider(newProv);
-                const meta = updatedProviderMetas.find(p => p.id === newProv);
-                if (meta && meta.defaultModels && meta.defaultModels.length > 0) {
-                  setModel(meta.defaultModels[0].value);
-                }
-              }}
-              className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-              disabled={updatedProviderMetas.length === 0}
-            >
-              {updatedProviderMetas.length === 0 ? (
-                <option value="">No gateway providers configured</option>
-              ) : (
-                updatedProviderMetas.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.label} {!p.keySet ? "⚠️ no key" : ""}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">LLM Model</label>
-            <select
-              value={model}
-              onChange={e => setModel(e.target.value)}
-              className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary font-mono"
-              disabled={loadingModels || updatedProviderMetas.find(p => p.id === provider)?.defaultModels?.length === 0}
-            >
-              {(() => {
-                const meta = updatedProviderMetas.find(p => p.id === provider);
-                const modelsList = meta?.defaultModels || [];
-                if (modelsList.length === 0) {
-                  return <option value="">No models available for this provider</option>;
-                }
-                return modelsList.map((m: any) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label} ({m.value})
-                  </option>
-                ));
-              })()}
-            </select>
-          </div>
-        </div>
-
-        {/* System Prompt */}
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <Sparkles className="h-3 w-3 text-primary" />
-              System Prompt
-            </label>
-            <span className="text-[10px] font-mono text-muted-foreground">
-              {systemPrompt.length.toLocaleString()} chars
-            </span>
-          </div>
-          <textarea
-            value={systemPrompt}
-            onChange={e => setSystemPrompt(e.target.value)}
-            placeholder="Enter the system prompt for this agent..."
-            rows={12}
-            className="w-full rounded-lg border border-input bg-muted/20 px-3 py-2.5 text-xs font-mono
-              leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-primary/50
-              focus:border-primary transition-all min-h-[200px]"
-          />
-        </div>
-
-        {/* Tool Assignment */}
-        <div>
-          <button
-            onClick={() => setShowTools(!showTools)}
-            className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
-          >
-            {showTools ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            <span>Attached Tools & Skills</span>
-            <span className="ml-auto font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded text-[10px]">
-              {tools.length} selected
-            </span>
-          </button>
-          {showTools && (
-            <div className="mt-3 p-4 rounded-lg border bg-muted/10">
-              <ToolAssignmentPanel
-                assigned={tools}
-                onChange={setTools}
-                skills={skills}
-                mcpConnections={mcpConnections}
-                toolSettings={toolSettings}
-                builtinModes={builtinModes}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Description</label>
+              <Input
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Enter agent description/role..."
+                className="h-9 text-xs bg-background"
               />
             </div>
-          )}
+          </div>
+
+          {/* Card 2: Persona & Instructions (System Prompt) */}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b pb-2 mb-3">
+              <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-primary" /> Persona & Instructions
+              </h3>
+              <span className="text-[10px] font-mono text-muted-foreground">
+                {systemPrompt.length.toLocaleString()} chars
+              </span>
+            </div>
+            <textarea
+              value={systemPrompt}
+              onChange={e => setSystemPrompt(e.target.value)}
+              placeholder="Define the behavior, constraints, and expertise guidelines for this agent..."
+              rows={16}
+              className="w-full rounded-lg border border-input bg-background text-foreground px-3.5 py-3 text-xs font-mono
+                leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-primary/50
+                focus:border-primary transition-all min-h-[320px]"
+            />
+          </div>
+
+          {/* Card 3: Attached Tools & Skills (Fully Visible) */}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
+            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Capabilities (Tools & Skills)</h3>
+            <ToolAssignmentPanel
+              assigned={tools}
+              onChange={setTools}
+              skills={skills}
+              mcpConnections={mcpConnections}
+              toolSettings={toolSettings}
+              builtinModes={builtinModes}
+              attachAllSkills={attachAllSkills}
+              agentId={agent.id}
+            />
+          </div>
         </div>
 
-        {/* Reference Images */}
-        <div>
-          <button
-            onClick={() => setShowImages(!showImages)}
-            className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
-          >
-            {showImages ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            <Images className="h-3.5 w-3.5 text-violet-500" />
-            <span>Reference Images</span>
-            <span className="text-[10px] text-muted-foreground ml-1">(VL model sees them directly — no separate tool needed)</span>
-          </button>
-          {showImages && (
-            <div className="mt-3 p-4 rounded-lg border bg-muted/10">
-              <ReferenceImagesPicker agentId={agent.id} />
+        {/* Right Column - Model Parameters & Assets */}
+        <div className="space-y-6">
+          
+          {/* Card 4: Model Parameters */}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
+            <h3 className="text-sm font-semibold border-b pb-2 mb-3">LLM Configuration</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">LLM Provider</label>
+                <select
+                  value={provider}
+                  onChange={e => {
+                    const newProv = e.target.value;
+                    setProvider(newProv);
+                    const meta = updatedProviderMetas.find(p => p.id === newProv);
+                    if (meta && meta.defaultModels && meta.defaultModels.length > 0) {
+                      setModel(meta.defaultModels[0].value);
+                    }
+                  }}
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled={updatedProviderMetas.length === 0}
+                >
+                  {updatedProviderMetas.length === 0 ? (
+                    <option value="">No gateway providers configured</option>
+                  ) : (
+                    updatedProviderMetas.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.label} {!p.keySet ? "⚠️ no key" : ""}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">LLM Model</label>
+                <select
+                  value={model}
+                  onChange={e => setModel(e.target.value)}
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+                  disabled={loadingModels || updatedProviderMetas.find(p => p.id === provider)?.defaultModels?.length === 0}
+                >
+                  {(() => {
+                    const meta = updatedProviderMetas.find(p => p.id === provider);
+                    const modelsList = meta?.defaultModels || [];
+                    if (modelsList.length === 0) {
+                      return <option value="">No models available</option>;
+                    }
+                    return modelsList.map((m: any) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label} ({m.value})
+                      </option>
+                    ));
+                  })()}
+                </select>
+              </div>
+
+              <div className="border-t pt-3">
+                <div className="flex items-center justify-between h-9">
+                  <div>
+                    <span className="text-xs font-semibold text-muted-foreground block">Auto-Attach Skills</span>
+                    <span className="text-[10px] text-muted-foreground block leading-tight">Attach General & Self Skills</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAttachAllSkills(!attachAllSkills)}
+                    className="text-primary hover:opacity-85 focus:outline-none"
+                  >
+                    {attachAllSkills ? <ToggleRight className="h-6 w-6 text-primary" /> : <ToggleLeft className="h-6 w-6 text-muted-foreground" />}
+                  </button>
+                </div>
+              </div>
             </div>
-          )}
+          </div>
+
+          {/* Card 5: Picture & Presets */}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
+            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Avatar Profile</h3>
+            <div className="space-y-4">
+              <div className="flex justify-center">
+                <div className="size-24 rounded-full border border-primary/20 bg-muted/30 p-1 flex items-center justify-center overflow-hidden">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="Avatar Preview" className="size-full rounded-full object-cover" />
+                  ) : (
+                    <Bot className="size-12 text-muted-foreground" />
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Avatar Image URL</label>
+                <div className="flex gap-2">
+                  <Input
+                    value={avatarUrl}
+                    onChange={e => setAvatarUrl(e.target.value)}
+                    placeholder="Paste custom image URL..."
+                    className="h-8 text-xs bg-background flex-1"
+                  />
+                  {avatarUrl && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setAvatarUrl("")}
+                      className="h-8 px-2 text-xs text-muted-foreground hover:bg-muted"
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2 border-t pt-3">
+                <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Choose Preset:</span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { name: "Bot 1", url: "https://api.dicebear.com/7.x/bottts/svg?seed=robot1" },
+                    { name: "Bot 2", url: "https://api.dicebear.com/7.x/bottts/svg?seed=robot2" },
+                    { name: "Coder", url: "https://api.dicebear.com/7.x/bottts/svg?seed=coder" },
+                    { name: "Analyst", url: "https://api.dicebear.com/7.x/identicon/svg?seed=analyst" },
+                    { name: "Agent 1", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" },
+                    { name: "Agent 2", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka" }
+                  ].map(preset => (
+                    <button
+                      key={preset.name}
+                      type="button"
+                      onClick={() => setAvatarUrl(preset.url)}
+                      className={`text-[10px] py-1.5 rounded border transition-colors truncate ${
+                        avatarUrl === preset.url
+                          ? "bg-primary text-primary-foreground border-primary font-semibold"
+                          : "bg-background hover:bg-muted text-muted-foreground border-border"
+                      }`}
+                    >
+                      {preset.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 6: Reference Assets */}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
+            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Reference Images</h3>
+            <ReferenceImagesPicker agentId={agent.id} />
+          </div>
         </div>
       </div>
     </div>
@@ -1109,6 +1285,41 @@ export function AgentsSection({ agentType, skills, mcpConnections, toolSettings 
   const [providerMetas, setProviderMetas] = useState<any[]>([]);
   const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
   const [builtinModes, setBuiltinModes] = useState<Record<string, string>>({});
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+
+  const Icon = agentType === "main" ? Bot : Users;
+  const label = agentType === "main" ? "Main Agents" : "Subagents";
+
+  const handleDelete = async (id: string) => {
+    await fetch(`/api/agents/${id}`, { method: "DELETE" });
+    setAgents(prev => prev.filter(a => a.id !== id));
+  };
+
+  const handleCreate = async () => {
+    setCreating(true);
+    try {
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: agentType === "main" ? "New Main Agent" : "New Subagent",
+          agent_type: agentType,
+          description: "",
+          system_prompt: "",
+          model_key: agentType === "main" ? "main_agent" : "research_subagent",
+          sort_order: 99,
+        }),
+      });
+      const data = await res.json();
+      if (data.agent) {
+        const newAgent = { ...data.agent, agent_tool_assignments: [] };
+        setAgents(prev => [...prev, newAgent]);
+        setSelectedAgentId(newAgent.id); // Auto-open configuration page!
+      }
+    } finally {
+      setCreating(false);
+    }
+  };
 
   useEffect(() => {
     async function loadBuiltinModes() {
@@ -1119,6 +1330,11 @@ export function AgentsSection({ agentType, skills, mcpConnections, toolSettings 
           .eq("key", "builtin_tools_loading_modes")
           .single();
         if (error) {
+          if (error.code === "PGRST116") {
+            // Row not found in fresh/truncated database — expected
+            setBuiltinModes({});
+            return;
+          }
           if (error.code === "PGRST303" || error.message?.includes("JWT expired")) {
             console.warn("JWT expired. Cleaning session and retrying loadBuiltinModes in AgentsSection...");
             await supabase.auth.signOut().catch(() => {});
@@ -1136,7 +1352,11 @@ export function AgentsSection({ agentType, skills, mcpConnections, toolSettings 
             data = retry.data;
             error = retry.error;
             if (error) {
-              console.error("Error loading built-in tool modes after retry in AgentsSection:", error);
+              if (error.code !== "PGRST116") {
+                console.error("Error loading built-in tool modes after retry in AgentsSection:", error);
+              } else {
+                setBuiltinModes({});
+              }
             }
           } else {
             console.error("Error loading built-in tool modes in AgentsSection:", error);
@@ -1198,52 +1418,38 @@ export function AgentsSection({ agentType, skills, mcpConnections, toolSettings 
     await fetchAgents();
   };
 
-  const handleDelete = async (id: string) => {
-    await fetch(`/api/agents/${id}`, { method: "DELETE" });
-    setAgents(prev => prev.filter(a => a.id !== id));
-  };
+  const selectedAgent = agents.find(a => a.id === selectedAgentId);
 
-  const handleCreate = async () => {
-    setCreating(true);
-    try {
-      const res = await fetch("/api/agents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: agentType === "main" ? "New Main Agent" : "New Subagent",
-          agent_type: agentType,
-          description: "",
-          system_prompt: "",
-          model_key: agentType === "main" ? "main_agent" : "research_subagent",
-          sort_order: 99,
-        }),
-      });
-      const data = await res.json();
-      if (data.agent) {
-        setAgents(prev => [...prev, { ...data.agent, agent_tool_assignments: [] }]);
-      }
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const Icon = agentType === "main" ? Bot : Users;
-  const label = agentType === "main" ? "Main Agents" : "Subagents";
-
-  if (loading) {
+  if (selectedAgentId !== null && selectedAgent) {
     return (
-      <div className="flex items-center justify-center py-16 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading {label.toLowerCase()}…
-      </div>
+      <AgentEditorCard
+        agent={selectedAgent}
+        skills={skills}
+        mcpConnections={mcpConnections}
+        toolSettings={toolSettings}
+        providerMetas={providerMetas}
+        workflows={workflows}
+        onSave={async (id, data) => {
+          await handleSave(id, data);
+          setSelectedAgentId(null);
+        }}
+        onDelete={async (id) => {
+          await handleDelete(id);
+          setSelectedAgentId(null);
+        }}
+        builtinModes={builtinModes}
+        onClose={() => setSelectedAgentId(null)}
+      />
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Section Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4 text-primary" />
-          <h2 className="font-semibold">{label}</h2>
+          <h2 className="font-semibold text-lg">{label}</h2>
           <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
             {agents.length}
           </span>
@@ -1254,6 +1460,7 @@ export function AgentsSection({ agentType, skills, mcpConnections, toolSettings 
         </Button>
       </div>
 
+      {/* Empty State */}
       {agents.length === 0 && (
         <div className="rounded-xl border border-dashed bg-muted/20 p-12 text-center">
           <Icon className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
@@ -1271,21 +1478,79 @@ export function AgentsSection({ agentType, skills, mcpConnections, toolSettings 
         </div>
       )}
 
-      <div className="space-y-4">
-        {agents.map(agent => (
-          <AgentEditorCard
-            key={agent.id}
-            agent={agent}
-            skills={skills}
-            mcpConnections={mcpConnections}
-            toolSettings={toolSettings}
-            providerMetas={providerMetas}
-            workflows={workflows}
-            onSave={handleSave}
-            onDelete={handleDelete}
-            builtinModes={builtinModes}
-          />
-        ))}
+      {/* Circular Profile Grid Layout */}
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {agents.map((agent) => {
+          const initials = agent.name
+            ? agent.name
+                .split(" ")
+                .map((n) => n[0])
+                .join("")
+                .substring(0, 2)
+                .toUpperCase()
+            : "AG";
+
+          return (
+            <div
+              key={agent.id}
+              className="border border-border rounded-2xl bg-card p-6 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col items-center text-center relative group"
+            >
+              {/* Quick Delete Option */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm(`Are you sure you want to delete ${agent.name}?`)) {
+                    handleDelete(agent.id);
+                  }
+                }}
+                className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Delete Agent"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+
+              {/* Circle Avatar Frame */}
+              <div className="mb-5 flex size-24 items-center justify-center rounded-full border-2 border-primary/20 bg-muted/30 p-1 group-hover:border-primary/60 transition-colors">
+                {agent.avatar_url ? (
+                  <img
+                    src={agent.avatar_url}
+                    alt={agent.name}
+                    className="size-full rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="size-full rounded-full bg-primary/5 flex items-center justify-center font-bold text-xl text-primary tracking-wide">
+                    {initials}
+                  </div>
+                )}
+              </div>
+
+              {/* Agent Details */}
+              <div className="mb-4 flex-1">
+                <h5 className="font-semibold text-lg text-foreground truncate max-w-full px-2">
+                  {agent.name}
+                </h5>
+                <h6 className="text-xs text-muted-foreground font-mono mt-0.5">
+                  {agent.provider ? `${agent.provider} / ${agent.model}` : agent.model_key}
+                </h6>
+                <p className="text-xs text-muted-foreground mt-3 line-clamp-3 min-h-[3rem] px-2 leading-relaxed font-sans">
+                  {agent.description || "No description provided. Click Configure to customize this agent's instructions, model, and tools."}
+                </p>
+              </div>
+
+              {/* Action Button */}
+              <div className="w-full flex gap-2 pt-2">
+                <Button
+                  onClick={() => setSelectedAgentId(agent.id)}
+                  variant="secondary"
+                  size="sm"
+                  className="w-full text-xs font-semibold rounded-lg"
+                >
+                  Configure
+                </Button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

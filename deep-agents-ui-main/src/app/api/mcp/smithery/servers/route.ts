@@ -1,12 +1,32 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
+    }
+  );
+}
+
 
 const SMITHERY_REGISTRY = "https://api.smithery.ai/servers";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Supabase client is initialized per-request using getSupabaseClient(cookieStore)
 
 export interface SmitheryServer {
   qualifiedName: string;
@@ -30,6 +50,12 @@ const pageCache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL = 15 * 60 * 1000; // 15 minutes cache
 
 export async function GET(req: Request) {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   const { searchParams } = new URL(req.url);
   const query = (searchParams.get("q") ?? "").trim().toLowerCase();
   const verifiedOnly = searchParams.get("verified") === "true";
@@ -106,8 +132,7 @@ export async function GET(req: Request) {
   let activeRemoteSlugs = new Set<string>();
   try {
     const { data: conns } = await supabase
-      .from("mcp_connections")
-      .select("toolkit_slug, status")
+      .from("mcp_connections").select("toolkit_slug, status").eq("user_id", user.id)
       .eq("connection_type", "manual")
       .eq("status", "active");
     for (const row of conns ?? []) {

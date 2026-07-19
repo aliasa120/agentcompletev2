@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
 
 # Skills directory is two levels up from tools/ → research_agent/skills/
 _SKILLS_ROOT = Path(__file__).resolve().parent.parent / "skills"
@@ -120,7 +121,7 @@ def check_skill_compatibility(frontmatter: dict, skill_name: str) -> Optional[st
 
 
 @tool(parse_docstring=True)
-def read_skill(skill_name: str, agent_id: Optional[str] = None) -> str:
+def read_skill(skill_name: str, agent_id: Optional[str] = None, config: Optional[RunnableConfig] = None) -> str:
     """Load a skill instruction file from disk and return its full content.
 
     Call this at the START of any task that uses a named skill.
@@ -134,6 +135,7 @@ def read_skill(skill_name: str, agent_id: Optional[str] = None) -> str:
                     Must match a folder inside research_agent/skills/.
         agent_id: Optional agent ID filter — if provided, only allows reading
                   skills assigned to this specific agent.
+        config: LangChain runnable configuration (automatically injected).
 
     Returns:
         The full text of the SKILL.md file, or an error message if not found.
@@ -142,63 +144,82 @@ def read_skill(skill_name: str, agent_id: Optional[str] = None) -> str:
     import os
     from datetime import datetime, timezone
     from typing import Optional
+    
+    configurable = config.get("configurable", {}) if config else {}
+    user_id_val = configurable.get("user_id")
+
+    # Tier 2: look up user_id from agent_configs using agent_id (reliable — bound at compile time)
+    if not user_id_val and agent_id:
+        try:
+            from supabase import create_client as _create_client
+            _url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+            _key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
+            if _url and _key:
+                _c = _create_client(_url, _key)
+                _r = _c.table("agent_configs").select("user_id").eq("id", agent_id).execute()
+                if _r.data and len(_r.data) > 0:
+                    user_id_val = _r.data[0].get("user_id")
+        except Exception:
+            pass
+
+    # Tier 3: ContextVar last resort
+    if not user_id_val:
+        try:
+            from research_agent.tools.provider_engine import active_user_id as _active_uid
+            user_id_val = _active_uid.get()
+        except Exception:
+            pass
+
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
         if url and key:
             client = create_client(url, key)
 
-            # Check if assigned to this agent
-            if agent_id:
-                # 1. Fetch attach_all_skills toggle for this agent
-                attach_all_skills = False
-                try:
-                    agent_resp = client.table("agent_configs") \
-                        .select("attach_all_skills") \
-                        .eq("id", agent_id) \
-                        .execute()
-                    if agent_resp.data and len(agent_resp.data) > 0:
-                        attach_all_skills = bool(agent_resp.data[0].get("attach_all_skills", False))
-                except Exception as e:
-                    print(f"[read_skill] Failed to fetch agent config: {e}")
-
-                # 2. Check manual assignment
-                is_manually_assigned = False
-                try:
-                    assign_resp = client.table("agent_tool_assignments") \
-                        .select("id") \
-                        .eq("agent_id", agent_id) \
-                        .eq("tool_key", skill_name) \
-                        .eq("tool_type", "skill") \
-                        .eq("enabled", True) \
-                        .execute()
-                    is_manually_assigned = bool(assign_resp.data and len(assign_resp.data) > 0)
-                except Exception as e:
-                    print(f"[read_skill] Failed to check manual assignment: {e}")
-
-                # 3. If not manually assigned, check if we can auto-attach
-                is_allowed = is_manually_assigned
-                if not is_allowed and attach_all_skills:
+            # Fetch the main skill using read_skill_admin RPC
+            resp = client.rpc("read_skill_admin", {"p_skill_key": skill_name, "p_user_id": user_id_val}).execute()
+            skill_data = resp.data
+            
+            if skill_data:
+                # Check access if agent_id is provided
+                if agent_id:
+                    attach_all_skills = False
+                    is_manually_assigned = False
+                    
                     try:
-                        skill_meta = client.table("skills_library") \
-                            .select("created_by_agent_id") \
-                            .eq("skill_key", skill_name) \
-                            .eq("state", "active") \
-                            .execute()
-                        if skill_meta.data and len(skill_meta.data) > 0:
-                            created_by = skill_meta.data[0].get("created_by_agent_id")
-                            if created_by is None or str(created_by) == str(agent_id):
-                                is_allowed = True
+                        bootstrap_resp = client.rpc("get_backend_bootstrap_data").execute()
+                        bootstrap = bootstrap_resp.data or {}
+
+                        # Resolve attach_all_skills from bootstrap agent_configs
+                        configs = bootstrap.get("agent_configs") or []
+                        for cfg in configs:
+                          if str(cfg.get("id")) == str(agent_id):
+                            attach_all_skills = bool(cfg.get("attach_all_skills", False))
+                            break
+
+                        # Resolve manual assignments from bootstrap agent_tool_assignments
+                        assignments = bootstrap.get("agent_tool_assignments") or []
+                        is_manually_assigned = any(
+                          str(a.get("agent_id")) == str(agent_id)
+                          and a.get("tool_key") == skill_name
+                          and a.get("tool_type") == "skill"
+                          and a.get("enabled")
+                          for a in assignments
+                        )
                     except Exception as e:
-                        print(f"[read_skill] Failed to check skill creator: {e}")
+                        print(f"[read_skill] Failed to fetch agent configurations via bootstrap RPC: {e}")
 
-                if not is_allowed:
-                    return f"⚠️ Access Denied: Skill '{skill_name}' is not assigned to you in the Settings UI. You can only read skills that are attached to you."
+                    is_allowed = is_manually_assigned
+                    if not is_allowed and attach_all_skills:
+                        created_by = skill_data.get("created_by_agent_id")
+                        if created_by is None or str(created_by) == str(agent_id):
+                            is_allowed = True
 
-            resp = client.table("skills_library").select("content, use_count").eq("skill_key", skill_name).eq("state", "active").execute()
-            if resp.data and len(resp.data) > 0:
-                content = resp.data[0].get("content", "").strip()
+                    if not is_allowed:
+                        return f"⚠️ Access Denied: Skill '{skill_name}' is not assigned to you in the Settings UI. You can only read skills that are attached to you."
+
+                content = skill_data.get("content", "").strip()
                 if content:
                     # Validate frontmatter and compatibility
                     frontmatter, body = parse_frontmatter(content)
@@ -206,20 +227,24 @@ def read_skill(skill_name: str, agent_id: Optional[str] = None) -> str:
                     if compatibility_error:
                         return compatibility_error
 
-                    # Track usage — increment use_count and update last_used_at
-                    try:
-                        current_count = resp.data[0].get("use_count", 0) or 0
-                        client.table("skills_library").update({
-                            "use_count": current_count + 1,
-                            "last_used_at": datetime.now(timezone.utc).isoformat(),
-                        }).eq("skill_key", skill_name).execute()
-                    except Exception:
-                        pass  # Don't fail the skill load if tracking fails
+                    # ── Fetch subskills automatically via get_subskills_admin RPC ──
+                    sub_resp = client.rpc("get_subskills_admin", {"p_parent_skill_key": skill_name, "p_user_id": user_id_val}).execute()
+                    subskills = sub_resp.data or []
 
-                    print(f"[read_skill] [OK] Loaded skill '{skill_name}' from database ({len(content)} chars)")
+                    subskills_text = ""
+                    if subskills:
+                        subskills_text = "\n\n=== SUBSKILLS ASSOCIATED WITH " + skill_name.upper() + " ===\n"
+                        for sub in subskills:
+                            sub_key = sub.get("skill_key", "")
+                            sub_content = sub.get("content", "").strip()
+                            subskills_text += f"\n--- SUBSKILL: {sub_key.upper()} ---\n{sub_content}\n"
+                        subskills_text += f"\n=== END OF SUBSKILLS ===\n"
+
+                    print(f"[read_skill] [OK] Loaded skill '{skill_name}' and {len(subskills)} subskills from database ({len(content)} chars)")
                     return (
                         f"=== SKILL: {skill_name.upper()} ===\n\n"
-                        f"{content}\n\n"
+                        f"{content}"
+                        f"{subskills_text}\n\n"
                         f"=== END OF SKILL: {skill_name.upper()} ===\n"
                         f"Now follow the skill instructions above exactly.\n"
                         f"If you find any issues with this skill, fix it using "

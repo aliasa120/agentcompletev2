@@ -1,98 +1,31 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { testStdioMcp, testSseMcp, testHttpMcp } from "./test/route";
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+import { testStdioMcp, testSseMcp, testHttpMcp, resolveNpmPackage, mapCommonEnvVariables } from "@/lib/mcp-tester";
 
-export async function resolveNpmPackage(qualifiedName: string): Promise<string> {
-  const lowercaseQualifiedName = qualifiedName.toLowerCase();
-  const mappings: Record<string, string> = {
-    "tavily": "tavily-mcp",
-    "outlook": "outlook-mcp",
-    "jina": "jina-mcp-tools",
-    "linkupplatform/linkup-mcp-server": "linkup-mcp-server",
-    "node2flow/wordpress": "@node2flow/wordpress-mcp",
-    "node2flow/gmail": "@node2flow/gmail-mcp",
-    "youtube": "@modelcontextprotocol/server-youtube",
-    "brave": "@modelcontextprotocol/server-brave",
-    "slack": "@modelcontextprotocol/server-slack",
-    "googledocs": "@modelcontextprotocol/server-google-docs",
-    "gmail": "@modelcontextprotocol/server-gmail",
-    "exa": "exa-mcp-server",
-    "postgres": "@modelcontextprotocol/server-postgres",
-    "sqlite": "@modelcontextprotocol/server-sqlite",
-    "github": "@modelcontextprotocol/server-github",
-    "gcal": "@modelcontextprotocol/server-gcal",
-    "parallel/search": "@parallel-web/mcp-server"
-  };
-
-  if (mappings[lowercaseQualifiedName]) {
-    return mappings[lowercaseQualifiedName];
-  }
-
-  try {
-    const parts = qualifiedName.split("/");
-    const shortName = parts[parts.length - 1].toLowerCase();
-    
-    // First check if <shortName>-mcp exists directly on npm
-    try {
-      const directRes = await fetch(`https://registry.npmjs.org/${shortName}-mcp`, {
-        method: "HEAD",
-        signal: AbortSignal.timeout(3000)
-      });
-      if (directRes.ok) {
-        return `${shortName}-mcp`;
-      }
-    } catch (_) {}
-
-    // Search NPM preferring MCP packages
-    const res = await fetch(`https://registry.npmjs.org/-/v1/search?text=${shortName}+mcp&size=8`, {
-      signal: AbortSignal.timeout(4000),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.objects && data.objects.length > 0) {
-        // Look for package that contains the shortName AND (-mcp or mcp- or /mcp) in its name
-        for (const obj of data.objects) {
-          const pkgName = obj.package.name.toLowerCase();
-          const cleanPkgName = pkgName.replace(/^@/, "").split("/").pop() || "";
-          
-          if (cleanPkgName.includes(shortName)) {
-            if (pkgName.includes("-mcp") || pkgName.includes("mcp-") || pkgName.includes("/mcp")) {
-              return obj.package.name;
-            }
-          }
-        }
-        
-        // Fallback to first result ONLY if it contains the shortName to prevent false positives
-        const firstPkgName = data.objects[0].package.name.toLowerCase();
-        const cleanFirstPkgName = firstPkgName.replace(/^@/, "").split("/").pop() || "";
-        if (cleanFirstPkgName.includes(shortName)) {
-          return data.objects[0].package.name;
-        }
-      }
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
     }
-  } catch (e) {
-    console.warn("[Smithery Resolve] NPM search failed, falling back to name:", e);
-  }
-
-  return qualifiedName.split("/").pop() || qualifiedName;
+  );
 }
 
-export function mapCommonEnvVariables(env: Record<string, string>, packageName: string): Record<string, string> {
-  const mapped = { ...env };
-  
-  const apiKeyValue = mapped.apiKey || mapped.apikey || mapped.api_key || mapped.API_KEY;
-  if (apiKeyValue) {
-    const cleanPkgName = packageName.replace(/^@/, "").split("/").pop() || "";
-    const baseName = cleanPkgName.replace(/-mcp-server$/, "").replace(/-mcp$/, "").replace(/-server$/, "");
-    const envKey = `${baseName.replace(/-/g, "_").toUpperCase()}_API_KEY`;
-    
-    if (!mapped[envKey]) {
-      mapped[envKey] = apiKeyValue;
-    }
-  }
 
-  return mapped;
-}
+
 
 function parseAndNormalizeMcpConfig(mcpUrlStr: string): {
   transport: "stdio" | "sse" | "http";
@@ -190,10 +123,7 @@ function parseAndNormalizeMcpConfig(mcpUrlStr: string): {
   }
 }
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Supabase client is initialized per-request using getSupabaseClient(cookieStore)
 
 // Helper to fetch tools from a Streamable HTTP connection (Zapier style)
 async function fetchMcpStreamableHttpTools(mcpUrl: string, secret?: string): Promise<{ tool_key: string; tool_name: string }[]> {
@@ -607,6 +537,12 @@ async function fetchMcpSseTools(mcpUrl: string, secret?: string): Promise<{ tool
 
 // GET /api/mcp/manual — list manual connections
 export async function GET(req: Request) {
+  const cookieStore = await cookies();
+  const supabase = getSupabaseClient(cookieStore);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const { searchParams } = new URL(req.url);
     const sync = searchParams.get("sync") === "true";
@@ -782,7 +718,14 @@ export async function GET(req: Request) {
         }
       }
 
-      const secret = process.env.ZAPIER_MCP_SECRET;
+      // Fetch user's custom Zapier key from agent_settings table
+      const { data: zapierSettings } = await supabase
+        .from("agent_settings")
+        .select("value")
+        .eq("user_id", user.id)
+        .eq("key", "zapier_mcp_secret")
+        .maybeSingle();
+      const secret = zapierSettings?.value?.trim() || "";
       // Find all unique base server URLs from Zapier connections
       const baseUrls = new Set<string>();
       for (const conn of connections) {
@@ -853,6 +796,7 @@ export async function GET(req: Request) {
               await supabase
                 .from("mcp_connections")
                 .insert({
+                  user_id: user.id,
                   connection_type: "manual",
                   label: appLabel,
                   mcp_url: appMcpUrl,
@@ -900,6 +844,12 @@ export async function GET(req: Request) {
 
 // POST /api/mcp/manual — add manual MCP server
 export async function POST(req: Request) {
+  const cookieStore = await cookies();
+  const supabase = getSupabaseClient(cookieStore);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const { label, mcp_url, available_tools: manual_tools } = await req.json();
     if (!label || !mcp_url) {
@@ -908,7 +858,14 @@ export async function POST(req: Request) {
 
     if (mcp_url.startsWith("https://mcp.zapier.com/")) {
       const baseServerUrl = mcp_url.split("#")[0];
-      const secret = process.env.ZAPIER_MCP_SECRET;
+      // Fetch user's custom Zapier key from agent_settings table
+      const { data: zapierSettings } = await supabase
+        .from("agent_settings")
+        .select("value")
+        .eq("user_id", user.id)
+        .eq("key", "zapier_mcp_secret")
+        .maybeSingle();
+      const secret = zapierSettings?.value?.trim() || "";
       
       let defaultTools: any[] = [];
       let enabledActions: any[] = [];
@@ -952,6 +909,7 @@ export async function POST(req: Request) {
         const { data } = await supabase
           .from("mcp_connections")
           .insert({
+            user_id: user.id,
             connection_type: "manual",
             label: baseLabel,
             mcp_url: baseMcpUrl,
@@ -1107,6 +1065,7 @@ export async function POST(req: Request) {
       const { data, error } = await supabase
         .from("mcp_connections")
         .insert({
+          user_id: user.id,
           connection_type: "manual",
           label,
           mcp_url,
@@ -1126,6 +1085,12 @@ export async function POST(req: Request) {
 
 // DELETE /api/mcp/manual
 export async function DELETE(req: Request) {
+  const cookieStore = await cookies();
+  const supabase = getSupabaseClient(cookieStore);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   async function cleanupToolAssignments(conn: any) {
     if (conn && conn.available_tools && Array.isArray(conn.available_tools)) {
       const toolKeys = conn.available_tools.map((t: any) => t.tool_key).filter(Boolean);

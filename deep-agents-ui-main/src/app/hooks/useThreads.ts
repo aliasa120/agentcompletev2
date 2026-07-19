@@ -71,9 +71,11 @@ export function useThreads(props: {
       workflowId?: string | null;
       userId?: string;
     }) => {
+      const isLocal = deploymentUrl.includes("localhost") || deploymentUrl.includes("127.0.0.1");
       const client = new Client({
         apiUrl: deploymentUrl,
-        defaultHeaders: apiKey ? { "X-Api-Key": apiKey } : {},
+        apiKey: (!isLocal && apiKey) ? apiKey : undefined,
+        defaultHeaders: (!isLocal && apiKey) ? { "X-Api-Key": apiKey } : {},
       });
 
       // Check if assistantId is a UUID (deployed) or graph name (local)

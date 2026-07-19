@@ -27,6 +27,7 @@ class ProviderConfig(TypedDict, total=False):
     base_url_env: str
     base_url_default: str
     env_key: str
+    agent_settings_key: str
     label: str
     openai_compat: bool
     default_models: list[dict[str, str]]
@@ -34,12 +35,13 @@ class ProviderConfig(TypedDict, total=False):
 
 
 # ── Core Registry ──────────────────────────────────────────────────────────────
-# Order determines the display order in the UI.
+# Order determines the display order in the UI. Only OpenRouter and Gemini direct.
 
 PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
     "openrouter": {
         "base_url": "https://openrouter.ai/api/v1",
         "env_key": "OPENROUTER_API_KEY",
+        "agent_settings_key": "openrouter_client_api_key",
         "label": "OpenRouter AI Gateway",
         "openai_compat": True,
         "badge_color": "from-violet-500 to-purple-600",
@@ -52,6 +54,7 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
     "gemini": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "env_key": "GEMINI_API_KEY",
+        "agent_settings_key": "gemini_client_api_key",
         "label": "Gemini (Direct API)",
         "openai_compat": True,
         "badge_color": "from-blue-500 to-indigo-600",
@@ -62,6 +65,8 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
         ],
     },
 }
+
+KEY_MAPPINGS: dict[str, str] = {name: cfg["env_key"] for name, cfg in PROVIDER_REGISTRY.items()}
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

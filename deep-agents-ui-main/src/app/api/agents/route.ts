@@ -1,14 +1,42 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
+    }
+  );
+}
+
 import { triggerAgentReload } from "@/lib/agent-reloader";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+
 
 // GET /api/agents — list all agents with tool assignments
 export async function GET() {
+
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
   try {
     const { data: agents, error } = await supabase
       .from("agent_configs")
@@ -41,6 +69,14 @@ export async function GET() {
 
 // POST /api/agents — create new agent
 export async function POST(req: Request) {
+
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
   try {
     const body = await req.json();
     const { name, agent_type, description, system_prompt, model_key, sort_order, provider, model, workflow_id, workflow_ids } = body;
@@ -52,6 +88,7 @@ export async function POST(req: Request) {
     const { data: agent, error } = await supabase
       .from("agent_configs")
       .insert({
+        user_id: user.id,
         name,
         agent_type: agent_type ?? "subagent",
         description: description ?? "",

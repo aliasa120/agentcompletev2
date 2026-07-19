@@ -3,11 +3,12 @@
 import React from "react";
 import {
   Wrench, Cpu, Bot, Users, LayoutList, BookOpen, Image as ImageIcon,
-  ChevronRight, Database, Settings, Menu, Brain, Route, AlarmClock, LayoutGrid
+  ChevronRight, Database, Settings, Menu, Brain, Route, AlarmClock, LayoutGrid, Shield
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type SettingsSection =
+  | "env-keys"
   | "workflows"
   | "tools"
   | "tools-composio"
@@ -38,6 +39,13 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  {
+    id: "env-keys",
+    label: "ENV Keys",
+    description: "Your API credentials & provider keys",
+    icon: <Shield className="h-4 w-4" />,
+    badge: "NEW",
+  },
   {
     id: "workflows",
     label: "Workflows",

@@ -1,15 +1,41 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+import { triggerAgentReload } from "@/lib/agent-reloader";
+
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
+    }
+  );
+}
+
 import fs from "fs";
 import path from "path";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
 // GET /api/skills — list all skills (merged with local filesystem)
 export async function GET() {
+  const cookieStore = await cookies();
+  const supabase = getSupabaseClient(cookieStore);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     // 1. Fetch skills from database
     const { data: dbSkills, error: dbError } = await supabase
@@ -21,7 +47,8 @@ export async function GET() {
       console.error("[api/skills] Supabase query error:", dbError);
     }
 
-    const skillsList = dbSkills ? [...dbSkills] : [];
+    // Filter out archived skills from UI presentation
+    const skillsList = dbSkills ? dbSkills.filter(s => s.state !== "archived") : [];
 
     // 2. Read local filesystem skills (relative to process.cwd(), which is deep-agents-ui-main)
     const skillsDir = path.resolve(process.cwd(), "../research_agent/skills");
@@ -36,8 +63,9 @@ export async function GET() {
             const skillKey = folder;
             const content = fs.readFileSync(skillMdPath, "utf-8");
 
-            // Check if skill already exists in the loaded database list
-            const existsInDb = skillsList.some((s) => s.skill_key === skillKey);
+            // Check if skill already exists in the raw database list (including archived)
+            // so we don't re-seed deleted/archived builtins
+            const existsInDb = dbSkills && dbSkills.some((s) => s.skill_key === skillKey);
 
             if (!existsInDb) {
               const label = skillKey
@@ -52,7 +80,7 @@ export async function GET() {
                   const { data: insertedData, error: insertError } = await supabase
                     .from("skills_library")
                     .insert({
-                      skill_key: skillKey,
+                      user_id: user.id, skill_key: skillKey,
                       label,
                       description,
                       content,
@@ -74,7 +102,7 @@ export async function GET() {
               // Fallback to local representation if Supabase is offline/errored
               skillsList.push({
                 id: skillKey, // folder name acts as fallback ID
-                skill_key: skillKey,
+                user_id: user.id, skill_key: skillKey,
                 label,
                 description,
                 content,
@@ -96,18 +124,36 @@ export async function GET() {
 
 // POST /api/skills — create skill
 export async function POST(req: Request) {
+  const cookieStore = await cookies();
+  const supabase = getSupabaseClient(cookieStore);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
-    const { skill_key, label, description, content } = body;
+    const { skill_key, label, description, content, parent_skill_key } = body;
     if (!skill_key || !label || !content) {
       return NextResponse.json({ error: "skill_key, label, and content are required" }, { status: 400 });
     }
     const { data, error } = await supabase
       .from("skills_library")
-      .insert({ skill_key, label, description: description ?? "", content, source: "user" })
+      .insert({
+        skill_key,
+        label,
+        description: description ?? "",
+        content,
+        source: "user",
+        parent_skill_key: parent_skill_key || null
+      })
       .select()
       .single();
     if (error) throw error;
+
+    // Trigger agent hot-reload to re-compile graph prompt with new skill
+    triggerAgentReload();
+
     return NextResponse.json({ skill: data });
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown" }, { status: 500 });

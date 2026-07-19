@@ -41,7 +41,7 @@ function Switch({
           width: "16px",
           height: "16px",
           borderRadius: "9999px",
-          backgroundColor: "white",
+          backgroundColor: "var(--background)",
           boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
           transition: "transform 0.2s",
           transform: "translateX(1px)",

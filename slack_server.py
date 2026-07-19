@@ -241,15 +241,17 @@ class SlackBotInstance:
         try:
             resp = await loop.run_in_executor(
                 None,
-                lambda: supabase.table("workflows")
-                .select("id, name")
-                .eq("is_active", True)
-                .order("created_at", desc=False)
-                .execute()
+                lambda: supabase.rpc("get_backend_bootstrap_data").execute()
             )
-            return resp.data or []
+            bootstrap = resp.data or {}
+            all_workflows = bootstrap.get("workflows") or []
+            filtered = [
+                w for w in all_workflows
+                if w.get("is_active") == True and (not self.user_id or str(w.get("user_id")) == str(self.user_id))
+            ]
+            return filtered
         except Exception as e:
-            logger.error(f"Error fetching workflows for Slack: {e}")
+            logger.error(f"Error fetching workflows for Slack via bootstrap: {e}")
             return []
 
     async def start(self):

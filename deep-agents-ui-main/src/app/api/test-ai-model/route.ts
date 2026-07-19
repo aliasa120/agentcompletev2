@@ -1,13 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
+    }
+  );
+}
 
 // GET /api/test-ai-model — returns env key status + custom models from DB
 export async function GET() {
+  const cookieStore = await cookies();
+  const supabase = getSupabaseClient(cookieStore);
   const env_status: Record<string, boolean> = {};
 
   let openrouter_key = "";
@@ -22,8 +39,20 @@ export async function GET() {
     }
   } catch {}
 
+  let gemini_key = "";
+  try {
+    const { data } = await supabase
+      .from("agent_settings")
+      .select("value")
+      .eq("key", "gemini_client_api_key")
+      .single();
+    if (data?.value) {
+      gemini_key = data.value.trim();
+    }
+  } catch {}
+
   env_status["openrouter"] = !!(openrouter_key || process.env.OPENROUTER_API_KEY);
-  env_status["gemini"] = !!process.env.GEMINI_API_KEY;
+  env_status["gemini"] = !!(gemini_key || process.env.GEMINI_API_KEY);
 
   let custom_models: Record<string, string[]> = {};
   try {
@@ -41,6 +70,14 @@ export async function GET() {
 // PATCH /api/test-ai-model — save custom models for one provider
 export async function PATCH(req: Request) {
   try {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { provider_id, custom_models } = await req.json();
     if (!provider_id) return NextResponse.json({ error: "provider_id required" }, { status: 400 });
 
@@ -54,8 +91,8 @@ export async function PATCH(req: Request) {
 
     const updated = { ...existing, [provider_id]: custom_models ?? [] };
     await supabase.from("agent_settings").upsert(
-      { key: "custom_models_by_provider", value: JSON.stringify(updated) },
-      { onConflict: "key" }
+      { key: "custom_models_by_provider", value: JSON.stringify(updated), user_id: user.id },
+      { onConflict: "user_id,key" }
     );
     return NextResponse.json({ success: true });
   } catch (e: unknown) {
@@ -65,6 +102,8 @@ export async function PATCH(req: Request) {
 
 // POST /api/test-ai-model — execute test model call
 export async function POST(request: NextRequest) {
+  const cookieStore = await cookies();
+  const supabase = getSupabaseClient(cookieStore);
   let provider: string;
   let model: string;
 
@@ -85,10 +124,24 @@ export async function POST(request: NextRequest) {
   let headers: Record<string, string> = { "Content-Type": "application/json" };
 
   if (provider === "gemini") {
-    resolvedKey = process.env.GEMINI_API_KEY || "";
+    try {
+      const { data } = await supabase
+        .from("agent_settings")
+        .select("value")
+        .eq("key", "gemini_client_api_key")
+        .single();
+      if (data?.value) {
+        resolvedKey = data.value.trim();
+      }
+    } catch {}
+
+    if (!resolvedKey) {
+      resolvedKey = process.env.GEMINI_API_KEY || "";
+    }
+
     if (!resolvedKey) {
       return NextResponse.json(
-        { success: false, error: "GEMINI_API_KEY environment variable is not set.", provider, model },
+        { success: false, error: "No Gemini Client API Key configured.", provider, model },
         { status: 400 }
       );
     }

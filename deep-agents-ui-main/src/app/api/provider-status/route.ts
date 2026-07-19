@@ -31,6 +31,7 @@ export async function GET() {
   );
 
   let openrouter_key = "";
+  let gemini_key = "";
   let customModelsByProvider: Record<string, string[]> = {};
 
   try {
@@ -40,6 +41,7 @@ export async function GET() {
 
     const settingsMap = new Map((settings || []).map(s => [s.key, s.value]));
     openrouter_key = settingsMap.get("openrouter_client_api_key")?.trim() || "";
+    gemini_key = settingsMap.get("gemini_client_api_key")?.trim() || "";
 
     const rawCustom = settingsMap.get("custom_models_by_provider");
     if (rawCustom) {
@@ -48,7 +50,7 @@ export async function GET() {
   } catch {}
 
   const openrouter_keySet = !!(openrouter_key || process.env.OPENROUTER_API_KEY);
-  const gemini_keySet = !!process.env.GEMINI_API_KEY;
+  const gemini_keySet = !!(gemini_key || process.env.GEMINI_API_KEY);
 
   // OpenRouter models
   const orCustom = (customModelsByProvider["openrouter"] ?? []).map(v => ({

@@ -381,16 +381,20 @@ export default function FeederSettingsPage() {
         setAgentSaveStatus("saving");
         try {
             const rows = [
-                { key: "feeder_provider", value: agentSettings.feeder_provider || "openrouter", updated_at: new Date().toISOString() },
-                { key: "feeder_model", value: agentSettings.feeder_model || "google/gemini-2.5-flash", updated_at: new Date().toISOString() },
+                { key: "feeder_provider", value: agentSettings.feeder_provider || "openrouter" },
+                { key: "feeder_model", value: agentSettings.feeder_model || "google/gemini-2.5-flash" },
             ];
-            const { error } = await supabase.from("agent_settings").upsert(rows, { onConflict: "key" });
-            if (error) {
-                console.error("Error saving agent LLM settings:", error);
-                setAgentSaveStatus("error");
-            } else {
+            const res = await fetch("/api/agent-settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ rows }),
+            });
+            if (res.ok) {
                 setAgentSaveStatus("saved");
                 setIsAgentLLMDirty(false);
+            } else {
+                console.error("Error saving agent LLM settings via API");
+                setAgentSaveStatus("error");
             }
         } catch (e) {
             console.error("Exception saving agent LLM settings:", e);

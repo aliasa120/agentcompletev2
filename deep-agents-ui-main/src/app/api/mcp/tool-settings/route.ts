@@ -1,14 +1,40 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
+    }
+  );
+}
+
+
+// Supabase client is initialized per-request using getSupabaseClient(cookieStore)
 
 // GET /api/mcp/tool-settings?connection_id=xxx
 // Returns all tool settings for a given connection
 export async function GET(req: Request) {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   const { searchParams } = new URL(req.url);
   const connection_id = searchParams.get("connection_id");
 
@@ -29,6 +55,12 @@ export async function GET(req: Request) {
 // POST /api/mcp/tool-settings — seed tools for a connection from mcp_connections.available_tools
 // Body: { connection_id }
 export async function POST(req: Request) {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   try {
     const { connection_id } = await req.json();
     if (!connection_id) {
@@ -37,8 +69,7 @@ export async function POST(req: Request) {
 
     // Fetch connection to get available_tools
     const { data: conn, error: connErr } = await supabase
-      .from("mcp_connections")
-      .select("id, available_tools")
+      .from("mcp_connections").select("id, available_tools").eq("user_id", user.id)
       .eq("id", connection_id)
       .single();
 
@@ -83,6 +114,12 @@ export async function POST(req: Request) {
 // PATCH /api/mcp/tool-settings — toggle a tool enabled/disabled or change loading_mode
 // Body: { connection_id, tool_key, enabled, loading_mode }
 export async function PATCH(req: Request) {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   try {
     const { connection_id, tool_key, enabled, loading_mode } = await req.json();
     if (!connection_id || !tool_key) {
@@ -114,6 +151,12 @@ export async function PATCH(req: Request) {
 // PUT /api/mcp/tool-settings — bulk update (enable all / disable all or change mode)
 // Body: { connection_id, enabled, loading_mode }
 export async function PUT(req: Request) {
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   try {
     const { connection_id, enabled, loading_mode } = await req.json();
     if (!connection_id) {

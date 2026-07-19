@@ -18,6 +18,7 @@ import { getConfig, saveConfig } from "@/lib/config";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { cn } from "@/lib/utils";
 import { SettingsSidebar, type SettingsSection } from "@/app/components/settings/SettingsSidebar";
+import { ApplicationShell } from "@/app/components/settings/ApplicationShell";
 import { ToolsSection } from "@/app/components/settings/ToolsSection";
 import { AgentsSection } from "@/app/components/settings/AgentsSection";
 import { SkillsSection } from "@/app/components/settings/SkillsSection";
@@ -27,6 +28,7 @@ import { WorkflowsSection } from "@/app/components/settings/WorkflowsSection";
 import { MemoriesSection } from "@/app/components/settings/MemoriesSection";
 import { TelegramBotsSection } from "@/app/components/settings/TelegramBotsSection";
 import { ScheduledTasksSection } from "@/app/components/settings/ScheduledTasksSection";
+import { EnvKeysSection } from "@/app/components/settings/EnvKeysSection";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Article { id: string; title: string; description: string; url: string; source_domain: string; status: string; created_at: string; }
@@ -50,7 +52,40 @@ const AGENT_SETTING_KEYS = [
   "vector_indexing_provider", "vector_indexing_model",
   "super_indexing_enabled", "normal_indexing_enabled",
   "mem0_enabled", "mem0_extraction_provider", "mem0_extraction_model",
+  // ── Provider API Keys (per-user SaaS credential segregation) ──
   "openrouter_client_api_key",
+  "gemini_client_api_key",
+  // ── Search & Extract Keys ──
+  "tavily_api_key",
+  "linkup_api_key",
+  "exa_api_key",
+  "brave_api_key",
+  "parallel_api_key",
+  "kie_api_key",
+  // ── Memory Keys ──
+  "pinecone_api_key",
+  "pinecone_index_name",
+  "cohere_api_key",
+  // ── WordPress ──
+  "wp_site_url",
+  "wp_username",
+  "wp_app_password",
+  // ── Platform ──
+  "composio_api_key",
+  "smithery_api_key",
+  "zapier_mcp_secret",
+  "langsmith_api_key",
+  // ── Social ──
+  "social_fb_token",
+  "social_fb_page_id",
+  "social_ig_account_id",
+  "social_twitter_api_key",
+  "social_twitter_username",
+  "social_twitter_email",
+  "social_twitter_password",
+  "social_twitter_totp",
+  "social_twitter_proxy",
+  // ── Gateway & misc ──
   "selected_ai_gateway",
   "omni_provider",
   "omni_model",
@@ -77,6 +112,7 @@ const DEFAULTS: Record<string, string> = {
   mem0_extraction_provider: "openrouter",
   mem0_extraction_model: "google/gemini-2.5-flash",
   openrouter_client_api_key: "",
+  gemini_client_api_key: "",
   selected_ai_gateway: "openrouter",
   omni_provider: "openrouter",
   omni_model: "google/gemini-2.5-flash",
@@ -186,6 +222,16 @@ function ProviderRow({ icon, label, description, providers, primaryKey, secondar
 export default function AgentSettingsPage() {
   const [section, setSection] = useState<SettingsSection>("workflows");
   const [settings, setSettings] = useState<Record<string, string>>(DEFAULTS);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get("tab");
+      if (tab) {
+        setSection(tab as any);
+      }
+    }
+  }, []);
   const [initialSettings, setInitialSettings] = useState<Record<string, string>>(DEFAULTS);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [isDirty, setIsDirty] = useState(false);
@@ -653,14 +699,10 @@ export default function AgentSettingsPage() {
   const saveSingleSetting = async (key: string, value: string) => {
     setSetting(key, value);
     try {
-      const currentRows = AGENT_SETTING_KEYS.map(k => ({
-        key: k,
-        value: k === key ? value : (settings[k] ?? "")
-      }));
       await fetch("/api/agent-settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: currentRows })
+        body: JSON.stringify({ rows: [{ key, value }] })
       });
       mutateSettings();
     } catch (e) {
@@ -676,7 +718,18 @@ export default function AgentSettingsPage() {
     }
     setSaveStatus("saving");
     try {
-      const rows = AGENT_SETTING_KEYS.map(key => ({ key, value: settings[key] ?? "" }));
+      const rows = AGENT_SETTING_KEYS
+        .filter(key => settings[key] !== initialSettings[key])
+        .map(key => ({ key, value: settings[key] ?? "" }));
+
+      if (rows.length === 0) {
+        setInitialSettings({ ...settings });
+        setIsDirty(false);
+        setSaveStatus("saved");
+        setTimeout(() => setSaveStatus("idle"), 1500);
+        return;
+      }
+
       const res = await fetch("/api/agent-settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -922,40 +975,6 @@ export default function AgentSettingsPage() {
       <div className="space-y-6 flex flex-col">
         {/* OpenRouter Setup & Model List */}
         <div className="space-y-6 flex flex-col">
-          <div className="rounded-xl border bg-card p-5 shadow-sm space-y-4">
-            <div className="flex items-center gap-2">
-              <KeyRound className="h-4 w-4 text-primary" />
-              <h3 className="font-semibold text-sm">OpenRouter Credentials</h3>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Enter your OpenRouter Client API Key. Calls OpenRouter endpoints directly.
-            </p>
-            <div className="flex items-center gap-3">
-              <div className="flex-1 max-w-md">
-                <Input
-                  type="password"
-                  placeholder="OpenRouter API Key (e.g. sk-or-...)"
-                  value={settings.openrouter_client_api_key || ""}
-                  onChange={(e) => setSetting("openrouter_client_api_key", e.target.value)}
-                  className="h-9 text-xs"
-                />
-              </div>
-              <Button
-                onClick={saveSettings}
-                disabled={saveStatus === "saving" || !isDirty}
-                size="sm"
-                className="h-9 font-semibold text-xs px-4"
-              >
-                {saveStatus === "saving" ? "Saving…" : "Save Key"}
-              </Button>
-              {saveStatus === "saved" && (
-                <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1">
-                  <CheckCircle2 className="h-4 w-4" /> Saved
-                </span>
-              )}
-            </div>
-          </div>
-
           {/* OpenRouter Custom Models Card */}
           <div className="rounded-xl border bg-card p-5 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
@@ -1098,6 +1117,7 @@ export default function AgentSettingsPage() {
 
   const renderSection = () => {
     switch (section) {
+      case "env-keys":   return <EnvKeysSection />;
       case "workflows": return <WorkflowsSection />;
       case "tools":     return <ToolsSection initialTab="tools" onRefresh={refreshSettingsAndTools} />;
       case "tools-composio": return <ToolsSection initialTab="composio" onRefresh={refreshSettingsAndTools} />;
@@ -1137,48 +1157,19 @@ export default function AgentSettingsPage() {
   };
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
-        <div className="flex h-14 items-center gap-3 px-4">
-          <Zap className="h-5 w-5 text-primary" />
-          <span className="font-semibold text-sm">Agent Settings</span>
-          <div className="ml-auto flex items-center gap-2">
-            {userEmail && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <User className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{userEmail}</span>
-              </div>
-            )}
-            <ThemeToggle />
-            <Link href="/">
-              <Button variant="ghost" size="sm" className="gap-1.5 text-xs">
-                <Home className="h-3.5 w-3.5" /> Home
-              </Button>
-            </Link>
-            <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground"
-              onClick={async () => { await signOut(); window.location.href = "/login"; }}>
-              <LogOut className="h-3.5 w-3.5" /> Sign out
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {/* Body */}
-      <div className="flex flex-1 overflow-hidden h-[calc(100vh-3.5rem)]">
-        <SettingsSidebar
-          active={section}
-          onChange={setSection}
-          isExpanded={isSidebarExpanded}
-          onToggleExpanded={() => setIsSidebarExpanded(!isSidebarExpanded)}
-        />
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className={cn("mx-auto", (section.startsWith("tools") || section.startsWith("gateway")) ? "w-full max-w-none" : "max-w-4xl")}>
-            {renderSection()}
-          </div>
-        </main>
+    <ApplicationShell
+      active={section}
+      onChange={setSection}
+      userEmail={userEmail}
+      onSignOut={async () => {
+        await signOut();
+        window.location.href = "/login";
+      }}
+    >
+      <div className={cn("mx-auto", (section.startsWith("tools") || section.startsWith("gateway")) ? "w-full max-w-none" : "max-w-4xl")}>
+        {renderSection()}
       </div>
-    </div>
+    </ApplicationShell>
   );
 }
 

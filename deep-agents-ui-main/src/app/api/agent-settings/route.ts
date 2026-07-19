@@ -1,11 +1,31 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+function getSupabaseClient(cookieStore: any) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {}
+        },
+      },
+    }
+  );
+}
+
 import Redis from "ioredis";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+
 
 import fs from "fs";
 
@@ -43,8 +63,16 @@ function getRedisClient(): Redis | null {
 
 // GET /api/agent-settings
 export async function GET() {
+
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
   try {
-    const { data, error } = await supabase.from("agent_settings").select("key,value");
+    const { data, error } = await supabase.from("agent_settings").select("key,value").eq("user_id", user.id);
     if (error) throw error;
     return NextResponse.json({ settings: data ?? [] });
   } catch (e: unknown) {
@@ -57,28 +85,42 @@ export async function GET() {
 
 // POST /api/agent-settings
 export async function POST(req: Request) {
+
+    const cookieStore = await cookies();
+    const supabase = getSupabaseClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
   try {
     const { rows } = await req.json();
     if (!rows || !Array.isArray(rows)) {
       return NextResponse.json({ error: "Invalid rows parameter" }, { status: 400 });
     }
 
-    // 1. Save to Supabase
-    const { error } = await supabase.from("agent_settings").upsert(rows, { onConflict: "key" });
+    // 1. Save to Supabase with user_id
+    const rowsWithUser = rows.map((r: any) => ({
+      user_id: user.id,
+      key: r.key,
+      value: r.value,
+      updated_at: new Date().toISOString()
+    }));
+    const { error } = await supabase.from("agent_settings").upsert(rowsWithUser, { onConflict: "user_id,key" });
     if (error) throw error;
 
-    // 2. Save to Redis Cache (seed/overwrite the entire settings dictionary)
+    // 2. Save to Redis Cache (seed/overwrite the user's settings dictionary)
     const redis = getRedisClient();
     if (redis) {
       try {
-        const { data: allData } = await supabase.from("agent_settings").select("key,value");
+        const { data: allData } = await supabase.from("agent_settings").select("key,value").eq("user_id", user.id);
         if (allData) {
           const dict: Record<string, string> = {};
           for (const row of allData) {
             dict[row.key] = row.value;
           }
-          await redis.setex("agent_settings:all", 3600, JSON.stringify(dict));
-          console.log("[Redis] Successfully updated settings cache.");
+          await redis.setex(`agent_settings:${user.id}`, 3600, JSON.stringify(dict));
+          console.log(`[Redis] Successfully updated settings cache for user ${user.id}.`);
         }
       } catch (err: any) {
         console.warn("[Redis] Failed to cache settings in Redis:", err.message);

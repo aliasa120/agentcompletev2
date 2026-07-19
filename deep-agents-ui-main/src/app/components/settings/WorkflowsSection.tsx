@@ -4,10 +4,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Plus, Trash2, Save, Loader2, CheckCircle2,
   ListTodo, Play, Settings2, ShieldCheck, HelpCircle,
-  Link, Unlink, RefreshCw
+  Link as LinkIcon, Unlink, RefreshCw, RotateCcw, Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { AnimatePresence, motion } from "framer-motion";
+import { BiSearch } from "react-icons/bi";
 
 interface Workflow {
   id: string;
@@ -120,6 +123,11 @@ export function WorkflowsSection() {
   const [creating, setCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
+
+  // Search and sort states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("name"); // "name", "active", "newest"
 
   // New Workflow Form
   const [newName, setNewName] = useState("");
@@ -174,12 +182,16 @@ export function WorkflowsSection() {
         })
       });
       if (res.ok) {
+        const data = await res.json();
         setNewName("");
         setNewDescription("");
         setNewInterval(30);
         setNewBatchSize(2);
         setShowCreateForm(false);
-        fetchData();
+        await fetchData();
+        if (data.workflow?.id) {
+          setSelectedWorkflowId(data.workflow.id);
+        }
       }
     } catch (e) {
       console.error("Error creating workflow", e);
@@ -274,44 +286,106 @@ export function WorkflowsSection() {
 
 
 
+  const selectedWorkflow = workflows.find(w => w.id === selectedWorkflowId);
+
+  if (selectedWorkflowId !== null && selectedWorkflow) {
+    return (
+      <WorkflowEditor
+        workflow={selectedWorkflow}
+        agents={agents}
+        onClose={() => setSelectedWorkflowId(null)}
+        onUpdate={handleUpdateWorkflow}
+        onDelete={handleDeleteWorkflow}
+        onAssignAgent={handleAssignAgent}
+      />
+    );
+  }
+
+  // Filtered and sorted workflows
+  const filteredWorkflows = workflows
+    .filter(w => 
+      w.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      w.description.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (sortBy === "name") {
+        return a.name.localeCompare(b.name);
+      }
+      if (sortBy === "active") {
+        return (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0);
+      }
+      if (sortBy === "newest") {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      return 0;
+    });
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <Settings2 className="h-5 w-5 text-primary" /> Workflows Settings
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Configure isolated workflow pipelines, each with its own Main Agent, Subagents, and Cron schedule.
-          </p>
+      {/* 2-Row Structured Header Layout */}
+      <div className="flex flex-col gap-1.5 border-b border-border pb-4">
+        <h1 className="text-xl font-bold md:text-2xl flex items-center gap-2 text-foreground leading-none">
+          <Settings2 className="h-5 w-5 text-primary" /> Workflows
+        </h1>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Configure isolated workflow pipelines, each with its own Main Agent, Subagents, and Cron schedule.
+        </p>
+      </div>
+
+      {/* Toolbar row */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-3 flex-1 w-full sm:max-w-md">
+          {/* Search box */}
+          <div className="relative flex-1">
+            <BiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 size-4" />
+            <Input
+              placeholder="Search workflows..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="pl-9 h-9 text-xs bg-background w-full"
+            />
+          </div>
+          {/* Sort dropdown */}
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            className="h-9 px-3 rounded-lg border border-input bg-background text-xs focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all hover:bg-muted/10 font-semibold"
+          >
+            <option value="name">Sort by: Name</option>
+            <option value="active">Sort by: Active First</option>
+            <option value="newest">Sort by: Newest</option>
+          </select>
         </div>
-        <Button size="sm" onClick={() => setShowCreateForm(!showCreateForm)} className="gap-1.5">
+        {/* Create button */}
+        <Button size="sm" onClick={() => setShowCreateForm(!showCreateForm)} className="gap-1.5 h-9 rounded-lg px-4 text-xs font-semibold self-stretch sm:self-auto justify-center">
           <Plus className="h-4 w-4" /> Create Workflow
         </Button>
       </div>
 
       {showCreateForm && (
-        <div className="rounded-xl border bg-muted/10 p-5 space-y-4 shadow-inner">
-          <h3 className="text-sm font-semibold">New Workflow Pipeline</h3>
+        <div className="rounded-xl border border-border bg-card p-6 space-y-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
+          <h3 className="text-sm font-semibold border-b pb-2">New Workflow Pipeline</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Workflow Name</label>
+              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Workflow Name</label>
               <Input
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 placeholder="e.g. Finance Agent System"
+                className="h-9 text-xs bg-background"
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Description</label>
+              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Description</label>
               <Input
                 value={newDescription}
                 onChange={e => setNewDescription(e.target.value)}
                 placeholder="Brief description of this workflow's role"
+                className="h-9 text-xs bg-background"
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Scrape/Trigger Interval</label>
+              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Scrape/Trigger Interval</label>
               {(() => {
                 const presets = [15, 30, 60, 120, 240];
                 const isCustom = !presets.includes(newInterval);
@@ -327,7 +401,7 @@ export function WorkflowsSection() {
                           setNewInterval(Number(val));
                         }
                       }}
-                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
                     >
                       <option value={15}>Every 15 minutes</option>
                       <option value={30}>Every 30 minutes</option>
@@ -337,13 +411,13 @@ export function WorkflowsSection() {
                       <option value="custom">Custom...</option>
                     </select>
                     {isCustom && (
-                      <div className="flex items-center gap-1.5 mt-1">
+                      <div className="flex items-center gap-1.5 mt-1.5">
                         <Input
                           type="number"
                           min={1}
                           value={newInterval}
                           onChange={e => setNewInterval(Number(e.target.value))}
-                          className="h-9 text-sm font-semibold w-24"
+                          className="h-8 text-xs bg-background w-20"
                         />
                         <span className="text-xs text-muted-foreground font-semibold">minutes</span>
                       </div>
@@ -353,278 +427,533 @@ export function WorkflowsSection() {
               })()}
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Batch Size (Pending Articles)</label>
+              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Batch Size (Pending Articles)</label>
               <Input
                 type="number"
                 min={1}
                 max={10}
                 value={newBatchSize}
                 onChange={e => setNewBatchSize(Number(e.target.value))}
+                className="h-9 text-xs bg-background"
               />
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={handleCreateWorkflow} disabled={creating || !newName.trim()} className="gap-1.5">
-              {creating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+          <div className="flex gap-2 border-t pt-4">
+            <Button size="sm" onClick={handleCreateWorkflow} disabled={creating || !newName.trim()} className="gap-1.5 h-8 text-xs font-semibold">
+              {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               Create
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowCreateForm(false)}>
+            <Button size="sm" variant="ghost" onClick={() => setShowCreateForm(false)} className="h-8 text-xs">
               Cancel
             </Button>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6">
-        {workflows.map(wf => {
+      {/* Grid List rendering for workflows */}
+      <div className="grid auto-cols-fr grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {filteredWorkflows.map((wf) => {
           const wfAgents = agents.filter(a => {
             const wfs = (a.workflow_agent_assignments ?? []).map((w: any) => w.workflow_id);
             if (a.workflow_id && !wfs.includes(a.workflow_id)) wfs.push(a.workflow_id);
             return wfs.includes(wf.id);
           });
-          const availableAgents = agents.filter(a => {
-            const wfs = (a.workflow_agent_assignments ?? []).map((w: any) => w.workflow_id);
-            if (a.workflow_id && !wfs.includes(a.workflow_id)) wfs.push(a.workflow_id);
-            return !wfs.includes(wf.id);
-          });
           const hasMain = wfAgents.some(a => a.agent_type === "main");
-          const isSaving = savingId === wf.id;
 
           return (
-            <div key={wf.id} className="rounded-xl border bg-card shadow-sm overflow-hidden flex flex-col">
-              {/* Header */}
-              <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 border-b bg-muted/10">
-                <div className="flex-1 min-w-0">
-                  <DelayedInput
-                    value={wf.name}
-                    onChange={val => handleUpdateWorkflow(wf.id, { name: val })}
-                    className="h-8 text-base font-semibold bg-transparent border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:bg-background/20 rounded px-1.5"
-                  />
-                  <DelayedInput
-                    value={wf.description}
-                    onChange={val => handleUpdateWorkflow(wf.id, { description: val })}
-                    placeholder="No description set"
-                    className="h-6 text-xs text-muted-foreground bg-transparent border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:bg-background/20 rounded px-1.5 mt-0.5"
-                  />
+            <div key={wf.id} className="border border-border rounded-2xl bg-card p-6 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between relative group">
+              <div className="flex flex-col text-left">
+                
+                {/* Header Row */}
+                <div className="flex items-start justify-between mb-4">
+                  {/* Icon Square */}
+                  <div className="size-14 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary flex-shrink-0 group-hover:bg-primary/20 transition-colors">
+                    <Settings2 className="size-7" />
+                  </div>
+                  
+                  {/* Quick Active switch */}
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground border rounded-full px-2 py-0.5 bg-muted/20">
+                    <span>Active</span>
+                    <Switch
+                      checked={wf.is_active}
+                      onCheckedChange={checked => handleUpdateWorkflow(wf.id, { is_active: checked })}
+                    />
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  {isSaving && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                  <div className="flex items-center gap-2 border rounded-full px-2.5 py-1 bg-background/50 text-xs">
-                    <span className="font-semibold text-muted-foreground">Workflow Active:</span>
-                    <button
-                      onClick={() => handleUpdateWorkflow(wf.id, { is_active: !wf.is_active })}
-                      className={`relative inline-flex w-9 h-5 items-center rounded-full transition-colors ${wf.is_active ? "bg-primary" : "bg-muted-foreground/30"}`}
-                    >
-                      <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${wf.is_active ? "translate-x-[18px]" : "translate-x-[2px]"}`} />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2 border rounded-full px-2.5 py-1 bg-background/50 text-xs">
-                    <span className="font-semibold text-muted-foreground">Agent Scheduler:</span>
-                    <button
-                      onClick={() => handleUpdateWorkflow(wf.id, { enabled: !wf.enabled })}
-                      className={`relative inline-flex w-9 h-5 items-center rounded-full transition-colors ${wf.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-                    >
-                      <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${wf.enabled ? "translate-x-[18px]" : "translate-x-[2px]"}`} />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2 border rounded-full px-2.5 py-1 bg-background/50 text-xs">
-                    <span className="font-semibold text-muted-foreground">Feeder Scheduler:</span>
-                    <button
-                      onClick={() => handleUpdateWorkflow(wf.id, { feeder_enabled: !wf.feeder_enabled })}
-                      className={`relative inline-flex w-9 h-5 items-center rounded-full transition-colors ${wf.feeder_enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-                    >
-                      <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${wf.feeder_enabled ? "translate-x-[18px]" : "translate-x-[2px]"}`} />
-                    </button>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDeleteWorkflow(wf.id)}
-                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
 
-              {/* Settings Row */}
-              <div className="px-6 py-4 border-b grid grid-cols-1 md:grid-cols-4 gap-4 bg-muted/5">
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Agent Interval</label>
-                  {(() => {
-                    const presets = [15, 30, 60, 120, 240];
-                    const isCustom = !presets.includes(wf.interval_minutes);
-                    return (
-                      <div className="space-y-1">
-                        <select
-                          value={isCustom ? "custom" : wf.interval_minutes}
-                          onChange={e => {
-                            const val = e.target.value;
-                            if (val === "custom") {
-                              handleUpdateWorkflow(wf.id, { interval_minutes: 5 });
-                            } else {
-                              handleUpdateWorkflow(wf.id, { interval_minutes: Number(val) });
-                            }
-                          }}
-                          className="w-full h-8 rounded-md border bg-background px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                        >
-                          <option value={15}>Every 15 minutes</option>
-                          <option value={30}>Every 30 minutes</option>
-                          <option value={60}>Every 1 hour</option>
-                          <option value={120}>Every 2 hours</option>
-                          <option value={240}>Every 4 hours</option>
-                          <option value="custom">Custom...</option>
-                        </select>
-                        {isCustom && (
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <DelayedNumberInput
-                              min={1}
-                              value={wf.interval_minutes}
-                              onChange={val => handleUpdateWorkflow(wf.id, { interval_minutes: val })}
-                              className="h-8 text-xs font-semibold w-20"
-                            />
-                            <span className="text-[10px] text-muted-foreground font-semibold">minutes</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Feeder Interval</label>
-                  {(() => {
-                    const presets = [10, 15, 30, 60, 120, 240];
-                    const isCustom = !presets.includes(wf.feeder_interval_minutes ?? 30);
-                    return (
-                      <div className="space-y-1">
-                        <select
-                          value={isCustom ? "custom" : (wf.feeder_interval_minutes ?? 30)}
-                          onChange={e => {
-                            const val = e.target.value;
-                            if (val === "custom") {
-                              handleUpdateWorkflow(wf.id, { feeder_interval_minutes: 5 });
-                            } else {
-                              handleUpdateWorkflow(wf.id, { feeder_interval_minutes: Number(val) });
-                            }
-                          }}
-                          className="w-full h-8 rounded-md border bg-background px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                        >
-                          <option value={10}>Every 10 minutes</option>
-                          <option value={15}>Every 15 minutes</option>
-                          <option value={30}>Every 30 minutes</option>
-                          <option value={60}>Every 1 hour</option>
-                          <option value={120}>Every 2 hours</option>
-                          <option value={240}>Every 4 hours</option>
-                          <option value="custom">Custom...</option>
-                        </select>
-                        {isCustom && (
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <DelayedNumberInput
-                              min={1}
-                              value={wf.feeder_interval_minutes ?? 30}
-                              onChange={val => handleUpdateWorkflow(wf.id, { feeder_interval_minutes: val })}
-                              className="h-8 text-xs font-semibold w-20"
-                            />
-                            <span className="text-[10px] text-muted-foreground font-semibold">minutes</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1 block">Batch Size (Articles)</label>
-                  <DelayedNumberInput
-                    min={1}
-                    value={wf.batch_size}
-                    onChange={val => handleUpdateWorkflow(wf.id, { batch_size: val })}
-                    className="h-8 text-xs font-semibold"
-                  />
-                </div>
-                <div className="flex flex-col justify-center gap-0.5">
-                  <span className="text-xs font-semibold text-muted-foreground block">Last Run Status</span>
-                  <span className="text-[10px] font-mono block leading-none">
-                    <strong>Agent:</strong> {wf.last_trigger_at ? new Date(wf.last_trigger_at).toLocaleString() : "Never"}
-                  </span>
-                  <span className="text-[10px] font-mono block leading-none mt-1">
-                    <strong>Feeder:</strong> {wf.feeder_last_trigger_at ? new Date(wf.feeder_last_trigger_at).toLocaleString() : "Never"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Agent Association */}
-              <div className="p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Associated Agents</h4>
-                  {!hasMain && (
-                    <span className="text-[10px] text-destructive bg-destructive/5 border border-destructive/20 rounded-full px-2 py-0.5 font-medium flex items-center gap-1">
-                      ⚠️ No Main Agent Assigned (Workflow will not run)
+                {/* Metadata details */}
+                <div className="mb-3">
+                  <h6 className="text-base font-bold leading-snug text-foreground group-hover:text-primary transition-colors truncate">
+                    {wf.name}
+                  </h6>
+                  
+                  {/* Meta stats */}
+                  <div className="flex items-center text-xs text-muted-foreground flex-wrap gap-1 mt-1.5 font-mono">
+                    <span>{wf.interval_minutes}m interval</span>
+                    <span className="mx-1 text-muted-foreground/30">•</span>
+                    <span>Batch: {wf.batch_size}</span>
+                    <span className="mx-1 text-muted-foreground/30">•</span>
+                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold ${
+                      hasMain 
+                        ? "bg-primary/5 text-primary border border-primary/25" 
+                        : "bg-destructive/5 text-destructive border border-destructive/25"
+                    }`}>
+                      {wfAgents.length} Agents {!hasMain && "⚠️"}
                     </span>
-                  )}
+                  </div>
                 </div>
 
-                {wfAgents.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">No agents associated. Assign agents below.</p>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {wfAgents.map(agent => (
-                      <div key={agent.id} className="flex items-center justify-between border rounded-lg p-2.5 bg-background shadow-sm">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${agent.agent_type === "main" ? "bg-primary/10 text-primary border border-primary/20" : "bg-muted text-muted-foreground"}`}>
-                            {agent.agent_type === "main" ? "Main" : "Subagent"}
-                          </span>
-                          <span className="text-xs font-medium">{agent.name}</span>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleAssignAgent(agent.id, wf.id, "unlink")}
-                          className="h-7 px-2 text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-1"
-                        >
-                          <Unlink className="h-3 w-3" /> Unlink
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Available unassigned agents */}
-                {availableAgents.length > 0 && (
-                  <div className="border-t pt-4">
-                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
-                      Assign Unlinked Agents
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {availableAgents.map(agent => (
-                        <button
-                          key={agent.id}
-                          onClick={() => handleAssignAgent(agent.id, wf.id, "link")}
-                          className="flex items-center gap-1.5 border hover:border-primary hover:bg-primary/5 rounded-full px-3 py-1 text-xs font-medium transition-all"
-                        >
-                          <Link className="h-3 w-3 text-muted-foreground" />
-                          <span>{agent.name}</span>
-                          <span className="text-[9px] text-muted-foreground">({agent.agent_type})</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* Description */}
+                <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed mb-4 min-h-[3rem] font-sans">
+                  {wf.description || "No description set. Click configure to add metadata, schedules, and connect agents to this pipeline."}
+                </p>
               </div>
+
+              {/* Action configure button */}
+              <Button
+                onClick={() => setSelectedWorkflowId(wf.id)}
+                variant="secondary"
+                size="sm"
+                className="w-full text-xs font-semibold rounded-lg mt-auto"
+              >
+                Configure Workflow
+              </Button>
             </div>
           );
         })}
       </div>
 
-      {workflows.length === 0 && (
-        <div className="rounded-xl border border-dashed p-12 text-center">
+      {filteredWorkflows.length === 0 && (
+        <div className="rounded-xl border border-dashed bg-muted/20 p-12 text-center">
           <ListTodo className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="text-sm font-medium text-muted-foreground mb-1">No workflows yet</p>
-          <p className="text-xs text-muted-foreground mb-4">Create your first workflow to orchestrate a pipeline.</p>
-          <Button size="sm" onClick={() => setShowCreateForm(true)} className="gap-1.5 text-xs">
-            <Plus className="h-3.5 w-3.5" /> Create Workflow
-          </Button>
+          <p className="text-sm font-semibold text-muted-foreground mb-1">No workflows found</p>
+          <p className="text-xs text-muted-foreground mb-4">
+            {searchQuery 
+              ? "Try adjusting your search filters to find existing workflows."
+              : "Create your first workflow to orchestrate a data processing pipeline."
+            }
+          </p>
+          {!searchQuery && (
+            <Button size="sm" onClick={() => setShowCreateForm(true)} className="gap-1.5 text-xs font-semibold">
+              <Plus className="h-3.5 w-3.5" /> Create Workflow
+            </Button>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Dedicated Workflow Editor Component ──────────────────────────────────────
+interface WorkflowEditorProps {
+  workflow: Workflow;
+  agents: Agent[];
+  onClose: () => void;
+  onUpdate: (id: string, updates: Partial<Workflow>) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  onAssignAgent: (agentId: string, workflowId: string, action: "link" | "unlink") => Promise<void>;
+}
+
+function WorkflowEditor({
+  workflow,
+  agents,
+  onClose,
+  onUpdate,
+  onDelete,
+  onAssignAgent,
+}: WorkflowEditorProps) {
+  const [name, setName] = useState(workflow.name);
+  const [description, setDescription] = useState(workflow.description);
+  const [batchSize, setBatchSize] = useState(workflow.batch_size);
+  const [interval, setInterval] = useState(workflow.interval_minutes);
+  const [feederInterval, setFeederInterval] = useState(workflow.feeder_interval_minutes ?? 30);
+  const [isActive, setIsActive] = useState(workflow.is_active);
+  const [enabled, setEnabled] = useState(workflow.enabled);
+  const [feederEnabled, setFeederEnabled] = useState(workflow.feeder_enabled);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  
+  useEffect(() => {
+    setName(workflow.name);
+    setDescription(workflow.description);
+    setBatchSize(workflow.batch_size);
+    setInterval(workflow.interval_minutes);
+    setFeederInterval(workflow.feeder_interval_minutes ?? 30);
+    setIsActive(workflow.is_active);
+    setEnabled(workflow.enabled);
+    setFeederEnabled(workflow.feeder_enabled);
+  }, [workflow]);
+
+  const isDirty = 
+    name !== workflow.name ||
+    description !== workflow.description ||
+    batchSize !== workflow.batch_size ||
+    interval !== workflow.interval_minutes ||
+    feederInterval !== (workflow.feeder_interval_minutes ?? 30) ||
+    isActive !== workflow.is_active ||
+    enabled !== workflow.enabled ||
+    feederEnabled !== workflow.feeder_enabled;
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onUpdate(workflow.id, {
+        name,
+        description,
+        batch_size: batchSize,
+        interval_minutes: interval,
+        feeder_interval_minutes: feederInterval,
+        is_active: isActive,
+        enabled,
+        feeder_enabled: feederEnabled,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    setName(workflow.name);
+    setDescription(workflow.description);
+    setBatchSize(workflow.batch_size);
+    setInterval(workflow.interval_minutes);
+    setFeederInterval(workflow.feeder_interval_minutes ?? 30);
+    setIsActive(workflow.is_active);
+    setEnabled(workflow.enabled);
+    setFeederEnabled(workflow.feeder_enabled);
+  };
+
+  const handleDelete = async () => {
+    if (confirm("Are you sure you want to delete this workflow? Linked agents will be unassigned.")) {
+      setDeleting(true);
+      try {
+        await onDelete(workflow.id);
+        onClose();
+      } finally {
+        setDeleting(false);
+      }
+    }
+  };
+
+  const wfAgents = agents.filter(a => {
+    const wfs = (a.workflow_agent_assignments ?? []).map((w: any) => w.workflow_id);
+    if (a.workflow_id && !wfs.includes(a.workflow_id)) wfs.push(a.workflow_id);
+    return wfs.includes(workflow.id);
+  });
+
+  const availableAgents = agents.filter(a => {
+    const wfs = (a.workflow_agent_assignments ?? []).map((w: any) => w.workflow_id);
+    if (a.workflow_id && !wfs.includes(a.workflow_id)) wfs.push(a.workflow_id);
+    return !wfs.includes(workflow.id);
+  });
+
+  const hasMain = wfAgents.some(a => a.agent_type === "main");
+
+  return (
+    <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      {/* Header action bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
+        <div>
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground font-semibold transition-colors w-fit mb-1"
+          >
+            &larr; Back to Workflows
+          </button>
+          <h1 className="text-xl font-bold text-foreground sm:text-2xl">{name || "Unnamed Workflow"}</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Configure scraping intervals, processing batch sizes, and connect agents to this pipeline.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleReset}
+            disabled={!isDirty}
+            className="h-9 px-3.5 text-xs gap-1.5 rounded-lg"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reset
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={saving || !isDirty}
+            className="h-9 px-4.5 text-xs gap-1.5 font-semibold rounded-lg"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Save Changes
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="h-9 px-3 text-xs gap-1.5 rounded-lg hover:bg-destructive/10 hover:text-destructive"
+          >
+            {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+          </Button>
+        </div>
+      </div>
+
+      {/* Main settings grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left column - core settings */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* Card 1: Core Configuration */}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
+            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Workflow Definition</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Workflow Name</label>
+                <Input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Enter workflow name..."
+                  className="h-9 text-xs bg-background"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Batch Size (Pending Articles)</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={batchSize}
+                  onChange={e => setBatchSize(Number(e.target.value))}
+                  className="h-9 text-xs bg-background"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Description</label>
+              <Input
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Enter description..."
+                className="h-9 text-xs bg-background"
+              />
+            </div>
+          </div>
+
+          {/* Card 2: Associated Agents & Linkers */}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b pb-2 mb-3">
+              <h3 className="text-sm font-semibold">Connected Agents</h3>
+              {!hasMain && (
+                <span className="text-[10px] text-destructive bg-destructive/5 border border-destructive/20 rounded-full px-2 py-0.5 font-semibold flex items-center gap-1">
+                  ⚠️ No Main Agent Assigned (Pipeline will not run)
+                </span>
+              )}
+            </div>
+            
+            {/* Linked agents */}
+            <div className="space-y-3">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                Linked to this workflow ({wfAgents.length})
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {wfAgents.map(agent => (
+                  <div key={agent.id} className="flex items-center justify-between border rounded-lg p-2.5 bg-muted/10">
+                    <div>
+                      <span className="font-semibold block text-xs text-foreground leading-none">{agent.name}</span>
+                      <span className={`text-[9px] uppercase font-semibold mt-1.5 inline-block border px-1.5 py-0.5 rounded leading-none ${
+                        agent.agent_type === "main" 
+                          ? "bg-primary/10 text-primary border-primary/20" 
+                          : "bg-muted text-muted-foreground border-border"
+                      }`}>
+                        {agent.agent_type}
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onAssignAgent(agent.id, workflow.id, "unlink")}
+                      className="h-7 px-2 text-[10px] text-destructive hover:bg-destructive/10"
+                    >
+                      <Unlink className="h-3 w-3 mr-1" /> Unlink
+                    </Button>
+                  </div>
+                ))}
+                {wfAgents.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic col-span-2 py-2">No agents linked to this workflow.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Unlinked agents */}
+            <div className="space-y-3 border-t pt-4">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                Assign Available Agents ({availableAgents.length})
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto">
+                {availableAgents.map(agent => (
+                  <div key={agent.id} className="flex items-center justify-between border rounded-lg p-2.5 bg-background">
+                    <div>
+                      <span className="font-semibold block text-xs text-foreground leading-none">{agent.name}</span>
+                      <span className="text-[9px] text-muted-foreground uppercase font-semibold mt-1.5 inline-block bg-muted/65 px-1.5 py-0.5 rounded leading-none">
+                        {agent.agent_type}
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onAssignAgent(agent.id, workflow.id, "link")}
+                      className="h-7 px-2.5 text-[10px] gap-1"
+                    >
+                      <LinkIcon className="h-3 w-3" /> Link
+                    </Button>
+                  </div>
+                ))}
+                {availableAgents.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic col-span-2 py-2">All agents are linked to this workflow.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right column - Schedulers */}
+        <div className="space-y-6">
+          
+          {/* Card 3: Scheduler Controls */}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
+            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Status & Activation</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between h-9">
+                <div>
+                  <span className="text-xs font-semibold text-foreground block">Workflow Pipeline</span>
+                  <span className="text-[10px] text-muted-foreground block">Main trigger control</span>
+                </div>
+                <Switch
+                  checked={isActive}
+                  onCheckedChange={setIsActive}
+                />
+              </div>
+
+              <div className="flex items-center justify-between h-9 border-t pt-3">
+                <div>
+                  <span className="text-xs font-semibold text-foreground block">Agent Scheduler</span>
+                  <span className="text-[10px] text-muted-foreground block">Agent runner state</span>
+                </div>
+                <Switch
+                  checked={enabled}
+                  onCheckedChange={setEnabled}
+                />
+              </div>
+
+              <div className="flex items-center justify-between h-9 border-t pt-3">
+                <div>
+                  <span className="text-xs font-semibold text-foreground block">Feeder Scheduler</span>
+                  <span className="text-[10px] text-muted-foreground block">Articles feeder runner</span>
+                </div>
+                <Switch
+                  checked={feederEnabled}
+                  onCheckedChange={setFeederEnabled}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Run Intervals */}
+          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
+            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Run Schedules</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Agent Execution Interval</label>
+                {(() => {
+                  const presets = [15, 30, 60, 120, 240];
+                  const isCustom = !presets.includes(interval);
+                  return (
+                    <div className="space-y-1.5">
+                      <select
+                        value={isCustom ? "custom" : interval}
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val === "custom") {
+                            setInterval(5);
+                          } else {
+                            setInterval(Number(val));
+                          }
+                        }}
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <option value={15}>Every 15 minutes</option>
+                        <option value={30}>Every 30 minutes</option>
+                        <option value={60}>Every 1 hour</option>
+                        <option value={120}>Every 2 hours</option>
+                        <option value={240}>Every 4 hours</option>
+                        <option value="custom">Custom...</option>
+                      </select>
+                      {isCustom && (
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <Input
+                            type="number"
+                            min={1}
+                            value={interval}
+                            onChange={e => setInterval(Number(e.target.value))}
+                            className="h-8 text-xs bg-background w-20"
+                          />
+                          <span className="text-xs text-muted-foreground font-semibold">minutes</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Feeder Execution Interval</label>
+                {(() => {
+                  const presets = [10, 15, 30, 60, 120, 240];
+                  const isCustom = !presets.includes(feederInterval);
+                  return (
+                    <div className="space-y-1.5">
+                      <select
+                        value={isCustom ? "custom" : feederInterval}
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val === "custom") {
+                            setFeederInterval(5);
+                          } else {
+                            setFeederInterval(Number(val));
+                          }
+                        }}
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <option value={10}>Every 10 minutes</option>
+                        <option value={15}>Every 15 minutes</option>
+                        <option value={30}>Every 30 minutes</option>
+                        <option value={60}>Every 1 hour</option>
+                        <option value={120}>Every 2 hours</option>
+                        <option value={240}>Every 4 hours</option>
+                        <option value="custom">Custom...</option>
+                      </select>
+                      {isCustom && (
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <Input
+                            type="number"
+                            min={1}
+                            value={feederInterval}
+                            onChange={e => setFeederInterval(Number(e.target.value))}
+                            className="h-8 text-xs bg-background w-20"
+                          />
+                          <span className="text-xs text-muted-foreground font-semibold">minutes</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

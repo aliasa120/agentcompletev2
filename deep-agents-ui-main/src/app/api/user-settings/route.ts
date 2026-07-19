@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -23,13 +23,9 @@ function getSupabaseClient(cookieStore: any) {
   );
 }
 
-import { triggerAgentReload } from "@/lib/agent-reloader";
-
-
-
-// GET /api/workflows — list all workflows
-export async function GET() {
-
+// GET /api/user-settings
+export async function GET(req: Request) {
+  try {
     const cookieStore = await cookies();
     const supabase = getSupabaseClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
@@ -37,14 +33,17 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-  try {
-    const { data: workflows, error } = await supabase
-      .from("workflows")
-      .select("*")
-      .order("created_at", { ascending: true });
+    const { data, error } = await supabase
+      .from("user_settings")
+      .select("composio_api_key")
+      .eq("id", user.id)
+      .maybeSingle();
 
     if (error) throw error;
-    return NextResponse.json({ workflows: workflows ?? [] });
+
+    return NextResponse.json({
+      settings: data ?? { composio_api_key: "" }
+    });
   } catch (e: unknown) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Unknown error" },
@@ -53,9 +52,9 @@ export async function GET() {
   }
 }
 
-// POST /api/workflows — create a new workflow
+// POST /api/user-settings
 export async function POST(req: Request) {
-
+  try {
     const cookieStore = await cookies();
     const supabase = getSupabaseClient(cookieStore);
     const { data: { user } } = await supabase.auth.getUser();
@@ -63,24 +62,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-  try {
     const body = await req.json();
-    const { name, description, interval_minutes, batch_size, enabled, is_active } = body;
-
-    if (!name) {
-      return NextResponse.json({ error: "name is required" }, { status: 400 });
-    }
+    const { composio_api_key } = body;
 
     const { data, error } = await supabase
-      .from("workflows")
-      .insert({
-        user_id: user.id,
-        name,
-        description: description ?? "",
-        interval_minutes: interval_minutes ?? 30,
-        batch_size: batch_size ?? 2,
-        enabled: enabled ?? true,
-        is_active: is_active ?? true,
+      .from("user_settings")
+      .upsert({
+        id: user.id,
+        composio_api_key: composio_api_key ?? "",
         updated_at: new Date().toISOString(),
       })
       .select()
@@ -88,13 +77,7 @@ export async function POST(req: Request) {
 
     if (error) throw error;
 
-    try {
-      triggerAgentReload();
-    } catch (reloadErr) {
-      console.warn("[workflows] Failed to trigger agent reload:", reloadErr);
-    }
-
-    return NextResponse.json({ workflow: data });
+    return NextResponse.json({ success: true, settings: data });
   } catch (e: unknown) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Unknown error" },

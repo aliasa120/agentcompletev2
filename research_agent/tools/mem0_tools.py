@@ -8,8 +8,8 @@ from research_agent.tools.mem0_provider import get_mem0_client
 
 logger = logging.getLogger(__name__)
 
-def _get_mem_client():
-    client = get_mem0_client()
+def _get_mem_client(user_id: Optional[str] = None):
+    client = get_mem0_client(user_id)
     if client is None:
         raise ValueError("Mem0 client is not initialized. Ensure memories are enabled in settings and PINECONE_API_KEY is configured.")
     return client
@@ -20,7 +20,8 @@ def add_memory(
     user_id: Optional[str] = None,
     agent_id: Optional[str] = None,
     run_id: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None,
+    config: Optional[RunnableConfig] = None
 ) -> str:
     """Save text or conversation history to the long-term memory for a user/agent/run.
 
@@ -30,9 +31,12 @@ def add_memory(
         agent_id: Optional identifier for the agent/workflow
         run_id: Optional identifier for the specific run
         metadata: Optional dictionary of key-value metadata to associate with the memory
+        config: LangChain runnable configuration (automatically injected).
     """
     try:
-        client = _get_mem_client()
+        configurable = config.get("configurable", {}) if config else {}
+        active_uid = user_id or configurable.get("user_id")
+        client = _get_mem_client(active_uid)
         res = client.add(
             text,
             user_id=user_id,
@@ -61,10 +65,11 @@ def search_memories(
         limit: Maximum number of memories to return (defaults to 10).
     """
     try:
-        client = _get_mem_client()
         configurable = config.get("configurable", {})
         workflow_id = configurable.get("workflow_id")
         user_id = configurable.get("user_id")
+        
+        client = _get_mem_client(user_id)
         
         # Construct the scope ID matching the agent's scope (strict tenant isolation)
         raw_scope = f"{user_id}_{workflow_id}" if user_id else str(workflow_id)
@@ -72,7 +77,7 @@ def search_memories(
         
         # Get threshold setting
         from research_agent.tools.provider_engine import get_settings
-        settings = get_settings()
+        settings = get_settings(user_id)
         try:
             threshold_val = float(settings.get("mem0_rerank_threshold", "0.50"))
         except ValueError:

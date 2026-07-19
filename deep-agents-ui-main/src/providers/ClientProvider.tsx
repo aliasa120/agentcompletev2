@@ -21,12 +21,19 @@ export function ClientProvider({
   apiKey,
 }: ClientProviderProps) {
   const client = useMemo(() => {
+    const isLocal = deploymentUrl.includes("localhost") || deploymentUrl.includes("127.0.0.1");
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    
+    if (!isLocal && apiKey) {
+      headers["X-Api-Key"] = apiKey;
+    }
+
     return new Client({
       apiUrl: deploymentUrl,
-      defaultHeaders: {
-        "Content-Type": "application/json",
-        "X-Api-Key": apiKey,
-      },
+      apiKey: (!isLocal && apiKey) ? apiKey : undefined,
+      defaultHeaders: headers,
     });
   }, [deploymentUrl, apiKey]);
 
