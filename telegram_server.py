@@ -355,13 +355,15 @@ class TelegramBotInstance:
         try:
             resp = await loop.run_in_executor(
                 None,
-                lambda: supabase.table("workflows")
-                .select("id, name")
-                .eq("is_active", True)
-                .order("created_at", desc=False)
-                .execute()
+                lambda: supabase.rpc("get_backend_bootstrap_data").execute()
             )
-            return resp.data or []
+            bootstrap = resp.data or {}
+            all_workflows = bootstrap.get("workflows") or []
+            filtered = [
+                w for w in all_workflows
+                if w.get("is_active") == True and (not self.user_id or str(w.get("user_id")) == str(self.user_id))
+            ]
+            return filtered
         except Exception as e:
             logger.error(f"Error fetching workflows: {e}")
             return []
@@ -458,15 +460,15 @@ class TelegramBotInstance:
                 "📌 *Current Status*\n\n"
                 f"🤖 *Workflow:* `{session['workflow_name']}`\n"
                 f"🧵 *Thread ID:* `{session['thread_id']}`\n\n"
-                "Use /start to switch to a different workflow \\(creates a new thread\\)\\."
+                "Use /start to switch to a different workflow (creates a new thread)."
             )
         else:
             msg = (
                 "📌 *Current Status*\n\n"
-                "❌ No active session\\. Use /start to select a workflow\\."
+                "❌ No active session. Use /start to select a workflow."
             )
 
-        await update.message.reply_text(msg, parse_mode="MarkdownV2")
+        await update.message.reply_text(msg, parse_mode="Markdown")
 
     # ── Callback: Workflow Selection ──────────────────────────────────────────
 
@@ -547,8 +549,8 @@ class TelegramBotInstance:
             f"✅ *{workflow_name}* is ready!\n\n"
             f"🧵 Thread: `{thread_id}`\n\n"
             "Send your first message below.\n"
-            "Use /start to switch workflows \\(creates a fresh thread\\)\\.",
-            parse_mode="MarkdownV2"
+            "Use /start to switch workflows (creates a fresh thread).",
+            parse_mode="Markdown"
         )
 
     # ── Message Handler ───────────────────────────────────────────────────────
