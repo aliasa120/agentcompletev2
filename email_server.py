@@ -38,15 +38,15 @@ except ImportError:
     sys.exit(1)
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
-SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "").strip()
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or os.environ.get("SUPABASE_ANON_KEY", "").strip()
 LANGGRAPH_API_URL = os.environ.get("LANGGRAPH_API_URL", "http://localhost:2024").strip()
 
-if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-    logger.error("SUPABASE_URL and SUPABASE_ANON_KEY must be set in .env")
+if not SUPABASE_URL or not SUPABASE_KEY:
+    logger.error("SUPABASE_URL and either SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY must be set in .env")
     sys.exit(1)
 
 try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
     logger.info("Supabase client initialized successfully.")
 except Exception as e:
     logger.error(f"Failed to initialize Supabase: {e}")
