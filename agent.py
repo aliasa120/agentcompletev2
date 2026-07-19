@@ -215,7 +215,32 @@ class ResilientChatModel(ChatOpenAI):
             print(f"[ResilientChatModel] Error resolving dynamic settings: {e}")
 
     def validate_environment(self):
-        res = super().validate_environment()
+        # Resolve api_key or use a dummy fallback key to prevent import-time crashes
+        # when no environment variables are set yet. This will be dynamically overridden at runtime.
+        from pydantic import SecretStr
+        import os
+        
+        current_api_key = getattr(self, "openai_api_key", None) or getattr(self, "api_key", None)
+        has_env_key = bool(os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_ADMIN_KEY"))
+        
+        if not current_api_key and not has_env_key:
+            object.__setattr__(self, "openai_api_key", SecretStr("dummy_key"))
+            if hasattr(self, "api_key"):
+                object.__setattr__(self, "api_key", "dummy_key")
+
+        try:
+            res = super().validate_environment()
+        except Exception as e:
+            if "api_key" in str(e) or "credentials" in str(e) or "ApiKey" in str(e) or "credentials" in str(e).lower():
+                import openai
+                object.__setattr__(self, "openai_api_key", SecretStr("dummy_key"))
+                if hasattr(self, "api_key"):
+                    object.__setattr__(self, "api_key", "dummy_key")
+                self.root_client = openai.OpenAI(api_key="dummy_key")
+                self.root_async_client = openai.AsyncOpenAI(api_key="dummy_key")
+                res = self
+            else:
+                raise e
         
         # ── Wrap client for synchronous calls ──
         for attr in ["client", "root_client"]:
