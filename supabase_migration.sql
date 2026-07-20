@@ -1,3 +1,4 @@
+
 -- ============================================================
 -- Deep Agents — Full Database Migration (Workspace Segregation)
 -- Run this in Supabase SQL Editor
@@ -204,6 +205,7 @@ CREATE POLICY user_telegram_bots_policy ON telegram_bots
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS user_settings_policy ON user_settings;
+CREATE POLICY user_settings_policy ON user_settings;
 CREATE POLICY user_settings_policy ON user_settings
   FOR ALL TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
