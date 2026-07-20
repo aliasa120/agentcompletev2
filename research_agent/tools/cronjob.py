@@ -26,9 +26,12 @@ except ImportError:
 def _get_supabase_client():
     from supabase import create_client
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
+    service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    key = service_key or os.environ.get("SUPABASE_ANON_KEY", "")
     if not url or not key:
         raise RuntimeError("SUPABASE_URL and SUPABASE_ANON_KEY/SUPABASE_SERVICE_ROLE_KEY must be set")
+    if not service_key:
+        logger.warning("[cronjob] SUPABASE_SERVICE_ROLE_KEY is missing from environment. Falling back to SUPABASE_ANON_KEY, which may fail due to Row-Level Security (RLS) policies.")
     return create_client(url, key)
 
 
@@ -321,35 +324,34 @@ def cronjob(
                 else:
                     name = "Cron Task"
 
-            task_row = {
-                "name": name,
-                "prompt": prompt,
-                "skills": skills or [],
-                "model": model,
-                "provider": provider,
-                "base_url": base_url,
-                "script": script,
-                "no_agent": bool(no_agent),
-                "context_from": context_from or [],
-                "schedule": parsed_schedule,
-                "schedule_display": parsed_schedule.get("display", schedule),
-                "repeat_times": repeat if repeat and repeat > 0 else None,
-                "enabled": True,
-                "state": "scheduled",
-                "deliver": delivery_target,
-                "enabled_toolsets": enabled_toolsets or [],
-                "workdir": workdir,
-                "next_run_at": next_run_at,
-                "origin": {"workflow_id": str(workflow_id)} if workflow_id else {},
-            }
-            if user_id_val:
-                task_row["user_id"] = user_id_val
+            resp = client.rpc("manage_scheduled_tasks_admin", {
+                "p_action": "create",
+                "p_user_id": user_id_val,
+                "p_name": name,
+                "p_prompt": prompt,
+                "p_skills": skills or [],
+                "p_model": model,
+                "p_provider": provider,
+                "p_base_url": base_url,
+                "p_script": script,
+                "p_no_agent": bool(no_agent),
+                "p_context_from": context_from or [],
+                "p_schedule": parsed_schedule,
+                "p_schedule_display": parsed_schedule.get("display", schedule),
+                "p_repeat_times": repeat if repeat and repeat > 0 else None,
+                "p_enabled": True,
+                "p_state": "scheduled",
+                "p_deliver": delivery_target,
+                "p_enabled_toolsets": enabled_toolsets or [],
+                "p_workdir": workdir,
+                "p_next_run_at": next_run_at
+            }).execute()
 
-            resp = client.table("agent_scheduled_tasks").insert(task_row).execute()
-            if not resp.data:
-                return json.dumps({"success": False, "error": "Failed to insert task in database."})
+            if not resp.data or not resp.data.get("success"):
+                error_msg = resp.data.get("error") if resp.data else "No database response"
+                return json.dumps({"success": False, "error": f"Failed to insert task in database: {error_msg}"})
             
-            new_task = resp.data[0]
+            new_task = resp.data.get("data")
             return json.dumps({
                 "success": True,
                 "message": f"Successfully created scheduled task '{new_task['name']}'",
@@ -362,32 +364,41 @@ def cronjob(
             }, indent=2)
 
         elif action == "list":
-            query = client.table("agent_scheduled_tasks").select("id, name, schedule_display, enabled, state, next_run_at, last_run_at, last_status")
-            if user_id_val:
-                query = query.eq("user_id", user_id_val)
-            resp = query.order("created_at", desc=True).execute()
-            tasks = resp.data or []
+            resp = client.rpc("manage_scheduled_tasks_admin", {
+                "p_action": "list",
+                "p_user_id": user_id_val
+            }).execute()
+            if not resp.data or not resp.data.get("success"):
+                error_msg = resp.data.get("error") if resp.data else "No database response"
+                return json.dumps({"success": False, "error": f"Failed to list tasks: {error_msg}"})
+            
+            tasks = resp.data.get("data") or []
             return json.dumps({"success": True, "tasks": tasks}, indent=2)
 
         elif action in ["update", "pause", "resume", "remove", "run"]:
             if not job_id:
                 return json.dumps({"success": False, "error": f"Parameter 'job_id' is required for action '{action}'."})
 
-            # Check if task exists (filtered by user_id if present)
-            query = client.table("agent_scheduled_tasks").select("*").eq("id", job_id)
-            if user_id_val:
-                query = query.eq("user_id", user_id_val)
-            task_resp = query.execute()
-            if not task_resp.data:
-                return json.dumps({"success": False, "error": f"Task with ID '{job_id}' not found."})
+            # Check if task exists
+            task_resp = client.rpc("manage_scheduled_tasks_admin", {
+                "p_action": "get",
+                "p_user_id": user_id_val,
+                "p_job_id": job_id
+            }).execute()
+            if not task_resp.data or not task_resp.data.get("success"):
+                return json.dumps({"success": False, "error": f"Task with ID '{job_id}' not found or access denied."})
             
-            task = task_resp.data[0]
+            task = task_resp.data.get("data")
 
             if action == "remove":
-                query = client.table("agent_scheduled_tasks").delete().eq("id", job_id)
-                if user_id_val:
-                    query = query.eq("user_id", user_id_val)
-                query.execute()
+                resp = client.rpc("manage_scheduled_tasks_admin", {
+                    "p_action": "delete",
+                    "p_user_id": user_id_val,
+                    "p_job_id": job_id
+                }).execute()
+                if not resp.data or not resp.data.get("success"):
+                    error_msg = resp.data.get("error") if resp.data else "No database response"
+                    return json.dumps({"success": False, "error": f"Failed to remove task: {error_msg}"})
                 return json.dumps({"success": True, "message": f"Task '{task['name']}' successfully removed."})
 
             elif action == "pause":
@@ -396,11 +407,17 @@ def cronjob(
                     "state": "paused",
                     "paused_at": _get_now().isoformat(),
                 }
-                query = client.table("agent_scheduled_tasks").update(updates).eq("id", job_id)
-                if user_id_val:
-                    query = query.eq("user_id", user_id_val)
-                upd_resp = query.execute()
-                return json.dumps({"success": True, "message": f"Task '{task['name']}' paused.", "task": upd_resp.data[0]}, indent=2)
+                resp = client.rpc("manage_scheduled_tasks_admin", {
+                    "p_action": "update",
+                    "p_user_id": user_id_val,
+                    "p_job_id": job_id,
+                    "p_updates": updates
+                }).execute()
+                if not resp.data or not resp.data.get("success"):
+                    error_msg = resp.data.get("error") if resp.data else "No database response"
+                    return json.dumps({"success": False, "error": f"Failed to pause task: {error_msg}"})
+                
+                return json.dumps({"success": True, "message": f"Task '{task['name']}' paused.", "task": resp.data.get("data")}, indent=2)
 
             elif action == "resume":
                 updates = {
@@ -409,11 +426,17 @@ def cronjob(
                     "paused_at": None,
                     "next_run_at": compute_next_run(task["schedule"])
                 }
-                query = client.table("agent_scheduled_tasks").update(updates).eq("id", job_id)
-                if user_id_val:
-                    query = query.eq("user_id", user_id_val)
-                upd_resp = query.execute()
-                return json.dumps({"success": True, "message": f"Task '{task['name']}' resumed.", "task": upd_resp.data[0]}, indent=2)
+                resp = client.rpc("manage_scheduled_tasks_admin", {
+                    "p_action": "update",
+                    "p_user_id": user_id_val,
+                    "p_job_id": job_id,
+                    "p_updates": updates
+                }).execute()
+                if not resp.data or not resp.data.get("success"):
+                    error_msg = resp.data.get("error") if resp.data else "No database response"
+                    return json.dumps({"success": False, "error": f"Failed to resume task: {error_msg}"})
+                
+                return json.dumps({"success": True, "message": f"Task '{task['name']}' resumed.", "task": resp.data.get("data")}, indent=2)
 
             elif action == "run":
                 # Set next_run_at to now to trigger immediately
@@ -422,10 +445,16 @@ def cronjob(
                     "state": "scheduled",
                     "enabled": True
                 }
-                query = client.table("agent_scheduled_tasks").update(updates).eq("id", job_id)
-                if user_id_val:
-                    query = query.eq("user_id", user_id_val)
-                upd_resp = query.execute()
+                resp = client.rpc("manage_scheduled_tasks_admin", {
+                    "p_action": "update",
+                    "p_user_id": user_id_val,
+                    "p_job_id": job_id,
+                    "p_updates": updates
+                }).execute()
+                if not resp.data or not resp.data.get("success"):
+                    error_msg = resp.data.get("error") if resp.data else "No database response"
+                    return json.dumps({"success": False, "error": f"Failed to run task: {error_msg}"})
+                
                 return json.dumps({"success": True, "message": f"Task '{task['name']}' triggered for immediate execution."}, indent=2)
 
             elif action == "update":
@@ -467,14 +496,23 @@ def cronjob(
                 if not updates:
                     return json.dumps({"success": False, "error": "No update fields provided."})
 
-                query = client.table("agent_scheduled_tasks").update(updates).eq("id", job_id)
-                if user_id_val:
-                    query = query.eq("user_id", user_id_val)
-                upd_resp = query.execute()
-                return json.dumps({"success": True, "message": f"Task '{task['name']}' updated.", "task": upd_resp.data[0]}, indent=2)
+                resp = client.rpc("manage_scheduled_tasks_admin", {
+                    "p_action": "update",
+                    "p_user_id": user_id_val,
+                    "p_job_id": job_id,
+                    "p_updates": updates
+                }).execute()
+                if not resp.data or not resp.data.get("success"):
+                    error_msg = resp.data.get("error") if resp.data else "No database response"
+                    return json.dumps({"success": False, "error": f"Failed to update task: {error_msg}"})
+                
+                return json.dumps({"success": True, "message": f"Task '{task['name']}' updated.", "task": resp.data.get("data")}, indent=2)
 
         return json.dumps({"success": False, "error": f"Unknown action '{action}'."})
 
     except Exception as e:
         logger.error(f"Error in cronjob tool: {e}", exc_info=True)
-        return json.dumps({"success": False, "error": str(e)})
+        err_msg = str(e)
+        if "row-level security" in err_msg.lower() and not os.environ.get("SUPABASE_SERVICE_ROLE_KEY"):
+            err_msg += "\n\n💡 TIP: This Row-Level Security (RLS) policy violation occurs because the SUPABASE_SERVICE_ROLE_KEY is missing from your .env file. Please retrieve the service_role key from your Supabase Dashboard (Settings -> API) and add it to your local .env file as: SUPABASE_SERVICE_ROLE_KEY=your_service_role_key"
+        return json.dumps({"success": False, "error": err_msg})
