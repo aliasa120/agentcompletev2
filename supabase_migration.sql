@@ -233,4 +233,123 @@ CREATE INDEX IF NOT EXISTS idx_mcp_connections_status
 CREATE INDEX IF NOT EXISTS idx_agent_scheduled_tasks_next_run
   ON agent_scheduled_tasks(next_run_at) WHERE enabled = true;
 
+-- ── manage_scheduled_tasks_admin RPC ─────────────────────────
+CREATE OR REPLACE FUNCTION public.manage_scheduled_tasks_admin(
+  p_action TEXT,
+  p_user_id UUID,
+  p_job_id UUID DEFAULT NULL,
+  p_name TEXT DEFAULT NULL,
+  p_prompt TEXT DEFAULT NULL,
+  p_skills JSONB DEFAULT NULL,
+  p_model TEXT DEFAULT NULL,
+  p_provider TEXT DEFAULT NULL,
+  p_base_url TEXT DEFAULT NULL,
+  p_script TEXT DEFAULT NULL,
+  p_no_agent BOOLEAN DEFAULT NULL,
+  p_context_from JSONB DEFAULT NULL,
+  p_schedule JSONB DEFAULT NULL,
+  p_schedule_display TEXT DEFAULT NULL,
+  p_repeat_times INTEGER DEFAULT NULL,
+  p_enabled BOOLEAN DEFAULT NULL,
+  p_state TEXT DEFAULT NULL,
+  p_deliver TEXT DEFAULT NULL,
+  p_enabled_toolsets JSONB DEFAULT NULL,
+  p_workdir TEXT DEFAULT NULL,
+  p_next_run_at TIMESTAMPTZ DEFAULT NULL,
+  p_updates JSONB DEFAULT NULL
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_result JSON;
+  v_row RECORD;
+BEGIN
+  IF p_action = 'create' THEN
+    INSERT INTO public.agent_scheduled_tasks (
+      user_id, name, prompt, skills, model, provider, base_url, script, no_agent,
+      context_from, schedule, schedule_display, repeat_times, enabled, state,
+      deliver, enabled_toolsets, workdir, next_run_at
+    ) VALUES (
+      p_user_id, p_name, p_prompt, COALESCE(p_skills, '[]'::jsonb), p_model, p_provider, p_base_url, p_script, COALESCE(p_no_agent, false),
+      COALESCE(p_context_from, '[]'::jsonb), p_schedule, p_schedule_display, p_repeat_times, COALESCE(p_enabled, true), COALESCE(p_state, 'scheduled'),
+      p_deliver, COALESCE(p_enabled_toolsets, '[]'::jsonb), p_workdir, p_next_run_at
+    )
+    RETURNING * INTO v_row;
+    
+    RETURN json_build_object('success', true, 'data', row_to_json(v_row));
+    
+  ELSIF p_action = 'list' THEN
+    SELECT json_agg(t) INTO v_result FROM (
+      SELECT id, name, schedule_display, enabled, state, next_run_at, last_run_at, last_status
+      FROM public.agent_scheduled_tasks
+      WHERE user_id IS NOT DISTINCT FROM p_user_id
+      ORDER BY created_at DESC
+    ) t;
+    
+    RETURN json_build_object('success', true, 'data', COALESCE(v_result, '[]'::json));
+    
+  ELSIF p_action = 'get' THEN
+    SELECT row_to_json(t) INTO v_result FROM (
+      SELECT * FROM public.agent_scheduled_tasks
+      WHERE id = p_job_id AND user_id IS NOT DISTINCT FROM p_user_id
+    ) t;
+    
+    IF v_result IS NULL THEN
+      RETURN json_build_object('success', false, 'error', 'Task not found');
+    END IF;
+    RETURN json_build_object('success', true, 'data', v_result);
+    
+  ELSIF p_action = 'delete' THEN
+    DELETE FROM public.agent_scheduled_tasks
+    WHERE id = p_job_id AND user_id IS NOT DISTINCT FROM p_user_id
+    RETURNING * INTO v_row;
+    
+    IF v_row IS NULL THEN
+      RETURN json_build_object('success', false, 'error', 'Task not found');
+    END IF;
+    RETURN json_build_object('success', true, 'data', row_to_json(v_row));
+    
+  ELSIF p_action = 'update' THEN
+    IF p_updates IS NULL THEN
+      RETURN json_build_object('success', false, 'error', 'Updates payload is null');
+    END IF;
+
+    UPDATE public.agent_scheduled_tasks
+    SET
+      name = CASE WHEN p_updates ? 'name' THEN (p_updates->>'name') ELSE name END,
+      prompt = CASE WHEN p_updates ? 'prompt' THEN (p_updates->>'prompt') ELSE prompt END,
+      skills = CASE WHEN p_updates ? 'skills' THEN (p_updates->'skills') ELSE skills END,
+      model = CASE WHEN p_updates ? 'model' THEN (p_updates->>'model') ELSE model END,
+      provider = CASE WHEN p_updates ? 'provider' THEN (p_updates->>'provider') ELSE provider END,
+      base_url = CASE WHEN p_updates ? 'base_url' THEN (p_updates->>'base_url') ELSE base_url END,
+      script = CASE WHEN p_updates ? 'script' THEN (p_updates->>'script') ELSE script END,
+      no_agent = CASE WHEN p_updates ? 'no_agent' THEN (p_updates->>'no_agent')::boolean ELSE no_agent END,
+      context_from = CASE WHEN p_updates ? 'context_from' THEN (p_updates->'context_from') ELSE context_from END,
+      schedule = CASE WHEN p_updates ? 'schedule' THEN (p_updates->'schedule') ELSE schedule END,
+      schedule_display = CASE WHEN p_updates ? 'schedule_display' THEN (p_updates->>'schedule_display') ELSE schedule_display END,
+      repeat_times = CASE WHEN p_updates ? 'repeat_times' THEN (p_updates->>'repeat_times')::integer ELSE repeat_times END,
+      enabled = CASE WHEN p_updates ? 'enabled' THEN (p_updates->>'enabled')::boolean ELSE enabled END,
+      state = CASE WHEN p_updates ? 'state' THEN (p_updates->>'state') ELSE state END,
+      deliver = CASE WHEN p_updates ? 'deliver' THEN (p_updates->>'deliver') ELSE deliver END,
+      enabled_toolsets = CASE WHEN p_updates ? 'enabled_toolsets' THEN (p_updates->'enabled_toolsets') ELSE enabled_toolsets END,
+      workdir = CASE WHEN p_updates ? 'workdir' THEN (p_updates->>'workdir') ELSE workdir END,
+      next_run_at = CASE WHEN p_updates ? 'next_run_at' THEN (p_updates->>'next_run_at')::timestamptz ELSE next_run_at END,
+      paused_at = CASE WHEN p_updates ? 'paused_at' THEN (p_updates->>'paused_at')::timestamptz ELSE paused_at END,
+      updated_at = now()
+    WHERE id = p_job_id AND user_id IS NOT DISTINCT FROM p_user_id
+    RETURNING * INTO v_row;
+    
+    IF v_row IS NULL THEN
+      RETURN json_build_object('success', false, 'error', 'Task not found');
+    END IF;
+    RETURN json_build_object('success', true, 'data', row_to_json(v_row));
+    
+  ELSE
+    RETURN json_build_object('success', false, 'error', 'Invalid action');
+  END IF;
+END;
+$$;
+
 SELECT 'Migration complete ✅' AS status;
