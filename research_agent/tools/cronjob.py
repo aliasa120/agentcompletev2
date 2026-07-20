@@ -26,9 +26,9 @@ except ImportError:
 def _get_supabase_client():
     from supabase import create_client
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    key = os.environ.get("SUPABASE_ANON_KEY", "")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
     if not url or not key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_ANON_KEY must be set")
+        raise RuntimeError("SUPABASE_URL and SUPABASE_ANON_KEY/SUPABASE_SERVICE_ROLE_KEY must be set")
     return create_client(url, key)
 
 
@@ -225,6 +225,76 @@ def cronjob(
     action = action.strip().lower()
 
     try:
+        # Resolve config from context variables if it is missing (due to tool parameter stripping)
+        if not config:
+            try:
+                from langgraph.config import get_config
+                config = get_config()
+                logger.info(f"[cronjob] ContextVar fallback: retrieved config from langgraph.config: {config}")
+            except Exception as e:
+                logger.debug(f"[cronjob] ContextVar langgraph.config lookup failed: {e}")
+
+        if not config:
+            try:
+                from langchain_core.runnables.config import var_child_runnable_config
+                config = var_child_runnable_config.get()
+                logger.info(f"[cronjob] ContextVar fallback: retrieved config from var_child_runnable_config: {config}")
+            except Exception as e:
+                logger.debug(f"[cronjob] ContextVar var_child_runnable_config lookup failed: {e}")
+
+        workflow_id = None
+        thread_id = None
+        agent_id = None
+        user_id_val = None
+
+        logger.info(f"[cronjob] Final resolved config: {config}")
+        if config:
+            configurable = config.get("configurable", {})
+            logger.info(f"[cronjob] Configurable fields: {configurable}")
+            workflow_id = configurable.get("workflow_id")
+            thread_id = configurable.get("thread_id")
+            agent_id = configurable.get("agent_id")
+            user_id_val = configurable.get("user_id")
+
+        if thread_id and not workflow_id:
+            try:
+                sess_resp = client.table("sessions").select("workflow_id").eq("id", thread_id).execute()
+                if sess_resp.data and sess_resp.data[0].get("workflow_id"):
+                    workflow_id = sess_resp.data[0].get("workflow_id")
+                    logger.info(f"[cronjob] Resolved workflow_id '{workflow_id}' from sessions table for thread '{thread_id}'")
+            except Exception as e:
+                logger.warning(f"[cronjob] Failed to resolve workflow_id from sessions table: {e}")
+
+        # Tier 2: look up user_id from the agent_configs table using agent_id
+        if not user_id_val and agent_id:
+            try:
+                resp = client.table("agent_configs").select("user_id").eq("id", agent_id).execute()
+                if resp.data and len(resp.data) > 0:
+                    user_id_val = resp.data[0].get("user_id")
+                    logger.info(f"[cronjob] Resolved user_id '{user_id_val}' from agent_id '{agent_id}'")
+            except Exception as e:
+                logger.warning(f"[cronjob] Failed to resolve user_id from agent_id: {e}")
+
+        # Tier 3: look up user_id from the workflows table using workflow_id
+        if not user_id_val and workflow_id:
+            try:
+                resp = client.table("workflows").select("user_id").eq("id", workflow_id).execute()
+                if resp.data and len(resp.data) > 0:
+                    user_id_val = resp.data[0].get("user_id")
+                    logger.info(f"[cronjob] Resolved user_id '{user_id_val}' from workflow_id '{workflow_id}'")
+            except Exception as e:
+                logger.warning(f"[cronjob] Failed to resolve user_id from workflow_id: {e}")
+
+        # Tier 4: ContextVar last resort
+        if not user_id_val:
+            try:
+                from research_agent.tools.provider_engine import active_user_id
+                user_id_val = active_user_id.get()
+                if user_id_val:
+                    logger.info(f"[cronjob] Resolved user_id '{user_id_val}' from active_user_id ContextVar")
+            except Exception:
+                pass
+
         if action == "create":
             if not schedule:
                 return json.dumps({"success": False, "error": "Missing required parameter 'schedule' for create action."})
@@ -237,41 +307,6 @@ def cronjob(
 
             parsed_schedule = parse_schedule(schedule)
             next_run_at = compute_next_run(parsed_schedule)
-
-            # Resolve config from context variables if it is missing (due to tool parameter stripping)
-            if not config:
-                try:
-                    from langgraph.config import get_config
-                    config = get_config()
-                    logger.info(f"[cronjob] ContextVar fallback: retrieved config from langgraph.config: {config}")
-                except Exception as e:
-                    logger.debug(f"[cronjob] ContextVar langgraph.config lookup failed: {e}")
-
-            if not config:
-                try:
-                    from langchain_core.runnables.config import var_child_runnable_config
-                    config = var_child_runnable_config.get()
-                    logger.info(f"[cronjob] ContextVar fallback: retrieved config from var_child_runnable_config: {config}")
-                except Exception as e:
-                    logger.debug(f"[cronjob] ContextVar var_child_runnable_config lookup failed: {e}")
-
-            workflow_id = None
-            thread_id = None
-            logger.info(f"[cronjob] Final resolved config: {config}")
-            if config:
-                configurable = config.get("configurable", {})
-                logger.info(f"[cronjob] Configurable fields: {configurable}")
-                workflow_id = configurable.get("workflow_id")
-                thread_id = configurable.get("thread_id")
-
-            if thread_id and not workflow_id:
-                try:
-                    sess_resp = client.table("sessions").select("workflow_id").eq("id", thread_id).execute()
-                    if sess_resp.data and sess_resp.data[0].get("workflow_id"):
-                        workflow_id = sess_resp.data[0].get("workflow_id")
-                        logger.info(f"[cronjob] Resolved workflow_id '{workflow_id}' from sessions table for thread '{thread_id}'")
-                except Exception as e:
-                    logger.warning(f"[cronjob] Failed to resolve workflow_id from sessions table: {e}")
 
             # Resolve delivery target
             delivery_target = deliver or "local"
@@ -307,6 +342,8 @@ def cronjob(
                 "next_run_at": next_run_at,
                 "origin": {"workflow_id": str(workflow_id)} if workflow_id else {},
             }
+            if user_id_val:
+                task_row["user_id"] = user_id_val
 
             resp = client.table("agent_scheduled_tasks").insert(task_row).execute()
             if not resp.data:
@@ -325,7 +362,10 @@ def cronjob(
             }, indent=2)
 
         elif action == "list":
-            resp = client.table("agent_scheduled_tasks").select("id, name, schedule_display, enabled, state, next_run_at, last_run_at, last_status").order("created_at", desc=True).execute()
+            query = client.table("agent_scheduled_tasks").select("id, name, schedule_display, enabled, state, next_run_at, last_run_at, last_status")
+            if user_id_val:
+                query = query.eq("user_id", user_id_val)
+            resp = query.order("created_at", desc=True).execute()
             tasks = resp.data or []
             return json.dumps({"success": True, "tasks": tasks}, indent=2)
 
@@ -333,15 +373,21 @@ def cronjob(
             if not job_id:
                 return json.dumps({"success": False, "error": f"Parameter 'job_id' is required for action '{action}'."})
 
-            # Check if task exists
-            task_resp = client.table("agent_scheduled_tasks").select("*").eq("id", job_id).execute()
+            # Check if task exists (filtered by user_id if present)
+            query = client.table("agent_scheduled_tasks").select("*").eq("id", job_id)
+            if user_id_val:
+                query = query.eq("user_id", user_id_val)
+            task_resp = query.execute()
             if not task_resp.data:
                 return json.dumps({"success": False, "error": f"Task with ID '{job_id}' not found."})
             
             task = task_resp.data[0]
 
             if action == "remove":
-                client.table("agent_scheduled_tasks").delete().eq("id", job_id).execute()
+                query = client.table("agent_scheduled_tasks").delete().eq("id", job_id)
+                if user_id_val:
+                    query = query.eq("user_id", user_id_val)
+                query.execute()
                 return json.dumps({"success": True, "message": f"Task '{task['name']}' successfully removed."})
 
             elif action == "pause":
@@ -350,7 +396,10 @@ def cronjob(
                     "state": "paused",
                     "paused_at": _get_now().isoformat(),
                 }
-                upd_resp = client.table("agent_scheduled_tasks").update(updates).eq("id", job_id).execute()
+                query = client.table("agent_scheduled_tasks").update(updates).eq("id", job_id)
+                if user_id_val:
+                    query = query.eq("user_id", user_id_val)
+                upd_resp = query.execute()
                 return json.dumps({"success": True, "message": f"Task '{task['name']}' paused.", "task": upd_resp.data[0]}, indent=2)
 
             elif action == "resume":
@@ -360,7 +409,10 @@ def cronjob(
                     "paused_at": None,
                     "next_run_at": compute_next_run(task["schedule"])
                 }
-                upd_resp = client.table("agent_scheduled_tasks").update(updates).eq("id", job_id).execute()
+                query = client.table("agent_scheduled_tasks").update(updates).eq("id", job_id)
+                if user_id_val:
+                    query = query.eq("user_id", user_id_val)
+                upd_resp = query.execute()
                 return json.dumps({"success": True, "message": f"Task '{task['name']}' resumed.", "task": upd_resp.data[0]}, indent=2)
 
             elif action == "run":
@@ -370,7 +422,10 @@ def cronjob(
                     "state": "scheduled",
                     "enabled": True
                 }
-                upd_resp = client.table("agent_scheduled_tasks").update(updates).eq("id", job_id).execute()
+                query = client.table("agent_scheduled_tasks").update(updates).eq("id", job_id)
+                if user_id_val:
+                    query = query.eq("user_id", user_id_val)
+                upd_resp = query.execute()
                 return json.dumps({"success": True, "message": f"Task '{task['name']}' triggered for immediate execution."}, indent=2)
 
             elif action == "update":
@@ -412,7 +467,10 @@ def cronjob(
                 if not updates:
                     return json.dumps({"success": False, "error": "No update fields provided."})
 
-                upd_resp = client.table("agent_scheduled_tasks").update(updates).eq("id", job_id).execute()
+                query = client.table("agent_scheduled_tasks").update(updates).eq("id", job_id)
+                if user_id_val:
+                    query = query.eq("user_id", user_id_val)
+                upd_resp = query.execute()
                 return json.dumps({"success": True, "message": f"Task '{task['name']}' updated.", "task": upd_resp.data[0]}, indent=2)
 
         return json.dumps({"success": False, "error": f"Unknown action '{action}'."})

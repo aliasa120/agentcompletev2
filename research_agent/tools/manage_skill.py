@@ -129,15 +129,27 @@ def manage_skill(
             error_msg = result.get("error", "Unknown database error") if result else "No database response"
             return f"❌ Failed to {action} skill '{skill_key}': {error_msg}"
         
-        # Trigger hot-reload by touching agent.py so the new skill list recompiles into system prompt immediately
+        # Trigger hot-reload by touching agent.py so the new skill list recompiles into system prompt immediately.
+        # To prevent interrupting/cancelling the CURRENT active run on the live server, we perform this touch in a delayed background thread.
         try:
             repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             agent_py_path = os.path.join(repo_root, "agent.py")
             if os.path.exists(agent_py_path):
-                os.utime(agent_py_path, None)
-                logger.info(f"[manage_skill] Touched agent.py to trigger hot-reload for action '{action}' on skill '{skill_key}'.")
+                import threading
+                import time
+
+                def delayed_touch():
+                    time.sleep(10)  # Wait 10 seconds for the current run to finish generating and streaming the response
+                    try:
+                        os.utime(agent_py_path, None)
+                        logger.info(f"[manage_skill] Asynchronously touched agent.py to trigger hot-reload for action '{action}' on skill '{skill_key}'.")
+                    except Exception as err:
+                        logger.warning(f"[manage_skill] Delayed touch of agent.py failed: {err}")
+
+                threading.Thread(target=delayed_touch, daemon=True).start()
+                logger.info(f"[manage_skill] Scheduled delayed hot-reload touch of agent.py in 10 seconds.")
         except Exception as touch_err:
-            logger.warning(f"[manage_skill] Failed to touch agent.py for hot-reload: {touch_err}")
+            logger.warning(f"[manage_skill] Failed to schedule touch of agent.py for hot-reload: {touch_err}")
 
         data = result.get("data", {})
         if action == "create":
