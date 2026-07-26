@@ -48,17 +48,45 @@ export async function GET(request: NextRequest) {
     const dir = getScopedMemoryDir(activeUserId, workflowId);
     const fileName = fileType.toUpperCase().endsWith("USER.MD") ? "USER.md" : "MEMORY.md";
     const filePath = path.join(dir, fileName);
+    const dbMemoryKey = fileName === "USER.md" ? `memory_user_md_${workflowId}` : `memory_file_md_${workflowId}`;
 
     let content = "";
-    if (fs.existsSync(filePath)) {
-      content = fs.readFileSync(filePath, "utf-8");
-    } else {
-      if (fileName === "USER.md") {
-        content = `# User Profile (${activeUserId})\nWorkflow: ${workflowId}\n\n## Preferences\n- None recorded yet.\n\n## Standing Instructions\n- None recorded yet.\n`;
+    if (user) {
+      try {
+        const { data: dbRow } = await supabase
+          .from("agent_settings")
+          .select("value")
+          .eq("user_id", user.id)
+          .eq("key", dbMemoryKey)
+          .single();
+        if (dbRow && dbRow.value && dbRow.value.trim()) {
+          content = dbRow.value;
+          try {
+            fs.writeFileSync(filePath, content, "utf-8");
+          } catch {}
+        }
+      } catch {}
+    }
+
+    if (!content) {
+      if (fs.existsSync(filePath)) {
+        content = fs.readFileSync(filePath, "utf-8");
       } else {
-        content = `# Persistent Memories (${workflowId})\nUser: ${activeUserId}\n\n## General Facts\n- Initialized local memory file.\n`;
+        if (fileName === "USER.md") {
+          content = `# User Profile (${activeUserId})\nWorkflow: ${workflowId}\n\n## Preferences\n- None recorded yet.\n\n## Standing Instructions\n- None recorded yet.\n`;
+        } else {
+          content = `# Persistent Memories (${workflowId})\nUser: ${activeUserId}\n\n## General Facts\n- Initialized local memory file.\n`;
+        }
+        fs.writeFileSync(filePath, content, "utf-8");
       }
-      fs.writeFileSync(filePath, content, "utf-8");
+      if (user && content) {
+        try {
+          await supabase.from("agent_settings").upsert(
+            { user_id: user.id, key: dbMemoryKey, value: content },
+            { onConflict: "user_id,key" }
+          );
+        } catch {}
+      }
     }
 
     // Query user's agent_settings for Honcho credentials & memory budget limits
@@ -163,6 +191,18 @@ export async function POST(request: NextRequest) {
       const fileName = fileType.toUpperCase().endsWith("USER.MD") ? "USER.md" : "MEMORY.md";
       const filePath = path.join(dir, fileName);
       fs.writeFileSync(filePath, content, "utf-8");
+
+      if (user) {
+        const dbMemoryKey = fileName === "USER.md" ? `memory_user_md_${workflowId}` : `memory_file_md_${workflowId}`;
+        try {
+          await supabase.from("agent_settings").upsert(
+            { user_id: user.id, key: dbMemoryKey, value: content },
+            { onConflict: "user_id,key" }
+          );
+        } catch (err) {
+          console.error("Failed to sync memory file to agent_settings in Supabase:", err);
+        }
+      }
     }
 
     return NextResponse.json({
