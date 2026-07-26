@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { Pinecone } from "@pinecone-database/pinecone";
+import fs from "fs";
+import path from "path";
+
+const MEMORY_BASE_DIR = path.join(process.cwd(), "..", "data", "memories");
+
+function getScopedMemoryDir(userId: string, workflowId: string): string {
+  const cleanUser = userId.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+  const cleanWorkflow = workflowId.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+  const dir = path.join(MEMORY_BASE_DIR, cleanUser, cleanWorkflow);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
 
 export async function GET(request: NextRequest) {
   try {
-    // 1. Authenticate user
     const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,152 +39,83 @@ export async function GET(request: NextRequest) {
     );
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const activeUserId = user ? user.id : "default_user";
 
     const { searchParams } = request.nextUrl;
-    const workflowId = searchParams.get("workflow_id");
-    const query = searchParams.get("query");
+    const workflowId = searchParams.get("workflow_id") || "default_workflow";
+    const fileType = searchParams.get("file") || "MEMORY.md"; // 'USER.md' or 'MEMORY.md'
 
-    if (!workflowId) {
-      return NextResponse.json({ error: "workflow_id is required" }, { status: 400 });
-    }
+    const dir = getScopedMemoryDir(activeUserId, workflowId);
+    const fileName = fileType.toUpperCase().endsWith("USER.MD") ? "USER.md" : "MEMORY.md";
+    const filePath = path.join(dir, fileName);
 
-    // 2. Query Pinecone
-    let apiKey = "";
-    try {
-      const { data: settingRow } = await supabase
-        .from("agent_settings")
-        .select("value")
-        .eq("user_id", user.id)
-        .eq("key", "pinecone_api_key")
-        .maybeSingle();
-      if (settingRow?.value) {
-        apiKey = settingRow.value.trim();
-      }
-    } catch (err) {
-      console.error("Failed to query user's pinecone_api_key from agent_settings:", err);
-    }
-
-    if (!apiKey) {
-      apiKey = process.env.PINECONE_API_KEY || "";
-    }
-
-    if (!apiKey) {
-      return NextResponse.json({ error: "PINECONE_API_KEY is not configured" }, { status: 500 });
-    }
-
-    const pc = new Pinecone({ apiKey });
-
-    let indexName = "";
-    try {
-      const { data: indexRow } = await supabase
-        .from("agent_settings")
-        .select("value")
-        .eq("user_id", user.id)
-        .eq("key", "pinecone_index_name")
-        .maybeSingle();
-      if (indexRow?.value) {
-        indexName = indexRow.value.trim();
-      }
-    } catch (err) {
-      console.error("Failed to query user's pinecone_index_name from agent_settings:", err);
-    }
-
-    if (!indexName) {
-      indexName = process.env.PINECONE_INDEX_NAME || "memories";
-    }
-
-    const index = pc.index(indexName);
-
-    let matches: any[] = [];
-
-    if (query && query.trim().length > 0) {
-      // Semantic search: embed the query and find nearest vectors
-      const embedResponse = await pc.inference.embed({
-        model: "multilingual-e5-large",
-        inputs: [query],
-        parameters: { inputType: "query" }
-      });
-      const vector = (embedResponse.data[0] as any).values;
-
-      const queryResponse = await index.query({
-        vector,
-        topK: 100,
-        includeMetadata: true,
-      });
-      matches = queryResponse.matches ?? [];
+    let content = "";
+    if (fs.existsSync(filePath)) {
+      content = fs.readFileSync(filePath, "utf-8");
     } else {
-      // List all records without a vector (serverless-safe)
-      // Use listPaginated to get all IDs, then fetch metadata in batches
-      const allIds: string[] = [];
-      let paginationToken: string | undefined = undefined;
-
-      do {
-        const listResponse: any = await (index as any).listPaginated({
-          limit: 100,
-          ...(paginationToken ? { paginationToken } : {}),
-        });
-        const vectors = listResponse.vectors ?? listResponse.results ?? [];
-        for (const v of vectors) {
-          if (v.id) allIds.push(v.id);
-        }
-        paginationToken = listResponse.pagination?.next ?? listResponse.nextToken ?? undefined;
-      } while (paginationToken);
-
-      // Fetch metadata in batches of 100 (guard: fetch requires at least 1 ID)
-      for (let i = 0; i < allIds.length; i += 100) {
-        const batch = allIds.slice(i, i + 100);
-        if (batch.length === 0) continue;
-        const fetched = await index.fetch({ ids: batch });
-        for (const [id, record] of Object.entries(fetched.records ?? {})) {
-          matches.push({ id, metadata: (record as any).metadata, score: 1 });
-        }
+      if (fileName === "USER.md") {
+        content = `# User Profile (${activeUserId})\nWorkflow: ${workflowId}\n\n## Preferences\n- None recorded yet.\n\n## Standing Instructions\n- None recorded yet.\n`;
+      } else {
+        content = `# Persistent Memories (${workflowId})\nUser: ${activeUserId}\n\n## General Facts\n- Initialized local memory file.\n`;
       }
+      fs.writeFileSync(filePath, content, "utf-8");
+    }
 
-      // Early exit if index is empty — no memories to show
-      if (allIds.length === 0) {
-        return NextResponse.json({ memories: [] });
+    // Query user's agent_settings for Honcho credentials & memory budget limits
+    let honchoApiKey = process.env.HONCHO_API_KEY || "";
+    let honchoApiUrl = process.env.HONCHO_API_URL || "";
+    let honchoWorkspace = process.env.HONCHO_WORKSPACE || "";
+    let userCharLimit = 1375;
+    let memoryCharLimit = 2200;
+
+    if (user) {
+      try {
+        const { data: rows } = await supabase
+          .from("agent_settings")
+          .select("key, value")
+          .eq("user_id", user.id)
+          .in("key", ["honcho_api_key", "honcho_api_url", "honcho_workspace", "memory_user_char_limit", "memory_file_char_limit"]);
+
+        if (rows) {
+          for (const row of rows) {
+            if (row.key === "honcho_api_key" && row.value) honchoApiKey = row.value.trim();
+            if (row.key === "honcho_api_url" && row.value) honchoApiUrl = row.value.trim();
+            if (row.key === "honcho_workspace" && row.value) honchoWorkspace = row.value.trim();
+            if (row.key === "memory_user_char_limit" && row.value) userCharLimit = parseInt(row.value, 10) || 1375;
+            if (row.key === "memory_file_char_limit" && row.value) memoryCharLimit = parseInt(row.value, 10) || 2200;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to query user's Honcho settings from agent_settings:", err);
       }
     }
 
-    // Helper: check if a memory belongs to the requested workflowId
-    // Supports both old scope (UUID_workflowId with underscore) and
-    // new sanitized scope (uuid-workflowId with hyphen)
-    const workflowIdLower = workflowId.toLowerCase();
-    const belongsToWorkflow = (memUserId: string) => {
-      if (!memUserId) return false;
-      const lower = memUserId.toLowerCase();
-      return (
-        lower === workflowIdLower ||
-        lower.endsWith(`-${workflowIdLower}`) ||
-        lower.endsWith(`_${workflowIdLower}`)
-      );
-    };
+    const isHonchoConfigured = Boolean(honchoApiKey);
 
-    const memories = matches
-      .filter((m: any) => belongsToWorkflow(m.metadata?.user_id as string))
-      .map((m: any) => ({
-        id: m.id,
-        text: (m.metadata?.data as string) || (m.metadata?.text as string) || "",
-        created_at: (m.metadata?.created_at as string) || "",
-        user_id: m.metadata?.user_id as string,
-        score: m.score,
-      }));
+    return NextResponse.json({
+      user_id: activeUserId,
+      workflow_id: workflowId,
+      file: fileName,
+      content,
+      budget_limits: {
+        user_char_limit: userCharLimit,
+        memory_char_limit: memoryCharLimit,
+      },
+      honcho_status: {
+        configured: isHonchoConfigured,
+        api_url: honchoApiUrl || (isHonchoConfigured ? "https://api.honcho.dev" : "Not configured (optional cloud memory provider)"),
+        workspace: honchoWorkspace || "default_workspace",
+      }
+    });
 
-    return NextResponse.json({ memories });
-  } catch (e: unknown) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Unknown error" },
-      { status: 500 }
-    );
+  } catch (error: any) {
+    console.error("Error fetching memories:", error);
+    return NextResponse.json({ error: error.message || "Failed to load memory file" }, { status: 500 });
   }
 }
 
-export async function DELETE(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    // 1. Authenticate user
     const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -194,209 +137,44 @@ export async function DELETE(request: NextRequest) {
     );
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const activeUserId = user ? user.id : "default_user";
 
-    const { searchParams } = request.nextUrl;
-    const id = searchParams.get("id");
-    const workflowId = searchParams.get("workflow_id");
+    const body = await request.json();
+    const workflowId = body.workflow_id || "default_workflow";
+    const fileType = body.file || "MEMORY.md";
+    const content = body.content;
 
-    let apiKey = "";
-    try {
-      const { data: settingRow } = await supabase
-        .from("agent_settings")
-        .select("value")
-        .eq("user_id", user.id)
-        .eq("key", "pinecone_api_key")
-        .maybeSingle();
-      if (settingRow?.value) {
-        apiKey = settingRow.value.trim();
+    // Handle budget settings save if passed
+    if (user && (body.memory_user_char_limit !== undefined || body.memory_file_char_limit !== undefined)) {
+      const updates = [];
+      if (body.memory_user_char_limit !== undefined) {
+        updates.push({ user_id: user.id, key: "memory_user_char_limit", value: String(body.memory_user_char_limit) });
       }
-    } catch (err) {
-      console.error("Failed to query user's pinecone_api_key from agent_settings:", err);
-    }
-
-    if (!apiKey) {
-      apiKey = process.env.PINECONE_API_KEY || "";
-    }
-
-    if (!apiKey) {
-      return NextResponse.json({ error: "PINECONE_API_KEY is not configured" }, { status: 500 });
-    }
-
-    const pc = new Pinecone({ apiKey });
-
-    let indexName = "";
-    try {
-      const { data: indexRow } = await supabase
-        .from("agent_settings")
-        .select("value")
-        .eq("user_id", user.id)
-        .eq("key", "pinecone_index_name")
-        .maybeSingle();
-      if (indexRow?.value) {
-        indexName = indexRow.value.trim();
+      if (body.memory_file_char_limit !== undefined) {
+        updates.push({ user_id: user.id, key: "memory_file_char_limit", value: String(body.memory_file_char_limit) });
       }
-    } catch (err) {
-      console.error("Failed to query user's pinecone_index_name from agent_settings:", err);
-    }
-
-    if (!indexName) {
-      indexName = process.env.PINECONE_INDEX_NAME || "memories";
-    }
-
-    const index = pc.index(indexName);
-
-    if (id) {
-      // Delete single memory by ID
-      await index.deleteMany({ ids: [id] });
-
-      // Clean up linked entities in memories-entities index
-      try {
-        const entitiesIndex = pc.index(`${indexName}-entities`);
-        const allEntityIds: string[] = [];
-        let paginationToken: string | undefined = undefined;
-
-        do {
-          const listResponse: any = await (entitiesIndex as any).listPaginated({
-            limit: 100,
-            ...(paginationToken ? { paginationToken } : {}),
-          });
-          const vectors = listResponse.vectors ?? listResponse.results ?? [];
-          for (const v of vectors) {
-            if (v.id) allEntityIds.push(v.id);
-          }
-          paginationToken = listResponse.pagination?.next ?? listResponse.nextToken ?? undefined;
-        } while (paginationToken);
-
-        const entitiesToDelete: string[] = [];
-        for (let i = 0; i < allEntityIds.length; i += 100) {
-          const batch = allEntityIds.slice(i, i + 100);
-          if (batch.length === 0) continue;
-          const fetched = await entitiesIndex.fetch({ ids: batch });
-          for (const [entityId, record] of Object.entries(fetched.records ?? {})) {
-            const linkedIds = (record as any).metadata?.linked_memory_ids;
-            if (Array.isArray(linkedIds) && linkedIds.includes(id)) {
-              entitiesToDelete.push(entityId);
-            }
-          }
-        }
-
-        if (entitiesToDelete.length > 0) {
-          await entitiesIndex.deleteMany({ ids: entitiesToDelete });
-        }
-      } catch (err) {
-        console.warn("[DELETE memories] Failed to clean up associated entities:", err);
+      if (updates.length > 0) {
+        await supabase.from("agent_settings").upsert(updates, { onConflict: "user_id,key" });
       }
-
-      return NextResponse.json({ success: true, message: `Memory ${id} deleted.` });
     }
 
-    if (workflowId) {
-      // List all record IDs (serverless-safe — no zero-vector query)
-      const allIds: string[] = [];
-      let paginationToken: string | undefined = undefined;
-
-      do {
-        const listResponse: any = await (index as any).listPaginated({
-          limit: 100,
-          ...(paginationToken ? { paginationToken } : {}),
-        });
-        const vectors = listResponse.vectors ?? listResponse.results ?? [];
-        for (const v of vectors) {
-          if (v.id) allIds.push(v.id);
-        }
-        paginationToken = listResponse.pagination?.next ?? listResponse.nextToken ?? undefined;
-      } while (paginationToken);
-
-      // Fetch metadata in batches and filter by workflowId
-      const workflowIdLower = workflowId.toLowerCase();
-      const belongsToWorkflow = (memUserId: string) => {
-        if (!memUserId) return false;
-        const lower = memUserId.toLowerCase();
-        return (
-          lower === workflowIdLower ||
-          lower.endsWith(`-${workflowIdLower}`) ||
-          lower.endsWith(`_${workflowIdLower}`)
-        );
-      };
-
-      const idsToDelete: string[] = [];
-      if (allIds.length > 0) {
-        for (let i = 0; i < allIds.length; i += 100) {
-          const batch = allIds.slice(i, i + 100);
-          if (batch.length === 0) continue;
-          const fetched = await index.fetch({ ids: batch });
-          for (const [id, record] of Object.entries(fetched.records ?? {})) {
-            const memUserId = (record as any).metadata?.user_id as string;
-            if (belongsToWorkflow(memUserId)) {
-              idsToDelete.push(id);
-            }
-          }
-        }
-
-        // Delete in batches of 1000
-        for (let i = 0; i < idsToDelete.length; i += 1000) {
-          await index.deleteMany({ ids: idsToDelete.slice(i, i + 1000) });
-        }
-      }
-
-      // Also clean up entities belonging to this workflow in memories-entities index
-      let entitiesDeletedCount = 0;
-      try {
-        const entitiesIndex = pc.index(`${indexName}-entities`);
-        const allEntityIds: string[] = [];
-        let entityPaginationToken: string | undefined = undefined;
-
-        do {
-          const listResponse: any = await (entitiesIndex as any).listPaginated({
-            limit: 100,
-            ...(entityPaginationToken ? { entityPaginationToken } : {}),
-          });
-          const vectors = listResponse.vectors ?? listResponse.results ?? [];
-          for (const v of vectors) {
-            if (v.id) allEntityIds.push(v.id);
-          }
-          entityPaginationToken = listResponse.pagination?.next ?? listResponse.nextToken ?? undefined;
-        } while (entityPaginationToken);
-
-        const entityIdsToDelete: string[] = [];
-        if (allEntityIds.length > 0) {
-          for (let i = 0; i < allEntityIds.length; i += 100) {
-            const batch = allEntityIds.slice(i, i + 100);
-            if (batch.length === 0) continue;
-            const fetched = await entitiesIndex.fetch({ ids: batch });
-            for (const [entityId, record] of Object.entries(fetched.records ?? {})) {
-              const memUserId = (record as any).metadata?.user_id as string;
-              if (belongsToWorkflow(memUserId)) {
-                entityIdsToDelete.push(entityId);
-              }
-            }
-          }
-
-          entitiesDeletedCount = entityIdsToDelete.length;
-          for (let i = 0; i < entityIdsToDelete.length; i += 1000) {
-            await entitiesIndex.deleteMany({ ids: entityIdsToDelete.slice(i, i + 1000) });
-          }
-        }
-      } catch (err) {
-        console.warn("[DELETE memories] Failed to clean up entities for workflow:", err);
-      }
-
-
-
-      return NextResponse.json({
-        success: true,
-        message: `Cleared ${idsToDelete.length} memories and ${entitiesDeletedCount} entities for workflow ${workflowId}.`,
-      });
+    if (content !== undefined) {
+      const dir = getScopedMemoryDir(activeUserId, workflowId);
+      const fileName = fileType.toUpperCase().endsWith("USER.MD") ? "USER.md" : "MEMORY.md";
+      const filePath = path.join(dir, fileName);
+      fs.writeFileSync(filePath, content, "utf-8");
     }
 
-    return NextResponse.json({ error: "id or workflow_id is required" }, { status: 400 });
-  } catch (e: unknown) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Unknown error" },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: true,
+      message: `Successfully updated memory settings for workflow ${workflowId}.`,
+      user_id: activeUserId,
+      workflow_id: workflowId,
+      file: fileType,
+    });
+
+  } catch (error: any) {
+    console.error("Error saving memory file:", error);
+    return NextResponse.json({ error: error.message || "Failed to save memory file" }, { status: 500 });
   }
 }

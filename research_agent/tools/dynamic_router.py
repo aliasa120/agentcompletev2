@@ -37,8 +37,20 @@ from research_agent.tools import (
     publish_to_wordpress,
     analyze_attachment,
 )
-from research_agent.tools.mem0_tools import (
-    search_memories,
+from research_agent.memory.builtin_provider import (
+    add_memory,
+    replace_memory,
+    remove_memory,
+)
+from research_agent.memory.honcho_provider import (
+    honcho_profile,
+    honcho_search,
+    honcho_reasoning,
+    honcho_context,
+    honcho_conclude,
+)
+from research_agent.tools.search_conversation_history import (
+    search_conversation_history,
 )
 
 # Registry mapping tool names to actual tool objects
@@ -58,8 +70,16 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
     "manage_skill": manage_skill,
     "get_wordpress_categories": get_wordpress_categories,
     "publish_to_wordpress": publish_to_wordpress,
-    # Mem0 memory tools (only search_memories is exposed to agent)
-    "search_memories": search_memories,
+    # Hermes-style 3-Layer Memory tools
+    "add_memory": add_memory,
+    "replace_memory": replace_memory,
+    "remove_memory": remove_memory,
+    "search_conversation_history": search_conversation_history,
+    "honcho_profile": honcho_profile,
+    "honcho_search": honcho_search,
+    "honcho_reasoning": honcho_reasoning,
+    "honcho_context": honcho_context,
+    "honcho_conclude": honcho_conclude,
     "analyze_attachment": analyze_attachment,
 }
 

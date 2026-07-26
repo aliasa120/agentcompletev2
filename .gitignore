@@ -24,20 +24,6 @@ deep-agents-ui-main/yarn-error.log
 deep-agents-ui-main/*.tsbuildinfo
 
 # Misc
-output/
-*.ipynb
-
-# Log files
-agent_load.log
-
-# External reference code
-hermes-agent-main/
-
-# Local temporary/scratch files
-*.png
-*.pdf
-scratch/
-tmp/
 *.json
 !package.json
 !package-lock.json
@@ -60,3 +46,16 @@ WhatsApp Audio 2026-06-19 at 10.03.17 PM.mp3
 vidssave.com Inter School Cycle Race _ Shiva Ep 5 _ Shiva Action Story _ New Animated Story _ Boonie Bears Hindi 480P.mp4
 vidssave.com Kiya Muhammad Ka Pyara Nahi Hun _ Ali Shanawar & Ali Jee  _ 2008 LOW.mp4
 test_9router_caps.mjs
+
+# External reference code & local data
+hermes-agent-main/
+honcho-main/
+OpenSpace-main/
+honchodocs.md
+data/
+scratch/
+output/
+tmp/
+*.png
+*.pdf
+agent_load.log

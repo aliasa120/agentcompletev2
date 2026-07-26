@@ -1,70 +1,46 @@
-"""search_conversation_history — Tool to search past conversation history using full-text search.
+"""search_conversation_history — Hermes-style 3-Strategy Smart Search Tool.
+
+Searches through workflow-scoped and user-scoped conversation history and memory files
+using 3 parallel strategies (Full-Text, Semantic, Entity Probe) combined via RRF ranking.
 """
 
-import os
 import logging
 from typing import Optional
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
+from research_agent.memory.smart_search import smart_search_memories
+from research_agent.memory.builtin_provider import _resolve_scope
 
 logger = logging.getLogger("search_conversation_history")
 
 
-def _get_supabase_client():
-    """Lazy-init a Supabase client."""
-    from supabase import create_client
-    url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    key = os.environ.get("SUPABASE_ANON_KEY", "")
-    if not url or not key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_ANON_KEY must be set")
-    return create_client(url, key)
-
-
 @tool(parse_docstring=True)
-def search_conversation_history(query: str) -> str:
-    """Search through all past conversation history messages using full-text search.
+def search_conversation_history(
+    query: str,
+    config: Optional[RunnableConfig] = None
+) -> str:
+    """Search through past conversation history messages, user profile, and memory files using 3-strategy smart search (Full-Text + Semantic + Entity Probe).
 
-    Use this tool when you need to recall details, context, facts, or decisions
-    from previous messages, sessions, or threads.
+    Use this tool when you need to recall details, context, facts, decisions, or user preferences
+    from previous messages, sessions, or stored memory files.
 
     Args:
-        query: The search query, keywords, or phrases to look for.
+        query: The search query, keywords, topic, or question to look for.
+        config: LangChain runnable configuration (automatically injected).
     """
     try:
-        client = _get_supabase_client()
-        
-        # Perform text search on content column
-        resp = client.table("messages") \
-            .select("session_id, role, content, created_at") \
-            .limit(20) \
-            .text_search("content", query, options={"config": "english", "type": "plain"}) \
-            .execute()
-            
-        data = resp.data or []
-        if not data:
-            return f"No messages matching '{query}' were found in the conversation history."
-            
-        lines = [f"🔍 Search results for '{query}' ({len(data)} matches):"]
-        for idx, row in enumerate(data, 1):
-            sess_id = row.get("session_id")
-            role = row.get("role", "unknown").upper()
-            content = row.get("content", "").strip()
-            created_at = row.get("created_at") or "unknown"
-            
-            # Truncate content to keep prompt size reasonable
-            if len(content) > 500:
-                content_preview = content[:500] + "... (truncated)"
-            else:
-                content_preview = content
-                
-            lines.append(
-                f"--- Result #{idx} ---\n"
-                f"Session ID: {sess_id}\n"
-                f"Role: {role}\n"
-                f"Date: {created_at}\n"
-                f"Content:\n{content_preview}\n"
-            )
-            
-        return "\n".join(lines)
-        
+        user_id, workflow_id = _resolve_scope(config)
+        return smart_search_memories(
+            query=query,
+            user_id=user_id,
+            workflow_id=workflow_id,
+            limit=12
+        )
     except Exception as e:
+        logger.error(f"Error in search_conversation_history: {e}")
         return f"❌ Error searching conversation history: {e}"
+
+
+# Alias for backward compatibility / agent tool lookup
+search_memories = search_conversation_history
+

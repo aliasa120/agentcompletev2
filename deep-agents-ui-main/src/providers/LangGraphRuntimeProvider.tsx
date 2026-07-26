@@ -132,6 +132,7 @@ export function LangGraphRuntimeProvider({
     submitRef.current = (input: any, options?: any) => {
       return stream.submit(input, {
         streamSubgraphs: true,
+        streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"],
         ...options,
         onError: (_err: any, _run: any) => {
           onStreamError?.();
@@ -194,7 +195,7 @@ export function LangGraphRuntimeProvider({
             pollInterval = null;
           }
           await stream.joinStream(activeRun.run_id, undefined, {
-            streamMode: ["values", "messages-tuple", "updates", "tasks", "tools"],
+            streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"],
           });
         }
       } catch (err) {

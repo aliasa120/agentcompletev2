@@ -30,8 +30,17 @@ from .wordpress_publisher import get_wordpress_categories, publish_to_wordpress
 from .list_skills import list_skills, build_skills_index
 from .manage_skill import manage_skill
 from .cronjob import cronjob
-from .search_conversation_history import search_conversation_history
-from .mem0_tools import search_memories
+
+# ── Hermes-style 3-Layer Memory Tools ────────────────────────────────────
+from research_agent.memory.builtin_provider import add_memory, replace_memory, remove_memory
+from research_agent.memory.honcho_provider import (
+    honcho_profile,
+    honcho_search,
+    honcho_reasoning,
+    honcho_context,
+    honcho_conclude,
+)
+from .search_conversation_history import search_conversation_history, search_memories
 
 # ── Dynamic Tool Routing ──────────────────────────────────────────────────
 from .dynamic_router import list_tools, load_tools, unload_unused_tools, build_tools_index, call_tool
@@ -43,6 +52,17 @@ __all__ = [
     "create_post_image",
     "youtube_transcript",
     "analyze_attachment",
+    # ── Memory tools ─────────────────────────────────────────────────────────
+    "add_memory",
+    "replace_memory",
+    "remove_memory",
+    "search_conversation_history",
+    "search_memories",
+    "honcho_profile",
+    "honcho_search",
+    "honcho_reasoning",
+    "honcho_context",
+    "honcho_conclude",
     # ── Dynamic Tool Routing ─────────────────────────────────────────────────
     "list_tools",
     "load_tools",
@@ -65,9 +85,7 @@ __all__ = [
     "list_skills",
     "manage_skill",
     "cronjob",
-    "search_conversation_history",
     "build_skills_index",
-    "search_memories",
     # ── Raw providers (not exposed to agent directly) ─────────────────────────
     "linkup_search",
     "tavily_extract",
@@ -75,5 +93,3 @@ __all__ = [
     "exa_extract",
     "create_post_image_gemini",
 ]
-
-

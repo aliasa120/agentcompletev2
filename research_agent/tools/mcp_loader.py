@@ -526,17 +526,10 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
         if matched:
             return [matched[0]]
 
-    # Intercept internal virtual Mem0 MCP tools
-    if mcp_url == "mem0-mcp-internal" or tool_key in [
-        "add_memory", "search_memories", "get_memories", "get_memory",
-        "update_memory", "delete_memory", "delete_all_memories",
-        "delete_entities", "list_entities", "list_events", "get_event_status"
-    ]:
-        from research_agent.tools.mem0_tools import get_memory_tool_by_name
-        tool_obj = get_memory_tool_by_name(tool_key)
-        if tool_obj:
-            logger.info(f"Loaded virtual internal Mem0 tool: {tool_key}")
-            return [tool_obj]
+    # Intercept virtual memory tools (add_memory, replace_memory, remove_memory, etc.)
+    from research_agent.tools.dynamic_router import TOOL_OBJECTS
+    if tool_key in TOOL_OBJECTS:
+        return [TOOL_OBJECTS[tool_key]]
 
     try:
         from langchain_mcp_adapters.client import MultiServerMCPClient
