@@ -19,6 +19,9 @@ Context Management (SummarizationMiddleware):
 """
 
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import time
 import asyncio
 import random
@@ -120,6 +123,7 @@ class WrappedAsyncStream:
     def __aiter__(self):
         return self.generator
 
+
 class ResilientChatModel(ChatOpenAI):
     """Wraps ChatOpenAI with rate-limit-aware retries tuned for enterprise LLM APIs.
 
@@ -137,21 +141,142 @@ class ResilientChatModel(ChatOpenAI):
     agent_config_id: str = ""  # UUID from agent_configs table; when set, dynamic reload reads per-workflow settings
     is_omni_call: bool = False
 
+    def _inject_memory_to_messages(self, messages: list) -> list:
+        """Inject USER.md + MEMORY.md + Honcho context into the LAST HumanMessage.
+
+        Following Hermes pattern exactly: context is injected into the user message
+        (NOT the system message) at API-call time, so the stored message stays clean
+        and the system prompt prefix cache stays stable.
+
+        Called once per LLM invocation from _generate / _agenerate / _astream.
+        Returns the (possibly modified) message list.  Never raises.
+        """
+        try:
+            from research_agent.tools.provider_engine import get_active_user_id, get_active_workflow_id, get_active_thread_id
+            user_id = get_active_user_id() or getattr(self, "user_id", None)
+            workflow_id = get_active_workflow_id() or getattr(self, "workflow_id", None)
+            thread_id = get_active_thread_id() or getattr(self, "thread_id", None) or ""
+            if not user_id:
+                print("[agent] Memory injection skipped: no user_id in context.")
+                return messages
+
+            # Extract last human/user message content (for Honcho query + injection target)
+            last_human_idx = -1
+            user_msg = ""
+            for idx, m in enumerate(messages):
+                role = getattr(m, "type", None) or (m.get("role") if isinstance(m, dict) else None)
+                if role in ("human", "user"):
+                    last_human_idx = idx
+                    content = m.content if hasattr(m, "content") else m.get("content", "")
+                    if isinstance(content, str):
+                        user_msg = content[:500]
+
+            if last_human_idx < 0:
+                # No human message found — nothing to inject into
+                return messages
+
+            # Build the memory context block (USER.md + MEMORY.md + Honcho)
+            # Offload to ThreadPoolExecutor so blockbuster doesn't intercept os.mkdir / socket operations
+            import concurrent.futures
+            from research_agent.memory.memory_manager import get_memory_manager
+            mm = get_memory_manager()
+
+            def _build_block_in_thread():
+                from research_agent.tools.provider_engine import active_user_id as _thr_uid, active_workflow_id as _thr_wfid, active_thread_id as _thr_tid
+                _t1 = _thr_uid.set(user_id) if user_id else None
+                _t2 = _thr_wfid.set(workflow_id) if workflow_id else None
+                _t3 = _thr_tid.set(thread_id) if thread_id else None
+                try:
+                    return mm.build_system_prompt_context(
+                        user_id=user_id,
+                        workflow_id=workflow_id or "default_workflow",
+                        user_message=user_msg,
+                        thread_id=thread_id,
+                    )
+                finally:
+                    if _t1 is not None: _thr_uid.reset(_t1)
+                    if _t2 is not None: _thr_wfid.reset(_t2)
+                    if _t3 is not None: _thr_tid.reset(_t3)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                context_block = ex.submit(_build_block_in_thread).result()
+
+            if not context_block:
+                print(f"[agent] Memory injection: empty context block for user_id={user_id[:8]}...")
+                return messages
+
+            # Inject into the LAST human message (Hermes pattern)
+            # Never mutate the original stored message — create a new list
+            new_messages = list(messages)
+            target = new_messages[last_human_idx]
+
+            if hasattr(target, "content"):
+                orig = target.content if isinstance(target.content, str) else ""
+                if "<memory-context>" not in orig:
+                    from langchain_core.messages import HumanMessage as _HM
+                    new_messages[last_human_idx] = _HM(content=f"{orig}\n\n{context_block}")
+                    print(f"[agent] ✅ Memory context injected ({len(context_block)} chars) into last HumanMessage (user={user_id[:8]}..., wf={workflow_id}).")
+                else:
+                    print("[agent] Memory injection skipped: already injected this turn.")
+            elif isinstance(target, dict):
+                orig = target.get("content", "") or ""
+                if "<memory-context>" not in orig:
+                    new_messages[last_human_idx] = dict(target, content=f"{orig}\n\n{context_block}")
+                    print(f"[agent] ✅ Memory context injected ({len(context_block)} chars) into last user dict (user={user_id[:8]}...).")
+            return new_messages
+        except Exception as e:
+            import traceback
+            print(f"[agent] Memory injection error: {e}")
+            traceback.print_exc()
+            return messages
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        """Sync non-streaming path: inject memory before calling parent."""
+        messages = self._inject_memory_to_messages(messages)
+        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+        """Async non-streaming path: inject memory before calling parent."""
+        messages = self._inject_memory_to_messages(messages)
+        return await super()._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
+
+    async def _astream(self, messages, stop=None, run_manager=None, **kwargs):
+        """Async STREAMING path (used by LangGraph): inject memory before streaming.
+
+        LangGraph calls _astream for streaming, which bypasses _agenerate entirely.
+        This override ensures memory is injected on the actual code path LangGraph uses.
+        """
+        messages = self._inject_memory_to_messages(messages)
+        async for chunk in super()._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
+            yield chunk
+
     def _set_active_user_from_config(self, *args, **kwargs):
         config = kwargs.get("config")
         if not config:
             for arg in args:
-                if isinstance(arg, dict) and "configurable" in arg:
+                if isinstance(arg, dict) and ("configurable" in arg or "metadata" in arg):
                     config = arg
                     break
         
         user_id = None
+        workflow_id = None
+        thread_id = None
         if config and isinstance(config, dict):
-            user_id = config.get("configurable", {}).get("user_id")
+            configurable = config.get("configurable", {})
+            metadata = config.get("metadata", {})
+            user_id = configurable.get("user_id") or metadata.get("user_id")
+            workflow_id = configurable.get("workflow_id") or metadata.get("workflow_id")
+            thread_id = configurable.get("thread_id") or configurable.get("session_id") or metadata.get("thread_id")
             
+        from research_agent.tools.provider_engine import set_active_user_and_workflow
+        set_active_user_and_workflow(user_id, workflow_id, thread_id)
         if user_id:
-            from research_agent.tools.provider_engine import active_user_id
-            active_user_id.set(user_id)
+            object.__setattr__(self, "user_id", user_id)
+        if workflow_id:
+            object.__setattr__(self, "workflow_id", workflow_id)
+        if thread_id:
+            object.__setattr__(self, "thread_id", thread_id)
+
 
     def _resolve_dynamic_fields(self):
         """Dynamic resolution of settings from Supabase.
@@ -163,22 +288,42 @@ class ResilientChatModel(ChatOpenAI):
 
         This ensures the workflow-specific model (e.g. novita/deepseek) is always respected
         and never overridden by stale global settings (e.g. oc/auto from agent_settings).
+
+        IMPORTANT: Python ContextVars are NOT inherited by threads spawned via
+        ThreadPoolExecutor. We must capture the current user_id in THIS thread
+        (the LangGraph async context where active_user_id IS set) and pass it
+        explicitly into the blocking thread so Supabase fetches the right user's
+        API keys instead of returning empty (which would cause HTTP 401).
         """
         if getattr(self, "is_omni_call", False):
             return
         try:
             import concurrent.futures
-            
+            from research_agent.tools.provider_engine import active_user_id as _active_uid
+
+            # ── Capture user_id NOW (in the calling async context) ────────────────
+            # self.user_id may have been set by _set_active_user_from_config earlier.
+            # Fall back to the ContextVar value which is valid in this thread.
+            captured_user_id = getattr(self, "user_id", None) or _active_uid.get()
+
             def _blocking_resolve():
-                if self.agent_config_id:
-                    # ── Per-workflow model: read from agent_configs ────────────────
-                    return self._get_llm_config_from_agent_configs()
-                else:
-                    # ── Global fallback model: read from agent_settings ────────────
-                    from research_agent.tools.provider_engine import invalidate_settings_cache, get_llm_config
-                    invalidate_settings_cache()
-                    return get_llm_config(self.agent_type)
-            
+                # Re-inject the captured user_id into THIS new thread's ContextVar so
+                # any deeper call (get_settings, get_user_api_key) also resolves correctly.
+                from research_agent.tools.provider_engine import active_user_id as _thr_uid
+                _token = _thr_uid.set(captured_user_id) if captured_user_id else None
+                try:
+                    if self.agent_config_id:
+                        # ── Per-workflow model: read from agent_configs ──────────
+                        return self._get_llm_config_from_agent_configs()
+                    else:
+                        # ── Global fallback model: read from agent_settings ──────
+                        from research_agent.tools.provider_engine import invalidate_settings_cache, get_llm_config
+                        invalidate_settings_cache(captured_user_id)
+                        return get_llm_config(self.agent_type, user_id=captured_user_id)
+                finally:
+                    if _token is not None:
+                        _thr_uid.reset(_token)
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(_blocking_resolve)
                 base_url, api_key, model_name = future.result()
@@ -1769,6 +1914,14 @@ def load_dynamic_agents_by_workflow():
             search_conversation_history,
             analyze_attachment,
             search_memories,
+            add_memory,
+            replace_memory,
+            remove_memory,
+            honcho_profile,
+            honcho_search,
+            honcho_reasoning,
+            honcho_context,
+            honcho_conclude,
         )
 
         tool_lookup = {
@@ -1794,6 +1947,14 @@ def load_dynamic_agents_by_workflow():
             "search_conversation_history": search_conversation_history,
             "analyze_attachment": analyze_attachment,
             "search_memories": search_memories,
+            "add_memory": add_memory,
+            "replace_memory": replace_memory,
+            "remove_memory": remove_memory,
+            "honcho_profile": honcho_profile,
+            "honcho_search": honcho_search,
+            "honcho_reasoning": honcho_reasoning,
+            "honcho_context": honcho_context,
+            "honcho_conclude": honcho_conclude,
         }
 
         tool_assignments_by_agent = {}
@@ -2371,32 +2532,36 @@ def save_chat_history(state, config: RunnableConfig):
             raw_scope = f"{user_id}_{workflow_id}" if user_id else str(workflow_id)
             scope_id = raw_scope.lower().replace("_", "-")
             
-            mem0_data = [
-                {"role": "user", "content": user_text},
-                {"role": "assistant", "content": ai_text}
-            ]
-            def run_mem0_in_background(data, scope, uid):
+            # 2. Memory background logging (Hermes 3-Layer local memory system handles recall via search_memories and USER.md/MEMORY.md)
+            print(f"[agent] Chat turn saved for scope {scope_id}.")
+
+            # 3. Honcho Cloud Memory Auto-Sync via official SDK
+            # sync_turn_to_honcho() writes user + agent messages to Honcho session.
+            # Honcho's background Deriver then extracts conclusions automatically.
+            def run_honcho_bg_sync(u_text: str, a_text: str, uid_val: str, wf_val: str, tid_val: str):
                 try:
-                    from research_agent.tools.mem0_provider import get_mem0_client
-                    mem0_client = get_mem0_client(uid)
-                    if mem0_client is not None:
-                        mem0_client.add(data, user_id=scope)
-                        print(f"[agent] Successfully added turn to Mem0 in background.")
-                    else:
-                        print(f"[agent] Mem0 client could not be initialized (disabled or missing config) in background.")
+                    from research_agent.memory.honcho_sync import sync_turn_to_honcho
+                    sync_turn_to_honcho(
+                        user_message=u_text[:25000],
+                        agent_response=a_text[:25000],
+                        thread_id=tid_val,
+                        user_id=uid_val,
+                        workflow_id=wf_val,
+                    )
                 except Exception as bg_err:
-                    print(f"[agent] Error writing to Mem0 in background: {bg_err}")
+                    print(f"[agent] [Honcho] Cloud session sync warning: {bg_err}")
 
             import threading
-            print(f"[agent] Spawning background thread to initialize Mem0 and add turn for scope {scope_id}...")
-            thread = threading.Thread(
-                target=run_mem0_in_background,
-                args=(mem0_data, scope_id, user_id)
+            h_thread = threading.Thread(
+                target=run_honcho_bg_sync,
+                args=(user_text, ai_text, user_id, workflow_id, thread_id)
             )
-            thread.daemon = True
-            thread.start()
+            h_thread.daemon = True
+            h_thread.start()
+
+
     except Exception as e:
-        print(f"[agent] Error writing to Mem0: {e}")
+        print(f"[agent] Error saving chat history turn: {e}")
 
     # 3. Clean large base64 data URLs from messages to shrink the graph checkpoint
     try:

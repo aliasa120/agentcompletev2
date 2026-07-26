@@ -71,8 +71,15 @@ const BUILTIN_TOOLS = [
   { tool_key: "unified_search",          tool_label: "Web Search",           category: "Search" },
   { tool_key: "unified_extract",         tool_label: "URL Extractor",        category: "Search" },
   { tool_key: "youtube_transcript",      tool_label: "YouTube Transcript",    category: "Search" },
-  { tool_key: "search_conversation_history", tool_label: "Search History",    category: "Search" },
-  { tool_key: "search_memories",          tool_label: "Search Memories",      category: "Search" },
+  { tool_key: "search_conversation_history", tool_label: "Smart Search History", category: "Memory" },
+  { tool_key: "add_memory",               tool_label: "Add Memory (USER/MEMORY.md)", category: "Memory" },
+  { tool_key: "replace_memory",           tool_label: "Replace Memory",       category: "Memory" },
+  { tool_key: "remove_memory",            tool_label: "Remove Memory",        category: "Memory" },
+  { tool_key: "honcho_profile",           tool_label: "Honcho Profile",       category: "Memory" },
+  { tool_key: "honcho_search",            tool_label: "Honcho Search",        category: "Memory" },
+  { tool_key: "honcho_reasoning",         tool_label: "Honcho Reasoning",     category: "Memory" },
+  { tool_key: "honcho_context",           tool_label: "Honcho Context",       category: "Memory" },
+  { tool_key: "honcho_conclude",          tool_label: "Honcho Conclude",      category: "Memory" },
   { tool_key: "think_tool",             tool_label: "Think Tool",            category: "Reasoning" },
   { tool_key: "fetch_images_brave",      tool_label: "Brave Image Search",   category: "Images" },
   { tool_key: "view_candidate_images",   tool_label: "View Candidate Images", category: "Images" },
@@ -90,7 +97,7 @@ const BUILTIN_TOOLS = [
   { tool_key: "analyze_attachment",      tool_label: "Analyze Attachment",    category: "Routing" },
 ];
 
-const TOOL_CATEGORIES = ["Search", "Reasoning", "Images", "Skills", "Output", "Routing"];
+const TOOL_CATEGORIES = ["Search", "Memory", "Reasoning", "Images", "Skills", "Output", "Routing"];
 
 interface ToolSetting {
   id: string;

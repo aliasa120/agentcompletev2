@@ -116,7 +116,7 @@ export function useChat({
             pollInterval = null;
           }
           await stream.joinStream(activeRun.run_id, undefined, {
-            streamMode: ["values", "messages-tuple", "updates", "tasks", "tools"]
+            streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"]
           });
         }
       } catch (err) {
@@ -146,6 +146,8 @@ export function useChat({
           optimisticValues: (prev) => ({
             messages: [...(prev.messages ?? []), newMessage],
           }),
+          // "messages-tuple" enables token-by-token streaming as the model generates
+          streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"],
           config: {
             ...(activeAssistant?.config ?? {}),
             recursion_limit: 200,
@@ -186,15 +188,14 @@ export function useChat({
             : {}),
           config: runConfig,
           checkpoint: checkpoint,
+          streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"],
           streamSubgraphs: true,
-          ...(isRerunningSubagent
-            ? { interruptAfter: ["tools"] }
-            : { interruptBefore: ["tools"] }),
+          ...(isRerunningSubagent ? { interruptAfter: ["tools"] } : {}),
         });
       } else {
         stream.submit(
           { messages },
-          { config: runConfig, interruptBefore: ["tools"], streamSubgraphs: true }
+          { config: runConfig, streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"], streamSubgraphs: true }
         );
       }
     },
@@ -223,10 +224,9 @@ export function useChat({
             user_id: userId || undefined,
           },
         },
+        streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"],
         streamSubgraphs: true,
-        ...(hasTaskToolCall
-          ? { interruptAfter: ["tools"] }
-          : { interruptBefore: ["tools"] }),
+        ...(hasTaskToolCall ? { interruptAfter: ["tools"] } : {}),
       });
       // Update thread list when continuing stream
       onHistoryRevalidate?.();

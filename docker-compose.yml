@@ -21,6 +21,7 @@ services:
     volumes:
       - shared-node-modules:/app/deep-agents-ui-main/node_modules
       - shared-npm-cache:/app/shared_npm_cache
+      - ./data:/app/data
 
   # ── Feeder HTTP server (port 8080, HTTP-only, no scheduler) ────────────
   feeder_svc:

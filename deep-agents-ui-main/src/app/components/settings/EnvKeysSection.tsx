@@ -80,15 +80,16 @@ const KEY_GROUPS: KeyGroup[] = [
   },
   {
     id: "memory",
-    label: "Memory & Vector Store (Pinecone)",
-    description: "Pinecone vector DB for per-user semantic memory",
+    label: "Honcho Cloud & Memory Provider",
+    description: "Honcho & Together AI provider credentials for cross-session memory prefetch deduplication & user modeling",
     icon: <Database className="h-4 w-4" />,
     iconClass: "text-emerald-500",
-    defaultExpanded: false,
+    defaultExpanded: true,
     fields: [
-      { key: "pinecone_api_key",    label: "Pinecone API Key",    placeholder: "pcsk_...",  helpUrl: "https://app.pinecone.io/",                    testable: false },
-      { key: "pinecone_index_name", label: "Pinecone Index Name", placeholder: "memories",  helpUrl: undefined, type: "text",                        testable: false },
-      { key: "cohere_api_key",      label: "Cohere API Key",      placeholder: "...",       helpUrl: "https://dashboard.cohere.com/api-keys",       testable: false },
+      { key: "honcho_api_key",    label: "Honcho API Key",       placeholder: "hch-v3-...",                helpUrl: "https://app.honcho.dev",     testable: false },
+      { key: "honcho_api_url",    label: "Honcho API Base URL",  placeholder: "https://api.honcho.dev",   helpUrl: undefined, type: "url",      testable: false },
+      { key: "honcho_workspace",  label: "Honcho Workspace",     placeholder: "default_workspace",       helpUrl: undefined, type: "text", testable: false },
+      { key: "together_api_key",  label: "Together AI API Key",  placeholder: "tgp_...",                   helpUrl: "https://api.together.xyz/settings/api-keys", testable: false },
     ],
   },
   {

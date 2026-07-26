@@ -52,6 +52,33 @@ from contextvars import ContextVar
 from typing import Optional, Any, Callable
 from langchain_core.tools import BaseTool
 active_user_id: ContextVar[Optional[str]] = ContextVar("active_user_id", default=None)
+active_workflow_id: ContextVar[Optional[str]] = ContextVar("active_workflow_id", default=None)
+active_thread_id: ContextVar[Optional[str]] = ContextVar("active_thread_id", default=None)
+
+_LAST_ACTIVE_USER_ID: Optional[str] = None
+_LAST_ACTIVE_WORKFLOW_ID: Optional[str] = None
+_LAST_ACTIVE_THREAD_ID: Optional[str] = None
+
+def set_active_user_and_workflow(user_id: Optional[str] = None, workflow_id: Optional[str] = None, thread_id: Optional[str] = None):
+    global _LAST_ACTIVE_USER_ID, _LAST_ACTIVE_WORKFLOW_ID, _LAST_ACTIVE_THREAD_ID
+    if user_id:
+        active_user_id.set(user_id)
+        _LAST_ACTIVE_USER_ID = str(user_id).strip()
+    if workflow_id:
+        active_workflow_id.set(workflow_id)
+        _LAST_ACTIVE_WORKFLOW_ID = str(workflow_id).strip()
+    if thread_id:
+        active_thread_id.set(thread_id)
+        _LAST_ACTIVE_THREAD_ID = str(thread_id).strip()
+
+def get_active_user_id() -> Optional[str]:
+    return active_user_id.get() or _LAST_ACTIVE_USER_ID
+
+def get_active_workflow_id() -> Optional[str]:
+    return active_workflow_id.get() or _LAST_ACTIVE_WORKFLOW_ID
+
+def get_active_thread_id() -> Optional[str]:
+    return active_thread_id.get() or _LAST_ACTIVE_THREAD_ID
 
 from .provider_registry import (
     get_provider_api_key,
@@ -109,9 +136,23 @@ def _fetch_settings_from_supabase(user_id: Optional[str] = None) -> dict[str, st
         client = create_client(url, key)
         params = {}
         if user_id:
-            params["p_user_id"] = str(user_id)
+            import uuid
+            try:
+                uuid.UUID(str(user_id))
+                params["p_user_id"] = str(user_id)
+            except ValueError:
+                pass
         resp = client.rpc("get_user_settings_admin", params).execute()
-        return {row["key"]: row["value"] for row in (resp.data or [])}
+        res = {row["key"]: row["value"] for row in (resp.data or [])}
+        if not res and not params.get("p_user_id"):
+            # Fall back to querying agent_settings table directly for fallback settings
+            try:
+                resp2 = client.table("agent_settings").select("key, value").limit(100).execute()
+                if resp2.data:
+                    res = {row["key"]: row["value"] for row in resp2.data}
+            except Exception:
+                pass
+        return res
     except Exception as e:
         logger.warning(f"[provider_engine] Supabase settings fetch failed: {e}")
         return {}
@@ -290,11 +331,13 @@ def get_llm_config(agent: str, user_id: Optional[str] = None) -> tuple[str, str,
     if needs_v1 and not base_url.endswith("/v1"):
         base_url = base_url + "/v1"
 
-    # Resolve API key: check user's agent_settings first (per-user SaaS key).
-    # No fallback to env vars. Uses agent_settings_key from registry.
+    # Resolve API key: check user's agent_settings first, fall back to process env vars
     agent_settings_key = cfg.get("agent_settings_key", "") if cfg else ""
+    env_key = cfg.get("env_key", "") if cfg else ""
     if agent_settings_key:
-        api_key = get_user_api_key(agent_settings_key, user_id=user_id)
+        api_key = get_user_api_key(agent_settings_key, env_fallback=env_key, user_id=user_id)
+    elif env_key:
+        api_key = os.environ.get(env_key, "").strip()
     else:
         api_key = ""
 
@@ -549,16 +592,10 @@ async def load_mcp_tool_by_key(tool_key: str, user_id: Optional[str] = None) -> 
        manual HTTP connection directly, find the tool, then backfill the DB cache.
     This makes the system self-healing — tools work even if available_tools is empty.
     """
-    # Intercept internal virtual Mem0 MCP tools
-    if tool_key in [
-        "add_memory", "search_memories", "get_memories", "get_memory",
-        "update_memory", "delete_memory", "delete_all_memories",
-        "delete_entities", "list_entities", "list_events", "get_event_status"
-    ]:
-        from research_agent.tools.mem0_tools import get_memory_tool_by_name
-        tool_obj = get_memory_tool_by_name(tool_key)
-        if tool_obj:
-            return [tool_obj]
+    # Intercept memory tools (add_memory, replace_memory, remove_memory, honcho_*, search_conversation_history)
+    from research_agent.tools.dynamic_router import TOOL_OBJECTS
+    if tool_key in TOOL_OBJECTS:
+        return [TOOL_OBJECTS[tool_key]]
 
     connections = run_in_thread(lambda: _fetch_active_mcp_connections(user_id))
 
