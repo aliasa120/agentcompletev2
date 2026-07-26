@@ -98,10 +98,25 @@ def get_memory_dir(user_id: str, workflow_id: str) -> Path:
 
 
 def read_user_md(user_id: str, workflow_id: str) -> str:
-    """Read USER.md for given user_id and workflow_id."""
+    """Read USER.md for given user_id and workflow_id, checking Supabase DB first."""
+    db_key = f"memory_user_md_{workflow_id}"
+    try:
+        from research_agent.tools.provider_engine import get_settings
+        settings = get_settings(user_id)
+        if db_key in settings and settings[db_key].strip():
+            content = settings[db_key]
+            # Sync to local disk cache
+            path = get_memory_dir(user_id, workflow_id) / "USER.md"
+            try:
+                path.write_text(content, encoding="utf-8")
+            except Exception:
+                pass
+            return content
+    except Exception:
+        pass
+
     path = get_memory_dir(user_id, workflow_id) / "USER.md"
     if not path.exists():
-        # Default template
         default_content = (
             f"# User Profile ({user_id})\n"
             f"Workflow Scope: {workflow_id}\n\n"
@@ -111,18 +126,50 @@ def read_user_md(user_id: str, workflow_id: str) -> str:
             "- None recorded yet.\n"
         )
         path.write_text(default_content, encoding="utf-8")
+        try:
+            from research_agent.tools.provider_engine import save_setting_to_supabase
+            save_setting_to_supabase(db_key, default_content, user_id)
+        except Exception:
+            pass
         return default_content
-    return path.read_text(encoding="utf-8")
+
+    content = path.read_text(encoding="utf-8")
+    try:
+        from research_agent.tools.provider_engine import save_setting_to_supabase
+        save_setting_to_supabase(db_key, content, user_id)
+    except Exception:
+        pass
+    return content
 
 
 def write_user_md(user_id: str, workflow_id: str, content: str) -> None:
-    """Write USER.md for given user_id and workflow_id."""
+    """Write USER.md to local disk and sync to Supabase agent_settings table."""
     path = get_memory_dir(user_id, workflow_id) / "USER.md"
     path.write_text(content, encoding="utf-8")
+    try:
+        from research_agent.tools.provider_engine import save_setting_to_supabase
+        save_setting_to_supabase(f"memory_user_md_{workflow_id}", content, user_id)
+    except Exception as e:
+        logger.warning(f"Failed to sync write_user_md to Supabase: {e}")
 
 
 def read_memory_md(user_id: str, workflow_id: str) -> str:
-    """Read MEMORY.md for given user_id and workflow_id."""
+    """Read MEMORY.md for given user_id and workflow_id, checking Supabase DB first."""
+    db_key = f"memory_file_md_{workflow_id}"
+    try:
+        from research_agent.tools.provider_engine import get_settings
+        settings = get_settings(user_id)
+        if db_key in settings and settings[db_key].strip():
+            content = settings[db_key]
+            path = get_memory_dir(user_id, workflow_id) / "MEMORY.md"
+            try:
+                path.write_text(content, encoding="utf-8")
+            except Exception:
+                pass
+            return content
+    except Exception:
+        pass
+
     path = get_memory_dir(user_id, workflow_id) / "MEMORY.md"
     if not path.exists():
         default_content = (
@@ -132,14 +179,31 @@ def read_memory_md(user_id: str, workflow_id: str) -> str:
             "- Initialized memory store.\n"
         )
         path.write_text(default_content, encoding="utf-8")
+        try:
+            from research_agent.tools.provider_engine import save_setting_to_supabase
+            save_setting_to_supabase(db_key, default_content, user_id)
+        except Exception:
+            pass
         return default_content
-    return path.read_text(encoding="utf-8")
+
+    content = path.read_text(encoding="utf-8")
+    try:
+        from research_agent.tools.provider_engine import save_setting_to_supabase
+        save_setting_to_supabase(db_key, content, user_id)
+    except Exception:
+        pass
+    return content
 
 
 def write_memory_md(user_id: str, workflow_id: str, content: str) -> None:
-    """Write MEMORY.md for given user_id and workflow_id."""
+    """Write MEMORY.md to local disk and sync to Supabase agent_settings table."""
     path = get_memory_dir(user_id, workflow_id) / "MEMORY.md"
     path.write_text(content, encoding="utf-8")
+    try:
+        from research_agent.tools.provider_engine import save_setting_to_supabase
+        save_setting_to_supabase(f"memory_file_md_{workflow_id}", content, user_id)
+    except Exception as e:
+        logger.warning(f"Failed to sync write_memory_md to Supabase: {e}")
 
 
 # ── LangChain Lifecycle Tools ─────────────────────────────────────────────

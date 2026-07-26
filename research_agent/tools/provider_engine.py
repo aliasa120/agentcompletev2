@@ -158,6 +158,36 @@ def _fetch_settings_from_supabase(user_id: Optional[str] = None) -> dict[str, st
         return {}
 
 
+def save_setting_to_supabase(key: str, value: str, user_id: Optional[str] = None) -> bool:
+    """Save/upsert a key-value setting into Supabase agent_settings table."""
+    try:
+        from supabase import create_client
+        url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        key_str = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
+        uid = user_id or active_user_id.get()
+        if not url or not key_str or not uid:
+            return False
+        import uuid
+        try:
+            uuid.UUID(str(uid))
+        except ValueError:
+            return False
+
+        def _do_upsert():
+            client = create_client(url, key_str)
+            client.table("agent_settings").upsert(
+                {"user_id": str(uid), "key": key, "value": value},
+                on_conflict="user_id,key"
+            ).execute()
+
+        run_in_thread(_do_upsert)
+        invalidate_settings_cache(uid)
+        return True
+    except Exception as e:
+        logger.warning(f"[provider_engine] Failed to save setting '{key}' to Supabase: {e}")
+        return False
+
+
 def run_in_thread(func, *args, **kwargs):
     import threading
     try:
