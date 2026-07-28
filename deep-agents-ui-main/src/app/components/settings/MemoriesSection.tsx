@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import {
-  Brain, Save, RefreshCw, FileText, UserCheck, Cloud, Server, Sparkles, CheckCircle2, AlertCircle, Layers
+  Brain, Save, RefreshCw, FileText, UserCheck, Cloud, CheckCircle2, AlertCircle, Layers, Sliders, Shield
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -117,12 +117,12 @@ export function MemoriesSection({
       <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-card to-background p-6 shadow-md">
         <div className="absolute right-0 top-0 -mr-6 -mt-6 h-36 w-36 rounded-full bg-primary/5 blur-3xl" />
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
             <Brain className="h-6 w-6" />
           </div>
           <div>
             <h2 className="text-xl font-bold tracking-tight">Hermes 3-Layer Memory Manager</h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               Workflow-isolated memory files (<code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">USER.md</code> & <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">MEMORY.md</code>) + optional Honcho Cloud Provider.
             </p>
           </div>
@@ -130,7 +130,7 @@ export function MemoriesSection({
       </div>
 
       {/* Workflow Selection & File Selector */}
-      <div className="rounded-xl border bg-card p-5 shadow-sm space-y-4">
+      <div className="rounded-xl border bg-card p-4 sm:p-5 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <label className="text-xs font-semibold text-muted-foreground">Active Workflow Context</label>
@@ -152,24 +152,24 @@ export function MemoriesSection({
           </div>
 
           {/* Memory Tab Selector */}
-          <div className="flex items-center gap-1.5 p-1 bg-muted/40 rounded-lg border">
+          <div className="flex flex-wrap items-center gap-1 p-1 bg-muted/40 rounded-lg border text-xs">
             <button
               onClick={() => setActiveTab("USER.md")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "USER.md" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${activeTab === "USER.md" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
               <UserCheck className="h-3.5 w-3.5" />
               USER.md
             </button>
             <button
               onClick={() => setActiveTab("MEMORY.md")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "MEMORY.md" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${activeTab === "MEMORY.md" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
               <FileText className="h-3.5 w-3.5" />
               MEMORY.md
             </button>
             <button
               onClick={() => setActiveTab("HONCHO")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === "HONCHO" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${activeTab === "HONCHO" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
               <Cloud className="h-3.5 w-3.5" />
               Honcho Cloud
@@ -181,9 +181,9 @@ export function MemoriesSection({
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-3 bg-muted/20 rounded-lg border text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-foreground">Character Budget Limits:</span>
-            <span>(Controls max memory size before truncation & consolidation)</span>
+            <span className="hidden sm:inline">(Controls max memory size before truncation)</span>
           </div>
-          <div className="flex items-center gap-4 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
             <div className="flex items-center gap-1.5">
               <label htmlFor="user-char-limit-input" className="whitespace-nowrap font-mono text-foreground">USER.md Max:</label>
               <input
@@ -212,18 +212,18 @@ export function MemoriesSection({
         {/* Tab Content 1 & 2: USER.md or MEMORY.md Editor */}
         {activeTab !== "HONCHO" && (
           <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs font-bold text-primary px-2 py-0.5 rounded bg-primary/10">
                   {activeTab}
                 </span>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-muted-foreground truncate">
                   {activeTab === "USER.md"
                     ? "Durable user profile, preferences, and standing rules for this workflow."
                     : "Curated persistent project facts, learnings, and decisions."}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 self-end sm:self-auto">
                 <Button
                   variant="outline"
                   size="sm"
@@ -257,7 +257,7 @@ export function MemoriesSection({
 
         {/* Tab Content 3: Honcho Cloud Provider Status */}
         {activeTab === "HONCHO" && (
-          <div className="p-5 rounded-lg border bg-muted/10 space-y-4">
+          <div className="p-4 sm:p-5 rounded-lg border bg-muted/10 space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <div className="flex items-center gap-2">
                 <Cloud className="h-5 w-5 text-primary" />

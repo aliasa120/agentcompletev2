@@ -42,6 +42,8 @@ def manage_skill(
     category: Optional[str] = "general",
     agent_id: Optional[str] = None,
     parent_skill_key: Optional[str] = None,
+    trust_state: Optional[str] = None,
+    origin: Optional[str] = None,
     config: Optional[RunnableConfig] = None,
 ) -> str:
     """Create, update, or archive a skill in the skills library.
@@ -71,6 +73,8 @@ def manage_skill(
         category: Skill category (e.g. 'research', 'content', 'publishing', 'general').
         agent_id: Optional agent ID (bound internally).
         parent_skill_key: Optional parent skill slug for hierarchical nesting.
+        trust_state: Optional trust state ('provisional' or 'trusted').
+        origin: Optional skill origin ('captured', 'derived', 'fix', 'user').
 
     Returns:
         Confirmation message with the action taken.
@@ -119,8 +123,11 @@ def manage_skill(
         "p_content": content,
         "p_category": category,
         "p_agent_id": agent_id,
-        "p_parent_skill_key": parent_skill_key
+        "p_parent_skill_key": parent_skill_key,
+        "p_trust_state": trust_state,
+        "p_origin": origin
     }
+
 
     try:
         resp = client.rpc("manage_skill_admin", params).execute()

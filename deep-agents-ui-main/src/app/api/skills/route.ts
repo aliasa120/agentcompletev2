@@ -80,11 +80,15 @@ export async function GET() {
                   const { data: insertedData, error: insertError } = await supabase
                     .from("skills_library")
                     .insert({
-                      user_id: user.id, skill_key: skillKey,
+                      user_id: user.id,   // ← always stamp the current user's ID
+                      skill_key: skillKey,
                       label,
                       description,
                       content,
                       source: "builtin",
+                      origin: "imported",
+                      trust_state: "trusted",
+                      is_active: true,
                     })
                     .select()
                     .single();
@@ -98,6 +102,7 @@ export async function GET() {
                   console.error(`[api/skills] Auto-seed failed for ${skillKey}:`, err);
                 }
               }
+
 
               // Fallback to local representation if Supabase is offline/errored
               skillsList.push({
@@ -116,11 +121,55 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ skills: skillsList });
+    // 3. Fetch tool assignments and attach_all_skills agent configs to populate attached_agent_ids
+    const { data: assignments } = await supabase
+      .from("agent_tool_assignments")
+      .select("agent_id, tool_key")
+      .eq("tool_type", "skill")
+      .eq("enabled", true);
+
+    const { data: autoAgents } = await supabase
+      .from("agent_configs")
+      .select("id")
+      .eq("attach_all_skills", true);
+
+    const autoAgentIds = autoAgents ? autoAgents.map((a: any) => a.id) : [];
+
+    const skillsWithAssignments = skillsList.map((skill: any) => {
+      const attachedIds = new Set<string>();
+      
+      if (skill.created_by_agent_id) {
+        attachedIds.add(skill.created_by_agent_id);
+      }
+
+      // Auto-attached skills apply to all agents with attach_all_skills = true
+      // (if created_by_agent_id is null/undefined or matches the auto-agent id)
+      for (const autoId of autoAgentIds) {
+        if (!skill.created_by_agent_id || skill.created_by_agent_id === autoId) {
+          attachedIds.add(autoId);
+        }
+      }
+
+      // Explicit assignments in agent_tool_assignments
+      if (assignments) {
+        assignments
+          .filter((a: any) => a.tool_key === skill.skill_key)
+          .forEach((a: any) => attachedIds.add(a.agent_id));
+      }
+
+      return {
+        ...skill,
+        attached_agent_ids: Array.from(attachedIds)
+      };
+    });
+
+    return NextResponse.json({ skills: skillsWithAssignments });
+
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown", skills: [] });
   }
 }
+
 
 // POST /api/skills — create skill
 export async function POST(req: Request) {

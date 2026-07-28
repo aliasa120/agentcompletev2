@@ -66,14 +66,30 @@ export async function DELETE(_req: Request, { params }: RouteParams) {
 
   const { id } = await params;
   try {
-    // Soft-delete to prevent Next.js from auto-re-seeding deleted builtin skills on next GET list
-    const { error } = await supabase
+    // Check origin/source of the skill first
+    const { data: targetSkill } = await supabase
       .from("skills_library")
-      .update({ state: "archived", updated_at: new Date().toISOString() })
-      .eq("id", id);
-    if (error) throw error;
+      .select("origin, source")
+      .eq("id", id)
+      .single();
 
-    // Trigger agent hot-reload to re-compile graph prompt without the archived skill
+    if (targetSkill && (targetSkill.origin === "derived" || targetSkill.origin === "captured" || targetSkill.origin === "fixed" || targetSkill.source === "user")) {
+      // Hard delete from database for evolved/provisional/user skills
+      const { error } = await supabase
+        .from("skills_library")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    } else {
+      // Soft-delete for imported builtin skills to prevent auto-reseeding
+      const { error } = await supabase
+        .from("skills_library")
+        .update({ state: "archived", updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    }
+
+    // Trigger agent hot-reload to re-compile graph prompt without the deleted skill
     triggerAgentReload();
 
     return NextResponse.json({ success: true });
@@ -81,3 +97,4 @@ export async function DELETE(_req: Request, { params }: RouteParams) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown" }, { status: 500 });
   }
 }
+

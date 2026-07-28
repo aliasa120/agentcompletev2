@@ -2559,6 +2559,97 @@ def save_chat_history(state, config: RunnableConfig):
             h_thread.daemon = True
             h_thread.start()
 
+            # 4. Skills Engine Intelligence & Evolution Auto-Pass
+            def run_skills_engine_bg_pass(u_text: str, uid_val: str, wf_val: str, tid_val: str, turn_msgs: list):
+                try:
+                    from blockbuster.blockbuster import blockbuster_skip
+                    skip_token = blockbuster_skip.set(True)
+                except Exception:
+                    skip_token = None
+
+                try:
+                    import asyncio
+                    from research_agent.skills_engine.orchestrator import process_completed_turn_skills
+                    
+                    tool_timeline = []
+                    selected_skill_ids = []
+                    conv_log = []
+                    error_traces = []
+                    fallback_sequences = []
+                    skill_read_seq = []
+                    last_failed_tool = None
+                    
+                    for idx, m in enumerate(turn_msgs):
+                        role = getattr(m, "type", None) or (m.get("role") if isinstance(m, dict) else "unknown")
+                        content = m.content if hasattr(m, "content") else (m.get("content") if isinstance(m, dict) else str(m))
+                        
+                        err_msg = getattr(m, "error", None) or (m.get("error") if isinstance(m, dict) else None)
+                        is_error = bool(err_msg or ("error" in str(content).lower()[:100] and role in ["tool", "tool_result", "function"]))
+
+                        conv_log.append({"role": role, "content": str(content)[:2000], "error": str(err_msg) if err_msg else None})
+                        
+                        t_calls = getattr(m, "tool_calls", None) or (m.get("tool_calls") if isinstance(m, dict) else None)
+                        if t_calls:
+                            for tc in t_calls:
+                                name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", str(tc))
+                                tool_timeline.append({"tool": name, "status": "executed"})
+                                
+                                if last_failed_tool and last_failed_tool != name:
+                                    fallback_sequences.append({
+                                        "failed_tool": last_failed_tool,
+                                        "fallback_tool": name,
+                                        "step_index": idx
+                                    })
+                                    last_failed_tool = None
+
+                                if name == "read_skill":
+                                    args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
+                                    sk_name = args.get("skill_name") or args.get("skill_key")
+                                    if sk_name:
+                                        skill_read_seq.append({"skill_key": sk_name, "read_at": idx})
+                                        if sk_name not in selected_skill_ids:
+                                            selected_skill_ids.append(sk_name)
+
+                        if is_error and role in ["tool", "tool_result", "function"]:
+                            tool_name = getattr(m, "name", None) or (m.get("name") if isinstance(m, dict) else "unknown_tool")
+                            error_traces.append({"tool": tool_name, "error": str(content)[:500], "step_index": idx})
+                            last_failed_tool = tool_name
+
+                    asyncio.run(process_completed_turn_skills(
+                        task_id=f"task_{tid_val[:8] if tid_val else 'turn'}",
+                        user_id=uid_val,
+                        workflow_id=wf_val,
+                        agent_id=wf_val,
+                        task_description=u_text[:500],
+                        execution_status="completed",
+                        iterations=len(turn_msgs),
+                        conversation_log=conv_log,
+                        tool_timeline=tool_timeline,
+                        selected_skill_ids=selected_skill_ids,
+                        error_traces=error_traces,
+                        fallback_sequences=fallback_sequences,
+                        skill_read_sequence=skill_read_seq,
+                    ))
+                except Exception as sk_err:
+                    print(f"[agent] [SkillsEngine] Background analysis error: {sk_err}")
+                finally:
+                    if skip_token is not None:
+                        try:
+                            from blockbuster.blockbuster import blockbuster_skip
+                            blockbuster_skip.reset(skip_token)
+                        except Exception:
+                            pass
+
+
+
+            s_thread = threading.Thread(
+                target=run_skills_engine_bg_pass,
+                args=(user_text, user_id, workflow_id, thread_id, messages)
+            )
+            s_thread.daemon = True
+            s_thread.start()
+
+
 
     except Exception as e:
         print(f"[agent] Error saving chat history turn: {e}")
