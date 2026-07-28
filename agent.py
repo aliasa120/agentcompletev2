@@ -337,27 +337,41 @@ class ResilientChatModel(ChatOpenAI):
                 print(f"  Old model: {current_model} -> New model: {model_name}")
                 print(f"  Old base_url: {current_base_url} -> New base_url: {base_url}")
                 
-                object.__setattr__(self, "model_name", model_name)
-                object.__setattr__(self, "model", model_name)
+                try:
+                    object.__setattr__(self, "model_name", model_name)
+                except Exception:
+                    pass
                 
-                object.__setattr__(self, "openai_api_base", base_url)
+                try:
+                    object.__setattr__(self, "openai_api_base", base_url)
+                except Exception:
+                    pass
+
                 if hasattr(self, "base_url"):
-                    object.__setattr__(self, "base_url", base_url)
+                    try:
+                        object.__setattr__(self, "base_url", base_url)
+                    except Exception:
+                        pass
                     
                 from pydantic import SecretStr
-                object.__setattr__(self, "openai_api_key", SecretStr(api_key) if api_key is not None else None)
-                if hasattr(self, "api_key"):
-                    object.__setattr__(self, "api_key", api_key)
+                try:
+                    object.__setattr__(self, "openai_api_key", SecretStr(api_key) if api_key is not None else None)
+                except Exception:
+                    pass
 
                 # Reset underlying clients to force recreation with new config
                 for attr in ["client", "async_client", "_client", "_async_client", "root_client", "root_async_client"]:
                     if hasattr(self, attr):
-                        object.__setattr__(self, attr, None)
+                        try:
+                            object.__setattr__(self, attr, None)
+                        except Exception:
+                            pass
                 
                 # Re-validate environment to rebuild OpenAI client with new credentials/base_url
                 self.validate_environment()
         except Exception as e:
             print(f"[ResilientChatModel] Error resolving dynamic settings: {e}")
+
 
     def validate_environment(self):
         # Resolve api_key or use a dummy fallback key to prevent import-time crashes
