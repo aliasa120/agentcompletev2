@@ -123,10 +123,7 @@ def get_redis_client() -> Optional[Any]:
 
 
 def _fetch_settings_from_supabase(user_id: Optional[str] = None) -> dict[str, str]:
-    """Pull agent_settings from Supabase synchronously. Returns {} on failure.
-
-    Only fetches non-secret settings for the given user_id.
-    """
+    """Pull agent_settings from Supabase synchronously including client API keys."""
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -134,28 +131,28 @@ def _fetch_settings_from_supabase(user_id: Optional[str] = None) -> dict[str, st
         if not url or not key:
             return {}
         client = create_client(url, key)
-        params = {}
+        res = {}
         if user_id:
-            import uuid
             try:
-                uuid.UUID(str(user_id))
-                params["p_user_id"] = str(user_id)
-            except ValueError:
+                resp = client.table("agent_settings").select("key, value").eq("user_id", str(user_id)).execute()
+                if resp.data:
+                    res = {row["key"]: row["value"] for row in resp.data}
+            except Exception:
                 pass
-        resp = client.rpc("get_user_settings_admin", params).execute()
-        res = {row["key"]: row["value"] for row in (resp.data or [])}
-        if not res and not params.get("p_user_id"):
-            # Fall back to querying agent_settings table directly for fallback settings
+
+        if not res:
             try:
-                resp2 = client.table("agent_settings").select("key, value").limit(100).execute()
+                resp2 = client.table("agent_settings").select("key, value").limit(500).execute()
                 if resp2.data:
                     res = {row["key"]: row["value"] for row in resp2.data}
             except Exception:
                 pass
+
         return res
     except Exception as e:
         logger.warning(f"[provider_engine] Supabase settings fetch failed: {e}")
         return {}
+
 
 
 def save_setting_to_supabase(key: str, value: str, user_id: Optional[str] = None) -> bool:
@@ -235,7 +232,7 @@ def get_settings(user_id: Optional[str] = None) -> dict[str, str]:
             if cached:
                 try:
                     data = json.loads(cached)
-                    if isinstance(data, dict):
+                    if isinstance(data, dict) and data.get("openrouter_client_api_key"):
                         return data
                 except Exception:
                     pass
@@ -249,6 +246,7 @@ def get_settings(user_id: Optional[str] = None) -> dict[str, str]:
                 return fresh
         except Exception as e:
             logger.warning(f"[provider_engine] Redis operation failed: {e}")
+
  
     now = time.time()
     loaded_at = _cache_loaded_at.get(uid_str, 0.0)
@@ -1007,4 +1005,77 @@ async def execute_unified_pipeline(
                 f"❌ Provider '{key}' failed and no further fallback is available. "
                 f"Error: {e}"
             )
+
+
+def get_llm(provider_name: Optional[str] = None, model_name: Optional[str] = None, user_id: Optional[str] = None):
+    """Instantiate a Chat model for the given provider_name, model_name, and user_id context."""
+    from dotenv import load_dotenv; load_dotenv()
+    from langchain_openai import ChatOpenAI
+    from research_agent.tools.provider_registry import get_provider_base_url, get_provider_api_key, get_provider_config
+    
+    if not provider_name:
+        provider_name = "openrouter"
+    if not model_name:
+        model_name = "xiaomi/mimo-v2.5-pro"
+
+    provider_clean = provider_name.strip().lower()
+    
+    # 1. Fetch API Key directly from Supabase agent_settings table to bypass any stale Redis caches
+    api_key = ""
+    target_key = "openrouter_client_api_key" if provider_clean == "openrouter" else f"{provider_clean}_client_api_key"
+    try:
+        from supabase import create_client
+        sb_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        sb_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
+        if sb_url and sb_key:
+            client = create_client(sb_url, sb_key)
+            if user_id:
+                r1 = client.table("agent_settings").select("value").eq("user_id", str(user_id)).eq("key", target_key).execute()
+                if r1.data and r1.data[0].get("value"):
+                    api_key = r1.data[0]["value"].strip()
+            if not api_key:
+                r2 = client.table("agent_settings").select("value").eq("key", target_key).limit(1).execute()
+                if r2.data and r2.data[0].get("value"):
+                    api_key = r2.data[0]["value"].strip()
+    except Exception as e:
+        logger.warning(f"[get_llm] Supabase direct query error: {e}")
+
+    # Fallback to env vars
+    if not api_key:
+        api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("GEMINI_API_KEY") or os.environ.get("OPENAI_API_KEY") or "placeholder"
+
+    # 2. Resolve Base URL
+    base_url = get_provider_base_url(provider_clean)
+    cfg = get_provider_config(provider_clean)
+    if cfg and "base_url_env" in cfg and not base_url.endswith("/v1"):
+        base_url = base_url + "/v1"
+
+    clean_model = model_name
+    if provider_clean == "openrouter" and clean_model.startswith("openrouter/"):
+        clean_model = clean_model[len("openrouter/"):]
+
+    headers = {
+        "HTTP-Referer": "https://github.com/agentcomplete",
+        "X-Title": "Agent Complete",
+    }
+    if api_key and api_key != "placeholder":
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    logger.info(f"[get_llm] Instantiating ChatOpenAI: provider={provider_clean}, model={clean_model}, base_url={base_url}")
+
+    return ChatOpenAI(
+        model=clean_model,
+        api_key=api_key,
+        openai_api_key=api_key,
+        base_url=base_url,
+        openai_api_base=base_url,
+        default_headers=headers,
+        temperature=0.2,
+    )
+
+
+
+
+
+
 

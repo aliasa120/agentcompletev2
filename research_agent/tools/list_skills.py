@@ -83,26 +83,13 @@ def build_skills_index(agent_id: Optional[str] = None) -> str:
             except Exception as e:
                 logger.warning(f"[build_skills_index] Failed to fetch agent config via bootstrap RPC: {e}")
 
-        # Call list_skills_admin RPC to bypass RLS
-        resp = client.rpc("list_skills_admin", {"p_user_id": user_id_val}).execute()
-        all_active_skills = resp.data or []
-
+        # Call list_skills_admin RPC to bypass RLS and return assigned skills
+        rpc_params = {"p_user_id": user_id_val}
         if agent_id:
-            skills = []
-            for s in all_active_skills:
-                s_key = s.get("skill_key")
-                created_by = s.get("created_by_agent_id")
-                
-                is_general_or_self = False
-                if attach_all_skills:
-                    is_general_or_self = (created_by is None or str(created_by) == str(agent_id))
-                
-                is_manually_assigned = assigned_skill_keys is not None and s_key in assigned_skill_keys
-                
-                if is_general_or_self or is_manually_assigned:
-                    skills.append(s)
-        else:
-            skills = all_active_skills
+            rpc_params["p_agent_id"] = agent_id
+        resp = client.rpc("list_skills_admin", rpc_params).execute()
+        skills = resp.data or []
+
         if not skills:
             return ""
 
@@ -132,11 +119,6 @@ def build_skills_index(agent_id: Optional[str] = None) -> str:
                     lines.append(f"      (subskills: {', '.join(sub.get('skill_key') for sub in matching_subs)})")
 
         index_body = "\n".join(lines)
-        filter_note = (
-            f"(filtered for this agent — {len(skills)} of "
-            if assigned_skill_keys is not None
-            else f"(all active — {len(skills)} "
-        )
 
         result = (
             "## Skills (scan before every task)\n"
@@ -157,8 +139,7 @@ def build_skills_index(agent_id: Optional[str] = None) -> str:
         _cached_skills_index = result
         logger.info(
             f"[build_skills_index] Built index with {len(skills)} skills "
-            f"across {len(by_category)} categories "
-            f"{'(agent-filtered)' if assigned_skill_keys else '(all active)'}"
+            f"across {len(by_category)} categories for agent {agent_id}"
         )
         return result
 
@@ -188,7 +169,6 @@ def list_skills(category: Optional[str] = None, agent_id: Optional[str] = None, 
         configurable = config.get("configurable", {}) if config else {}
         user_id_val = configurable.get("user_id")
 
-        # Fall back to active_user_id ContextVar (set by ResilientChatModel on every LLM invocation)
         if not user_id_val:
             try:
                 from research_agent.tools.provider_engine import active_user_id as _active_uid
@@ -196,70 +176,26 @@ def list_skills(category: Optional[str] = None, agent_id: Optional[str] = None, 
             except Exception:
                 pass
 
-        # Resolve user_id, attach_all_skills, and assigned_skill_keys from bootstrap RPC (bypasses RLS)
-        attach_all_skills = False
-        assigned_skill_keys = []
+        if not agent_id:
+            agent_id = configurable.get("agent_id") or configurable.get("workflow_id")
 
+        # Call list_skills_admin RPC to bypass RLS and fetch assigned skills directly
+        rpc_params = {"p_user_id": user_id_val}
         if agent_id:
-            try:
-                bootstrap_resp = client.rpc("get_backend_bootstrap_data").execute()
-                bootstrap = bootstrap_resp.data or {}
-
-                # Resolve user_id and attach_all_skills from bootstrap agent_configs
-                configs = bootstrap.get("agent_configs") or []
-                for cfg in configs:
-                    if str(cfg.get("id")) == str(agent_id):
-                        attach_all_skills = bool(cfg.get("attach_all_skills", False))
-                        if not user_id_val:
-                            user_id_val = cfg.get("user_id")
-                        break
-
-                # Resolve assigned skill keys from bootstrap agent_tool_assignments
-                assignments = bootstrap.get("agent_tool_assignments") or []
-                assigned_skill_keys = [
-                    a["tool_key"] for a in assignments
-                    if str(a.get("agent_id")) == str(agent_id)
-                    and a.get("tool_type") == "skill"
-                    and a.get("enabled")
-                ]
-            except Exception as e:
-                logger.warning(f"[list_skills] Failed to fetch agent configs via bootstrap RPC: {e}")
-
-        # Call list_skills_admin RPC to bypass RLS
-        resp = client.rpc("list_skills_admin", {"p_user_id": user_id_val}).execute()
-        all_active_skills = resp.data or []
+            rpc_params["p_agent_id"] = agent_id
+        resp = client.rpc("list_skills_admin", rpc_params).execute()
+        skills = resp.data or []
 
         # Filter by category if provided
         if category:
-            all_active_skills = [s for s in all_active_skills if s.get("category") == category]
-
-        if agent_id:
-            skills = []
-            for s in all_active_skills:
-                s_key = s.get("skill_key")
-                created_by = s.get("created_by_agent_id")
-                
-                is_general_or_self = False
-                if attach_all_skills:
-                    is_general_or_self = (created_by is None or str(created_by) == str(agent_id))
-                
-                is_manually_assigned = s_key in assigned_skill_keys
-                
-                if is_general_or_self or is_manually_assigned:
-                    skills.append(s)
-            
-            if not skills:
-                if attach_all_skills:
-                    return "No skills are available (either general or self-created) for you."
-                else:
-                    return "No skills are assigned to you in the Settings UI. Please attach skills first."
-        else:
-            skills = all_active_skills
+            skills = [s for s in skills if s.get("category") == category]
 
         if not skills:
             if category:
-                return f"No active skills found in category '{category}'."
-            return "No skills found in the skills library. You can create one with manage_skill(action='create')."
+                return f"No skills found in category '{category}' for this agent."
+            return "No skills are currently assigned to this agent/workflow."
+
+
 
         # Separate main and subskills
         parent_skills = [s for s in skills if not s.get("parent_skill_key")]
