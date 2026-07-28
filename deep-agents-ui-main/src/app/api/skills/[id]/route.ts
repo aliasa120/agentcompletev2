@@ -73,26 +73,38 @@ export async function DELETE(_req: Request, { params }: RouteParams) {
       .eq("id", id)
       .single();
 
-    if (targetSkill && (targetSkill.origin === "derived" || targetSkill.origin === "captured" || targetSkill.origin === "fixed" || targetSkill.source === "user")) {
-      // Hard delete from database for evolved/provisional/user skills
-      const { error } = await supabase
-        .from("skills_library")
-        .delete()
-        .eq("id", id);
-      if (error) throw error;
-    } else {
-      // Soft-delete for imported builtin skills to prevent auto-reseeding
-      const { error } = await supabase
-        .from("skills_library")
-        .update({ state: "archived", updated_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
+    if (targetSkill) {
+      // Clean up all agent tool assignments for this skill
+      if (targetSkill.skill_key) {
+        await supabase
+          .from("agent_tool_assignments")
+          .delete()
+          .eq("tool_key", targetSkill.skill_key)
+          .eq("tool_type", "skill");
+      }
+
+      if (targetSkill.origin === "derived" || targetSkill.origin === "captured" || targetSkill.origin === "fixed" || targetSkill.source === "user") {
+        // Hard delete from database for evolved/provisional/user skills
+        const { error } = await supabase
+          .from("skills_library")
+          .delete()
+          .eq("id", id);
+        if (error) throw error;
+      } else {
+        // Soft-delete for imported builtin skills to prevent auto-reseeding
+        const { error } = await supabase
+          .from("skills_library")
+          .update({ state: "archived", updated_at: new Date().toISOString() })
+          .eq("id", id);
+        if (error) throw error;
+      }
     }
 
     // Trigger agent hot-reload to re-compile graph prompt without the deleted skill
     triggerAgentReload();
 
     return NextResponse.json({ success: true });
+
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown" }, { status: 500 });
   }
