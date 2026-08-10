@@ -37,6 +37,13 @@ except ImportError:
     logger.error("langgraph-sdk is not installed. Run: uv pip install langgraph-sdk")
     sys.exit(1)
 
+# Agent feature helpers (TTS audio markers)
+try:
+    from research_agent.tts import extract_audio_markers
+except ImportError as ie:
+    logger.warning(f"research_agent helpers not importable ({ie}); audio attachments disabled")
+    extract_audio_markers = lambda t: (None, False, t or "")  # noqa: E731
+
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or os.environ.get("SUPABASE_ANON_KEY", "").strip()
 LANGGRAPH_API_URL = os.environ.get("LANGGRAPH_API_URL", "http://localhost:2024").strip()
@@ -82,6 +89,8 @@ class EmailGatewayInstance:
         self.is_running = False
         # Mapping: sender_email -> thread_id
         self.active_threads = {}
+        # Mapping: sender_email -> thread_id awaiting an APPROVE/DENY reply
+        self.pending_approvals = {}
 
     async def get_enabled_workflows(self) -> list[dict]:
         loop = asyncio.get_running_loop()
@@ -193,6 +202,15 @@ class EmailGatewayInstance:
                 pass
 
     async def process_email_message(self, sender_email: str, sender_raw: str, subject: str, body: str, reply_to_msg_id: str):
+        # Approval decision reply? ("APPROVE" / "DENY" while a command awaits approval)
+        if sender_email in self.pending_approvals:
+            decision_word = body.strip().split()[0].upper() if body.strip() else ""
+            if decision_word in ("APPROVE", "DENY"):
+                thread_id = self.pending_approvals.pop(sender_email)
+                decision = "approve" if decision_word == "APPROVE" else "reject"
+                await self._resume_and_reply(sender_email, subject, thread_id, {"decisions": [{"type": decision}]}, reply_to_msg_id)
+                return
+
         # Determine workflow
         workflows = await self.get_enabled_workflows()
         if not workflows:
@@ -255,11 +273,13 @@ class EmailGatewayInstance:
         config = {
             "configurable": {
                 "workflow_id": selected["id"],
-                "user_id": self.user_id
+                "user_id": self.user_id,
+                "platform": "email",
+                "voice_mode": "off",
+                "voice_input": False,
             }
         }
 
-        response_text = ""
         try:
             # We don't stream since Email is asynchronous and doesn't support real-time chunks.
             # We run to completion and fetch the result.
@@ -269,31 +289,142 @@ class EmailGatewayInstance:
                 input=input_data,
                 config=config
             )
-            
-            # Fetch response
-            state = await langgraph_client.threads.get_state(thread_id)
-            values = state.get("values", {})
-            messages = values.get("messages", [])
-            if messages:
-                for msg in reversed(messages):
-                    role = msg.get("type") or msg.get("role")
-                    if role in ("ai", "assistant"):
-                        response_text = msg.get("content", "")
-                        break
 
+            response_text, audio_url = await self._final_reply_parts(thread_id)
             if not response_text.strip():
                 response_text = "🤖 Conversation completed. (No text content was generated)."
+
+            # Pending terminal approval? Ask for an APPROVE/DENY reply instead.
+            pending = await self._pending_interrupt(thread_id)
+            if pending:
+                reqs = pending.get("action_requests") or pending.get("actionRequests") or []
+                req_data = reqs[0] if reqs else {}
+                command = (req_data.get("args") or {}).get("command", "<?>")
+                desc = req_data.get("description") or ""
+                self.pending_approvals[sender_email] = thread_id
+                reply_subject = subject if subject.lower().startswith("re:") else "Re: " + subject
+                await asyncio.to_thread(
+                    self.send_reply, sender_email, reply_subject,
+                    "⚠️ COMMAND APPROVAL REQUIRED\n\n"
+                    f"The agent wants to run this command on the server:\n\n    {command}\n\n"
+                    f"{desc}\n\nReply with APPROVE or DENY as the first word of your reply.",
+                    reply_to_msg_id
+                )
+                return
 
         except Exception as run_err:
             logger.error(f"LangGraph run failed: {run_err}")
             response_text = f"❌ Agent execution failed:\n\n{run_err}"
+            audio_url = None
 
-        # Send response via email
+        # Send response via email (with audio attachment if the agent spoke)
         reply_subject = subject if subject.lower().startswith("re:") else "Re: " + subject
-        await asyncio.to_thread(self.send_reply, sender_email, reply_subject, response_text, reply_to_msg_id)
+        await asyncio.to_thread(self.send_reply, sender_email, reply_subject, response_text, reply_to_msg_id, audio_url)
 
-    def send_reply(self, to_email: str, subject: str, content: str, reply_to_msg_id: str):
-        msg = MIMEText(content, "plain", "utf-8")
+    async def _final_reply_parts(self, thread_id: str) -> tuple[str, str | None]:
+        """Fetch the last assistant message; return (cleaned_text, audio_url)."""
+        response_text = ""
+        audio_url = None
+        try:
+            state = await langgraph_client.threads.get_state(thread_id)
+            values = state.get("values", {}) if isinstance(state, dict) else {}
+            messages = values.get("messages", [])
+            for msg in reversed(messages):
+                role = msg.get("type") or msg.get("role")
+                if role in ("ai", "assistant"):
+                    content = msg.get("content", "")
+                    if isinstance(content, list):
+                        content = "".join(
+                            (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else (b if isinstance(b, str) else ""))
+                            for b in content
+                        )
+                    audio_url, _is_voice, response_text = extract_audio_markers(content or "")
+                    break
+        except Exception as e:
+            logger.warning(f"Email final-state fetch failed: {e}")
+        return response_text, audio_url
+
+    async def _pending_interrupt(self, thread_id: str) -> dict | None:
+        """Return the pending HITL interrupt payload (e.g. terminal approval), if any."""
+        try:
+            state = await langgraph_client.threads.get_state(thread_id)
+        except Exception as e:
+            logger.warning(f"Interrupt check get_state failed: {e}")
+            return None
+        values = state.get("values", {}) if isinstance(state, dict) else {}
+        for intr in (values.get("__interrupt__") or []):
+            v = intr.get("value") if isinstance(intr, dict) else None
+            if isinstance(v, dict) and (v.get("action_requests") or v.get("actionRequests")):
+                return v
+        for task in (state.get("tasks") or []):
+            for intr in (task.get("interrupts") or []):
+                v = intr.get("value") if isinstance(intr, dict) else None
+                if isinstance(v, dict) and (v.get("action_requests") or v.get("actionRequests")):
+                    return v
+        return None
+
+    async def _resume_and_reply(self, sender_email: str, subject: str, thread_id: str, resume_payload: dict, reply_to_msg_id: str):
+        """Resume an interrupted run after an APPROVE/DENY email and send the result."""
+        reply_subject = subject if subject.lower().startswith("re:") else "Re: " + subject
+        config = {
+            "configurable": {
+                "user_id": self.user_id,
+                "platform": "email",
+                "voice_mode": "off",
+                "voice_input": False,
+            }
+        }
+        try:
+            await langgraph_client.runs.create_and_wait(
+                thread_id=thread_id,
+                assistant_id=RESOLVED_ASSISTANT_ID,
+                command={"resume": resume_payload},
+                config=config,
+            )
+            # Another approval may be pending (multiple gated commands)
+            pending = await self._pending_interrupt(thread_id)
+            if pending:
+                self.pending_approvals[sender_email] = thread_id
+                reqs = pending.get("action_requests") or pending.get("actionRequests") or []
+                req_data = reqs[0] if reqs else {}
+                command = (req_data.get("args") or {}).get("command", "<?>")
+                await asyncio.to_thread(
+                    self.send_reply, sender_email, reply_subject,
+                    "⚠️ ANOTHER COMMAND NEEDS APPROVAL\n\n"
+                    f"    {command}\n\nReply with APPROVE or DENY as the first word of your reply.",
+                    reply_to_msg_id
+                )
+                return
+
+            response_text, audio_url = await self._final_reply_parts(thread_id)
+            if not response_text.strip():
+                response_text = "🤖 Done."
+            await asyncio.to_thread(self.send_reply, sender_email, reply_subject, response_text, reply_to_msg_id, audio_url)
+        except Exception as e:
+            logger.error(f"Email resume failed: {e}")
+            await asyncio.to_thread(self.send_reply, sender_email, reply_subject, f"❌ Failed to resume the run: {e}", reply_to_msg_id)
+
+    def send_reply(self, to_email: str, subject: str, content: str, reply_to_msg_id: str, audio_url: str | None = None):
+        from email.mime.application import MIMEApplication
+        from email.mime.multipart import MIMEMultipart
+
+        if audio_url:
+            msg = MIMEMultipart()
+            msg.attach(MIMEText(content, "plain", "utf-8"))
+            try:
+                import requests as _requests
+                r = _requests.get(audio_url, timeout=60)
+                r.raise_for_status()
+                ext = audio_url.rsplit(".", 1)[-1][:4] or "mp3"
+                part = MIMEApplication(r.content, _subtype=("ogg" if ext == "ogg" else "mpeg"))
+                part.add_header("Content-Disposition", "attachment", filename=f"voice_reply.{ext}")
+                msg.attach(part)
+            except Exception as e:
+                logger.error(f"Failed to fetch audio attachment {audio_url}: {e}")
+                msg.attach(MIMEText(f"\n\n🔊 Audio reply: {audio_url}", "plain", "utf-8"))
+        else:
+            msg = MIMEText(content, "plain", "utf-8")
+
         msg["Subject"] = subject
         msg["From"] = self.username
         msg["To"] = to_email

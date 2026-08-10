@@ -24,7 +24,10 @@ logger = logging.getLogger("manage_skill")
 
 def _get_supabase_client():
     """Lazy-init a Supabase client."""
+    from dotenv import load_dotenv
     from supabase import create_client
+    load_dotenv()
+    load_dotenv("deep-agents-ui-main/.env.local", override=False)
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
     if not url or not key:
@@ -44,6 +47,7 @@ def manage_skill(
     parent_skill_key: Optional[str] = None,
     trust_state: Optional[str] = None,
     origin: Optional[str] = None,
+    user_id: Optional[str] = None,
     config: Optional[RunnableConfig] = None,
 ) -> str:
     """Create, update, or archive a skill in the skills library.
@@ -89,18 +93,19 @@ def manage_skill(
         return f"❌ Cannot connect to database: {e}"
 
     configurable = config.get("configurable", {}) if config else {}
-    user_id_val = configurable.get("user_id")
+    user_id_val = user_id or configurable.get("user_id")
 
-    # Tier 2: look up user_id from the agent_configs table using agent_id
-    # (agent_id is reliably bound at graph compile time — this is the most robust path)
-    if not user_id_val and agent_id:
+    valid_agent_id = None
+    if agent_id:
         try:
-            resp = client.table("agent_configs").select("user_id").eq("id", agent_id).execute()
+            resp = client.table("agent_configs").select("id, user_id").eq("id", agent_id).execute()
             if resp.data and len(resp.data) > 0:
-                user_id_val = resp.data[0].get("user_id")
-                logger.debug(f"[manage_skill] Resolved user_id={user_id_val} from agent_id={agent_id}")
+                valid_agent_id = agent_id
+                if not user_id_val:
+                    user_id_val = resp.data[0].get("user_id")
+                    logger.debug(f"[manage_skill] Resolved user_id={user_id_val} from agent_id={agent_id}")
         except Exception as e:
-            logger.warning(f"[manage_skill] Failed to resolve user_id from agent_id: {e}")
+            logger.warning(f"[manage_skill] Failed to validate agent_id: {e}")
 
     # Tier 3: ContextVar last resort (unreliable across asyncio task boundaries, but worth trying)
     if not user_id_val:
@@ -109,6 +114,16 @@ def manage_skill(
             user_id_val = active_user_id.get()
         except Exception:
             pass
+
+    if not valid_agent_id and user_id_val:
+        try:
+            resp = client.table("agent_configs").select("id").eq("user_id", user_id_val).limit(1).execute()
+            if resp.data and len(resp.data) > 0:
+                valid_agent_id = resp.data[0].get("id")
+        except Exception:
+            pass
+
+    agent_id = valid_agent_id
 
     if not user_id_val:
         return "❌ Action requires an active user context (user_id not found in config)."

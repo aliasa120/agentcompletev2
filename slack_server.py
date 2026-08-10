@@ -42,6 +42,16 @@ except ImportError:
     logger.error("langgraph-sdk is not installed. Run: uv pip install langgraph-sdk")
     sys.exit(1)
 
+# Agent feature helpers (command registry + TTS audio markers)
+try:
+    from research_agent.commands import resolve_command, help_lines as cmd_help_lines
+    from research_agent.tts import extract_audio_markers
+except ImportError as ie:
+    logger.warning(f"research_agent helpers not importable ({ie}); !commands and voice replies disabled")
+    resolve_command = None
+    cmd_help_lines = lambda: []  # noqa: E731
+    extract_audio_markers = lambda t: (None, False, t or "")  # noqa: E731
+
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or os.environ.get("SUPABASE_ANON_KEY", "").strip()
 LANGGRAPH_API_URL = os.environ.get("LANGGRAPH_API_URL", "http://localhost:2024").strip()
@@ -234,7 +244,194 @@ class SlackBotInstance:
         self.web_client = AsyncWebClient(token=self.bot_token)
         self.socket_client = None
         self.active_sessions = {}  # channel_id -> {workflow_id, workflow_name, thread_id}
+        self.voice_modes = {}      # channel_id -> "off" | "voice_only" | "all"
         self.is_running = False
+
+    def get_voice_mode(self, channel_id: str) -> str:
+        return self.voice_modes.get(channel_id, "voice_only")
+
+    # ── Terminal command approval (human-in-the-loop) + run finishing ──────────
+
+    async def _pending_interrupt(self, thread_id: str) -> dict | None:
+        """Return the pending HITL interrupt payload (e.g. terminal approval), if any."""
+        try:
+            state = await langgraph_client.threads.get_state(thread_id)
+        except Exception as e:
+            logger.warning(f"Interrupt check get_state failed: {e}")
+            return None
+        values = state.get("values", {}) if isinstance(state, dict) else {}
+        for intr in (values.get("__interrupt__") or []):
+            v = intr.get("value") if isinstance(intr, dict) else None
+            if isinstance(v, dict) and (v.get("action_requests") or v.get("actionRequests")):
+                return v
+        for task in (state.get("tasks") or []):
+            for intr in (task.get("interrupts") or []):
+                v = intr.get("value") if isinstance(intr, dict) else None
+                if isinstance(v, dict) and (v.get("action_requests") or v.get("actionRequests")):
+                    return v
+        return None
+
+    async def _send_approval_prompt(self, channel_id: str, thread_id: str, payload: dict):
+        reqs = payload.get("action_requests") or payload.get("actionRequests") or []
+        req_data = reqs[0] if reqs else {}
+        command = (req_data.get("args") or {}).get("command", "<?>")
+        desc = req_data.get("description") or "The agent wants to run a potentially risky command."
+        text = f"⚠️ *Command approval required*\nThe agent wants to run:\n```{command}```\n{desc}"
+        blocks = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": text}},
+            {
+                "type": "actions",
+                "elements": [
+                    {"type": "button", "text": {"type": "plain_text", "text": "✅ Approve"},
+                     "style": "primary", "action_id": f"term_ok:{thread_id}", "value": thread_id},
+                    {"type": "button", "text": {"type": "plain_text", "text": "❌ Deny"},
+                     "style": "danger", "action_id": f"term_no:{thread_id}", "value": thread_id},
+                ],
+            },
+        ]
+        await self.web_client.chat_postMessage(channel=channel_id, blocks=blocks, text=text)
+
+    async def _resume_and_continue(self, channel_id: str, thread_id: str, resume_payload: dict):
+        """Resume an interrupted run after an approval decision, then finish it."""
+        session = self.active_sessions.get(channel_id)
+        config = {
+            "configurable": {
+                "workflow_id": session["workflow_id"] if session else None,
+                "user_id": self.user_id,
+                "platform": "slack",
+                "voice_mode": self.get_voice_mode(channel_id),
+                "voice_input": False,
+            }
+        }
+        placeholder = await self.web_client.chat_postMessage(channel=channel_id, text="🤖 _Continuing…_")
+        msg_ts = placeholder.get("ts")
+        accumulated_text = ""
+        active_messages: dict = {}
+        last_edit_time = 0.0
+        last_edit_text = ""
+        try:
+            async for chunk in langgraph_client.runs.stream(
+                thread_id=thread_id,
+                assistant_id=RESOLVED_ASSISTANT_ID,
+                command={"resume": resume_payload},
+                config=config,
+                stream_mode="messages"
+            ):
+                if isinstance(chunk, dict):
+                    event_type = chunk.get("event")
+                    data = chunk.get("data", [])
+                else:
+                    event_type = getattr(chunk, "event", None)
+                    data = getattr(chunk, "data", [])
+                if event_type == "messages/partial":
+                    for msg in data:
+                        msg_id = msg.get("id") if isinstance(msg, dict) else getattr(msg, "id", None)
+                        content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+                        if msg_id and content:
+                            active_messages[msg_id] = content
+                    accumulated_text = "".join(active_messages.values())
+                    if accumulated_text.strip() and msg_ts:
+                        now = time.time()
+                        if now - last_edit_time > 2.0 and accumulated_text.strip() != last_edit_text.strip():
+                            try:
+                                text_to_send = extract_audio_markers(accumulated_text)[2]
+                                if len(text_to_send) > 3000:
+                                    text_to_send = text_to_send[:3000] + "\n\n... (truncated)"
+                                await self.web_client.chat_update(channel=channel_id, ts=msg_ts, text=text_to_send + " ▉")
+                                last_edit_text = accumulated_text
+                                last_edit_time = now
+                            except Exception as ue:
+                                logger.warning(f"Slack chat_update warning: {ue}")
+        except Exception as e:
+            logger.exception("Error resuming run after approval decision")
+            await self.web_client.chat_postMessage(channel=channel_id, text=f"❌ Failed to resume: {e}")
+            return
+
+        await self._finish_run(channel_id, thread_id, accumulated_text, msg_ts)
+
+    async def _finish_run(self, channel_id: str, thread_id: str, streamed_text: str, msg_ts: str, thread_ts: str = None):
+        """Tail of every run: pause for approval if interrupted, else deliver final
+        text (markers stripped) plus any voice/audio reply file."""
+        # 1. Pending human approval? (terminal tool interrupt)
+        pending = await self._pending_interrupt(thread_id)
+        if pending:
+            if msg_ts:
+                try:
+                    await self.web_client.chat_update(channel=channel_id, ts=msg_ts, text="⏸️ Agent paused — needs your approval:")
+                except Exception:
+                    pass
+            await self._send_approval_prompt(channel_id, thread_id, pending)
+            return
+
+        # 2. Final text from thread state (includes voice-mirror markers appended
+        #    after streaming); fall back to the streamed text
+        audio_url, is_voice, final_text = None, False, streamed_text
+        try:
+            state = await langgraph_client.threads.get_state(thread_id)
+            messages = (state.get("values", {}) or {}).get("messages", []) if isinstance(state, dict) else []
+            for msg in reversed(messages):
+                role = msg.get("type") or msg.get("role")
+                if role in ("ai", "assistant"):
+                    content = msg.get("content", "")
+                    if isinstance(content, list):
+                        content = "".join(
+                            (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else (b if isinstance(b, str) else ""))
+                            for b in content
+                        )
+                    if content.strip():
+                        audio_url, is_voice, cleaned = extract_audio_markers(content)
+                        if cleaned.strip():
+                            final_text = cleaned
+                        break
+        except Exception as e:
+            logger.warning(f"Final state fetch failed (using streamed text): {e}")
+        if audio_url is None and streamed_text:
+            audio_url, is_voice, cleaned = extract_audio_markers(streamed_text)
+            if audio_url:
+                final_text = cleaned
+
+        # 3. Update the placeholder with the final cleaned text
+        if msg_ts:
+            if final_text.strip():
+                formatted_response = convert_markdown_to_slack(format_markdown_tables(final_text))
+                if len(formatted_response) > 3000:
+                    parts = []
+                    temp = formatted_response
+                    while temp:
+                        parts.append(temp[:3000])
+                        temp = temp[3000:]
+                    await self.web_client.chat_update(
+                        channel=channel_id,
+                        ts=msg_ts,
+                        text=parts[0] + f"\n\n*(Part 1/{len(parts)} - continued in thread)*"
+                    )
+                    parent_ts = thread_ts or msg_ts
+                    for i, part in enumerate(parts[1:], start=2):
+                        suffix = f"\n\n*(Part {i}/{len(parts)} - continued in thread)*" if i < len(parts) else ""
+                        await self.web_client.chat_postMessage(channel=channel_id, thread_ts=parent_ts, text=part + suffix)
+                else:
+                    await self.web_client.chat_update(channel=channel_id, ts=msg_ts, text=formatted_response)
+            else:
+                await self.web_client.chat_update(channel=channel_id, ts=msg_ts, text="🤖 Done. (No response content was generated.)")
+
+        # 4. Deliver the audio reply as an uploaded file
+        if audio_url:
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=120.0) as http_client:
+                    resp = await http_client.get(audio_url)
+                    resp.raise_for_status()
+                    audio_bytes = resp.content
+                ext = audio_url.rsplit(".", 1)[-1][:4] or "mp3"
+                await self.web_client.files_upload_v2(
+                    channel=channel_id,
+                    file=audio_bytes,
+                    filename=f"voice_reply.{ext}",
+                    title="🔊 Voice reply",
+                )
+            except Exception as e:
+                logger.error(f"Failed to deliver audio reply on Slack: {e}")
+                await self.web_client.chat_postMessage(channel=channel_id, text=f"🔊 Audio reply: {audio_url}")
 
     async def get_enabled_workflows(self) -> list[dict]:
         loop = asyncio.get_running_loop()
@@ -304,6 +501,24 @@ class SlackBotInstance:
                         workflow_id, workflow_name = value.split(":", 1)
                         channel_id = payload.get("channel", {}).get("id")
                         asyncio.create_task(self.switch_workflow(channel_id, workflow_id, workflow_name))
+                elif action_id.startswith("term_ok:") or action_id.startswith("term_no:"):
+                    # Terminal command approval decision (human-in-the-loop)
+                    thread_id = action_id.split(":", 1)[1]
+                    channel_id = payload.get("channel", {}).get("id")
+                    msg = payload.get("message", {})
+                    decision = "approve" if action_id.startswith("term_ok:") else "reject"
+                    base_text = (msg.get("text") or "").split("\n\n✅")[0].split("\n\n❌")[0]
+                    mark = "\n\n✅ _Approved — running…_" if decision == "approve" else "\n\n❌ _Denied — the agent has been told._"
+                    try:
+                        await self.web_client.chat_update(
+                            channel=channel_id,
+                            ts=msg.get("ts"),
+                            text=base_text + mark,
+                            blocks=[{"type": "section", "text": {"type": "mrkdwn", "text": base_text + mark}}],
+                        )
+                    except Exception as ue:
+                        logger.warning(f"Failed to update approval message: {ue}")
+                    asyncio.create_task(self._resume_and_continue(channel_id, thread_id, {"decisions": [{"type": decision}]}))
 
     async def switch_workflow(self, channel_id: str, workflow_id: str, workflow_name: str):
         global RESOLVED_ASSISTANT_ID
@@ -438,6 +653,63 @@ class SlackBotInstance:
 
             await self.switch_workflow(channel_id, selected["id"], selected["name"])
             return
+
+        # Bang commands (!voice / !help / !new) — "!" keeps native Slack "/" handling
+        # conflict-free. Agent commands (e.g. !learn) fall through to the agent.
+        elif text.startswith("!") and resolve_command is not None:
+            parsed = resolve_command(text)
+            if not parsed:
+                await self.web_client.chat_postMessage(channel=channel_id, text="❓ Unknown command. Try `!help`")
+                return
+            cmd, args = parsed
+            if cmd.kind == "agent":
+                pass  # e.g. !learn — falls through to the agent below
+            elif cmd.name == "voice":
+                mapping = {"on": "voice_only", "off": "off", "tts": "all"}
+                mode = mapping.get(args.lower())
+                if not mode:
+                    await self.web_client.chat_postMessage(
+                        channel=channel_id,
+                        text="Usage: `!voice on` (speak replies to voice messages) · `!voice tts` (speak every reply) · `!voice off` (text only)"
+                    )
+                    return
+                self.voice_modes[channel_id] = mode
+                label = {
+                    "voice_only": "ON — I'll speak replies to your voice messages 🎙️",
+                    "off": "OFF — text only",
+                    "all": "TTS — I'll speak every reply 🔊",
+                }[mode]
+                await self.web_client.chat_postMessage(channel=channel_id, text=f"Voice replies: *{label}*")
+                return
+            elif cmd.name == "help":
+                await self.web_client.chat_postMessage(
+                    channel=channel_id,
+                    text="🤖 *Commands*\n\n" + "\n".join(cmd_help_lines()) + "\n\nNative: `!start` · `!select <workflow>`"
+                )
+                return
+            elif cmd.name == "new":
+                session = self.active_sessions.get(channel_id)
+                if not session:
+                    await self.web_client.chat_postMessage(channel=channel_id, text="No active workflow yet — send `!start` first.")
+                    return
+                try:
+                    thread = await langgraph_client.threads.create(
+                        metadata={"workflow_id": session["workflow_id"], "user_id": self.user_id, "slack_channel_id": channel_id}
+                    )
+                    session["thread_id"] = thread["thread_id"]
+                    await self.web_client.chat_postMessage(channel=channel_id, text=f"🆕 Fresh conversation started with *{session['workflow_name']}*.")
+                except Exception as e:
+                    await self.web_client.chat_postMessage(channel=channel_id, text=f"❌ Couldn't start a new thread: {e}")
+                return
+            elif cmd.name in ("status",):
+                session = self.active_sessions.get(channel_id)
+                text_out = (f"📌 *Current Status*\n🤖 Workflow: `{session['workflow_name']}`\n🧵 Thread: `{session['thread_id']}`"
+                            if session else "📌 *Current Status*\n❌ No active session.")
+                await self.web_client.chat_postMessage(channel=channel_id, text=text_out)
+                return
+            elif cmd.name == "model":
+                await self.web_client.chat_postMessage(channel=channel_id, text="Model changes live in the web UI (Settings → Workflows).")
+                return
 
         # 2. Regular message routing
         session = self.active_sessions.get(channel_id)
@@ -604,7 +876,10 @@ class SlackBotInstance:
         config = {
             "configurable": {
                 "workflow_id": workflow_id,
-                "user_id": self.user_id
+                "user_id": self.user_id,
+                "platform": "slack",
+                "voice_mode": self.get_voice_mode(channel_id),
+                "voice_input": any(a.get("type") == "audio" for a in attachments),
             }
         }
 
@@ -643,7 +918,7 @@ class SlackBotInstance:
                             now = time.time()
                             if now - last_edit_time > 2.0 and accumulated_text.strip() != last_edit_text.strip():
                                 try:
-                                    text_to_send = accumulated_text
+                                    text_to_send = extract_audio_markers(accumulated_text)[2]
                                     if len(text_to_send) > 3000:
                                         text_to_send = text_to_send[:3000] + "\n\n... (truncated)"
                                     await self.web_client.chat_update(
@@ -699,7 +974,7 @@ class SlackBotInstance:
                                 now = time.time()
                                 if now - last_edit_time > 2.0 and accumulated_text.strip() != last_edit_text.strip():
                                     try:
-                                        text_to_send = accumulated_text
+                                        text_to_send = extract_audio_markers(accumulated_text)[2]
                                         if len(text_to_send) > 3000:
                                             text_to_send = text_to_send[:3000] + "\n\n... (truncated)"
                                         await self.web_client.chat_update(
@@ -714,59 +989,9 @@ class SlackBotInstance:
                 else:
                     raise stream_err
 
-            # Fallback recovery
-            if not accumulated_text.strip():
-                try:
-                    state = await langgraph_client.threads.get_state(thread_id)
-                    values = state.get("values", {})
-                    messages = values.get("messages", [])
-                    if messages:
-                        for msg in reversed(messages):
-                            role = msg.get("type") or msg.get("role")
-                            if role in ("ai", "assistant"):
-                                accumulated_text = msg.get("content", "")
-                                break
-                except Exception as fe:
-                    logger.error(f"Fallback state recovery failed: {fe}")
-
-            if accumulated_text.strip():
-                formatted_response = format_markdown_tables(accumulated_text)
-                formatted_response = convert_markdown_to_slack(formatted_response)
-                if len(formatted_response) > 3000:
-                    parts = []
-                    temp = formatted_response
-                    while temp:
-                        parts.append(temp[:3000])
-                        temp = temp[3000:]
-                    
-                    # Update the main message with Part 1
-                    await self.web_client.chat_update(
-                        channel=channel_id,
-                        ts=msg_ts,
-                        text=parts[0] + f"\n\n*(Part 1/{len(parts)} - continued in thread)*"
-                    )
-                    
-                    # Post the rest of the parts as replies in the thread
-                    parent_ts = thread_ts or msg_ts
-                    for i, part in enumerate(parts[1:], start=2):
-                        suffix = f"\n\n*(Part {i}/{len(parts)} - continued in thread)*" if i < len(parts) else ""
-                        await self.web_client.chat_postMessage(
-                            channel=channel_id,
-                            thread_ts=parent_ts,
-                            text=part + suffix
-                        )
-                else:
-                    await self.web_client.chat_update(
-                        channel=channel_id,
-                        ts=msg_ts,
-                        text=formatted_response
-                    )
-            else:
-                await self.web_client.chat_update(
-                    channel=channel_id,
-                    ts=msg_ts,
-                    text="🤖 Done. (No response content was generated.)"
-                )
+            # Final delivery / approval pause (state is source of truth — the voice
+            # mirror appends AUDIO_URL markers after streaming finishes)
+            await self._finish_run(channel_id, thread_id, accumulated_text, msg_ts, thread_ts=thread_ts)
 
         except Exception as e:
             logger.exception("Error processing message in Slack daemon")

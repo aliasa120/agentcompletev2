@@ -46,7 +46,12 @@ uv run jupyter notebook research_agent.ipynb
 Run a local [LangGraph server](https://langchain-ai.github.io/langgraph/tutorials/langgraph-platform/local-server/) with a web interface:
 
 ```bash
-langgraph dev
+# via the convenience script (recommended: passes --n-jobs-per-worker 10
+# so multiple chats can run in parallel; dev server default is 1)
+uv run python server.py
+
+# or directly:
+uv run python -m langgraph_cli dev --host 0.0.0.0 --port 2024 --n-jobs-per-worker 10
 ```
 
 LangGraph server will open a new browser window with the Studio interface, which you can submit your search query to:

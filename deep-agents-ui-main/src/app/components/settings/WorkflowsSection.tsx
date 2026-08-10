@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { JanCard, CardItem } from "@/components/settings/JanCard";
 import { AnimatePresence, motion } from "framer-motion";
 import { BiSearch } from "react-icons/bi";
 
@@ -363,29 +364,26 @@ export function WorkflowsSection() {
       </div>
 
       {showCreateForm && (
-        <div className="rounded-xl border border-border bg-card p-6 space-y-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
-          <h3 className="text-sm font-semibold border-b pb-2">New Workflow Pipeline</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Workflow Name</label>
+        <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+        <JanCard title="New Workflow Pipeline">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            <CardItem column className="mt-0" title="Workflow Name">
               <Input
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 placeholder="e.g. Finance Agent System"
-                className="h-9 text-xs bg-background"
+                className="h-9 text-xs bg-background w-full"
               />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Description</label>
+            </CardItem>
+            <CardItem column className="mt-0" title="Description">
               <Input
                 value={newDescription}
                 onChange={e => setNewDescription(e.target.value)}
                 placeholder="Brief description of this workflow's role"
-                className="h-9 text-xs bg-background"
+                className="h-9 text-xs bg-background w-full"
               />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Scrape/Trigger Interval</label>
+            </CardItem>
+            <CardItem column title="Scrape/Trigger Interval" description="How often the agent pipeline runs">
               {(() => {
                 const presets = [15, 30, 60, 120, 240];
                 const isCustom = !presets.includes(newInterval);
@@ -425,20 +423,19 @@ export function WorkflowsSection() {
                   </div>
                 );
               })()}
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Batch Size (Pending Articles)</label>
+            </CardItem>
+            <CardItem column title="Batch Size (Pending Articles)" description="How many queued articles run per trigger (1–10)">
               <Input
                 type="number"
                 min={1}
                 max={10}
                 value={newBatchSize}
                 onChange={e => setNewBatchSize(Number(e.target.value))}
-                className="h-9 text-xs bg-background"
+                className="h-9 text-xs bg-background w-full"
               />
-            </div>
+            </CardItem>
           </div>
-          <div className="flex gap-2 border-t pt-4">
+          <div className="flex gap-2 mt-4">
             <Button size="sm" onClick={handleCreateWorkflow} disabled={creating || !newName.trim()} className="gap-1.5 h-8 text-xs font-semibold">
               {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               Create
@@ -447,6 +444,7 @@ export function WorkflowsSection() {
               Cancel
             </Button>
           </div>
+        </JanCard>
         </div>
       )}
 
@@ -461,7 +459,7 @@ export function WorkflowsSection() {
           const hasMain = wfAgents.some(a => a.agent_type === "main");
 
           return (
-            <div key={wf.id} className="border border-border rounded-2xl bg-card p-6 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between relative group">
+            <JanCard key={wf.id} className="hover:shadow-md transition-all duration-300 flex flex-col justify-between relative group">
               <div className="flex flex-col text-left">
                 
                 {/* Header Row */}
@@ -518,7 +516,7 @@ export function WorkflowsSection() {
               >
                 Configure Workflow
               </Button>
-            </div>
+            </JanCard>
           );
         })}
       </div>
@@ -705,52 +703,49 @@ function WorkflowEditor({
         <div className="lg:col-span-2 space-y-6">
           
           {/* Card 1: Core Configuration */}
-          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
-            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Workflow Definition</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Workflow Name</label>
+          <JanCard title="Workflow Definition">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+              <CardItem column className="mt-0" title="Workflow Name">
                 <Input
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="Enter workflow name..."
-                  className="h-9 text-xs bg-background"
+                  className="h-9 text-xs bg-background w-full"
                 />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Batch Size (Pending Articles)</label>
+              </CardItem>
+              <CardItem column className="mt-0 md:border-border/40" title="Batch Size (Pending Articles)" description="Queued articles per run">
                 <Input
                   type="number"
                   min={1}
                   max={10}
                   value={batchSize}
                   onChange={e => setBatchSize(Number(e.target.value))}
-                  className="h-9 text-xs bg-background"
+                  className="h-9 text-xs bg-background w-full"
                 />
-              </div>
+              </CardItem>
             </div>
 
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Description</label>
+            <CardItem column title="Description">
               <Input
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Enter description..."
-                className="h-9 text-xs bg-background"
+                className="h-9 text-xs bg-background w-full"
               />
-            </div>
-          </div>
+            </CardItem>
+          </JanCard>
 
           {/* Card 2: Associated Agents & Linkers */}
-          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b pb-2 mb-3">
-              <h3 className="text-sm font-semibold">Connected Agents</h3>
-              {!hasMain && (
-                <span className="text-[10px] text-destructive bg-destructive/5 border border-destructive/20 rounded-full px-2 py-0.5 font-semibold flex items-center gap-1">
+          <JanCard
+            title="Connected Agents"
+            header={!hasMain ? (
+              <div className="-mt-2 mb-4">
+                <span className="text-[10px] text-destructive bg-destructive/5 border border-destructive/20 rounded-full px-2 py-0.5 font-semibold inline-flex items-center gap-1">
                   ⚠️ No Main Agent Assigned (Pipeline will not run)
                 </span>
-              )}
-            </div>
+              </div>
+            ) : undefined}
+          >
             
             {/* Linked agents */}
             <div className="space-y-3">
@@ -815,143 +810,118 @@ function WorkflowEditor({
                 )}
               </div>
             </div>
-          </div>
+          </JanCard>
         </div>
 
         {/* Right column - Schedulers */}
         <div className="space-y-6">
           
           {/* Card 3: Scheduler Controls */}
-          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
-            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Status & Activation</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between h-9">
-                <div>
-                  <span className="text-xs font-semibold text-foreground block">Workflow Pipeline</span>
-                  <span className="text-[10px] text-muted-foreground block">Main trigger control</span>
-                </div>
-                <Switch
-                  checked={isActive}
-                  onCheckedChange={setIsActive}
-                />
-              </div>
-
-              <div className="flex items-center justify-between h-9 border-t pt-3">
-                <div>
-                  <span className="text-xs font-semibold text-foreground block">Agent Scheduler</span>
-                  <span className="text-[10px] text-muted-foreground block">Agent runner state</span>
-                </div>
-                <Switch
-                  checked={enabled}
-                  onCheckedChange={setEnabled}
-                />
-              </div>
-
-              <div className="flex items-center justify-between h-9 border-t pt-3">
-                <div>
-                  <span className="text-xs font-semibold text-foreground block">Feeder Scheduler</span>
-                  <span className="text-[10px] text-muted-foreground block">Articles feeder runner</span>
-                </div>
-                <Switch
-                  checked={feederEnabled}
-                  onCheckedChange={setFeederEnabled}
-                />
-              </div>
-            </div>
-          </div>
+          <JanCard title="Status & Activation">
+            <CardItem
+              title="Workflow Pipeline"
+              description="Main trigger control"
+              actions={<Switch checked={isActive} onCheckedChange={setIsActive} />}
+            />
+            <CardItem
+              title="Agent Scheduler"
+              description="Agent runner state"
+              actions={<Switch checked={enabled} onCheckedChange={setEnabled} />}
+            />
+            <CardItem
+              title="Feeder Scheduler"
+              description="Articles feeder runner"
+              actions={<Switch checked={feederEnabled} onCheckedChange={setFeederEnabled} />}
+            />
+          </JanCard>
 
           {/* Card 4: Run Intervals */}
-          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
-            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Run Schedules</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Agent Execution Interval</label>
-                {(() => {
-                  const presets = [15, 30, 60, 120, 240];
-                  const isCustom = !presets.includes(interval);
-                  return (
-                    <div className="space-y-1.5">
-                      <select
-                        value={isCustom ? "custom" : interval}
-                        onChange={e => {
-                          const val = e.target.value;
-                          if (val === "custom") {
-                            setInterval(5);
-                          } else {
-                            setInterval(Number(val));
-                          }
-                        }}
-                        className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-                      >
-                        <option value={15}>Every 15 minutes</option>
-                        <option value={30}>Every 30 minutes</option>
-                        <option value={60}>Every 1 hour</option>
-                        <option value={120}>Every 2 hours</option>
-                        <option value={240}>Every 4 hours</option>
-                        <option value="custom">Custom...</option>
-                      </select>
-                      {isCustom && (
-                        <div className="flex items-center gap-1.5 mt-1.5">
-                          <Input
-                            type="number"
-                            min={1}
-                            value={interval}
-                            onChange={e => setInterval(Number(e.target.value))}
-                            className="h-8 text-xs bg-background w-20"
-                          />
-                          <span className="text-xs text-muted-foreground font-semibold">minutes</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
+          <JanCard title="Run Schedules">
+            <CardItem column className="mt-0" title="Agent Execution Interval" description="How often the agent pipeline triggers">
+              {(() => {
+                const presets = [15, 30, 60, 120, 240];
+                const isCustom = !presets.includes(interval);
+                return (
+                  <div className="space-y-1.5">
+                    <select
+                      value={isCustom ? "custom" : interval}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === "custom") {
+                          setInterval(5);
+                        } else {
+                          setInterval(Number(val));
+                        }
+                      }}
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value={15}>Every 15 minutes</option>
+                      <option value={30}>Every 30 minutes</option>
+                      <option value={60}>Every 1 hour</option>
+                      <option value={120}>Every 2 hours</option>
+                      <option value={240}>Every 4 hours</option>
+                      <option value="custom">Custom...</option>
+                    </select>
+                    {isCustom && (
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <Input
+                          type="number"
+                          min={1}
+                          value={interval}
+                          onChange={e => setInterval(Number(e.target.value))}
+                          className="h-8 text-xs bg-background w-20"
+                        />
+                        <span className="text-xs text-muted-foreground font-semibold">minutes</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </CardItem>
 
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Feeder Execution Interval</label>
-                {(() => {
-                  const presets = [10, 15, 30, 60, 120, 240];
-                  const isCustom = !presets.includes(feederInterval);
-                  return (
-                    <div className="space-y-1.5">
-                      <select
-                        value={isCustom ? "custom" : feederInterval}
-                        onChange={e => {
-                          const val = e.target.value;
-                          if (val === "custom") {
-                            setFeederInterval(5);
-                          } else {
-                            setFeederInterval(Number(val));
-                          }
-                        }}
-                        className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-                      >
-                        <option value={10}>Every 10 minutes</option>
-                        <option value={15}>Every 15 minutes</option>
-                        <option value={30}>Every 30 minutes</option>
-                        <option value={60}>Every 1 hour</option>
-                        <option value={120}>Every 2 hours</option>
-                        <option value={240}>Every 4 hours</option>
-                        <option value="custom">Custom...</option>
-                      </select>
-                      {isCustom && (
-                        <div className="flex items-center gap-1.5 mt-1.5">
-                          <Input
-                            type="number"
-                            min={1}
-                            value={feederInterval}
-                            onChange={e => setFeederInterval(Number(e.target.value))}
-                            className="h-8 text-xs bg-background w-20"
-                          />
-                          <span className="text-xs text-muted-foreground font-semibold">minutes</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
+            <CardItem column title="Feeder Execution Interval" description="How often the feeder scrapes new articles">
+              {(() => {
+                const presets = [10, 15, 30, 60, 120, 240];
+                const isCustom = !presets.includes(feederInterval);
+                return (
+                  <div className="space-y-1.5">
+                    <select
+                      value={isCustom ? "custom" : feederInterval}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === "custom") {
+                          setFeederInterval(5);
+                        } else {
+                          setFeederInterval(Number(val));
+                        }
+                      }}
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value={10}>Every 10 minutes</option>
+                      <option value={15}>Every 15 minutes</option>
+                      <option value={30}>Every 30 minutes</option>
+                      <option value={60}>Every 1 hour</option>
+                      <option value={120}>Every 2 hours</option>
+                      <option value={240}>Every 4 hours</option>
+                      <option value="custom">Custom...</option>
+                    </select>
+                    {isCustom && (
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <Input
+                          type="number"
+                          min={1}
+                          value={feederInterval}
+                          onChange={e => setFeederInterval(Number(e.target.value))}
+                          className="h-8 text-xs bg-background w-20"
+                        />
+                        <span className="text-xs text-muted-foreground font-semibold">minutes</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </CardItem>
+          </JanCard>
         </div>
       </div>
     </div>

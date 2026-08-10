@@ -59,36 +59,66 @@ export function SmitheryConnectDialog({
   /** Smithery namespace + connectionId saved for the re-connect after input */
   const [pendingNamespace, setPendingNamespace] = useState("");
   const [pendingSmitheryConnId, setPendingSmitheryConnId] = useState("");
+  const [pendingConnectionId, setPendingConnectionId] = useState("");
   /** Optional hosted form URL from Smithery for the input_required step */
   const [inputSetupUrl, setInputSetupUrl] = useState("");
 
-  // Keep references to popup and interval for cleanup
+  // Keep references to popup, poll interval and timers for cleanup
   const popupRef = React.useRef<Window | null>(null);
   const pollIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
+  const pollTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  /** When the popup closed (Arcade's OAuth completion page closes it after "Allow") */
+  const popupClosedAtRef = React.useRef<number | null>(null);
+  /** When polling started — used for an overall timeout */
+  const pollStartRef = React.useRef<number>(0);
 
   // Cleanup polling and popup on unmount
   React.useEffect(() => {
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-      if (popupRef.current) popupRef.current.close();
+      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+      if (popupRef.current && !popupRef.current.closed) {
+        try { popupRef.current.close(); } catch { /* already closed */ }
+      }
     };
   }, []);
 
   const remoteUrl = `https://server.smithery.ai/${server.qualifiedName}/mcp`;
 
   // ── OAuth polling ────────────────────────────────────────────────────────────
-  const startPolling = (namespace: string, smitheryConnectionId: string, finalConnectionId: string) => {
+  const stopPolling = () => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+    pollIntervalRef.current = null;
+    pollTimeoutRef.current = null;
+  };
+
+  const closePopup = () => {
+    if (popupRef.current && !popupRef.current.closed) {
+      try { popupRef.current.close(); } catch { /* already closed */ }
+    }
+  };
+
+  const startPolling = (namespace: string, smitheryConnectionId: string, finalConnectionId: string) => {
+    stopPolling();
+    popupClosedAtRef.current = null;
+    pollStartRef.current = Date.now();
+
+    // Arcade (which acquired Smithery) closes the OAuth popup itself the moment
+    // the user clicks "Allow", while Smithery's backend only flips the connection
+    // to "connected" a few seconds later. So a closed popup is NOT immediate
+    // failure — keep polling through a grace period first.
+    const GRACE_AFTER_POPUP_CLOSE_MS = 10_000;
+    const OVERALL_TIMEOUT_MS = 120_000;
+
+    pollTimeoutRef.current = setTimeout(() => {
+      stopPolling();
+      closePopup();
+      setConnecting(false);
+      setError("Authorization timed out. Please try again.");
+    }, OVERALL_TIMEOUT_MS);
 
     pollIntervalRef.current = setInterval(async () => {
-      // Check if popup has been closed manually by the user
-      if (popupRef.current && popupRef.current.closed) {
-        clearInterval(pollIntervalRef.current!);
-        setConnecting(false);
-        setError("Authorization popup was closed. Please try again.");
-        return;
-      }
-
       try {
         const queryParams = new URLSearchParams({
           namespace,
@@ -99,22 +129,37 @@ export function SmitheryConnectDialog({
         const data = await res.json();
 
         if (data.success && data.state === "connected") {
-          // Success! Clear interval and close popup
-          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-          if (popupRef.current) popupRef.current.close();
-
+          // Success! Stop polling and close popup if still open
+          stopPolling();
+          closePopup();
           setAuthStatus("success");
           setDone(true);
           setConnecting(false);
           setTimeout(() => onSuccess(finalConnectionId), 1200);
-        } else if (data.success && data.state === "failed") {
+          return;
+        }
+
+        if (data.success && data.state === "failed") {
           // Failed authorization
-          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-          if (popupRef.current) popupRef.current.close();
-          
+          stopPolling();
+          closePopup();
           setAuthStatus("failed");
           setConnecting(false);
           setError("Smithery connection authorization failed.");
+          return;
+        }
+
+        // Still pending. If the popup closed — either by the user, or by Arcade's
+        // completion page after a successful "Allow" — don't fail immediately;
+        // the backend may still be registering the OAuth callback.
+        if (popupRef.current && popupRef.current.closed) {
+          if (popupClosedAtRef.current === null) {
+            popupClosedAtRef.current = Date.now();
+          } else if (Date.now() - popupClosedAtRef.current > GRACE_AFTER_POPUP_CLOSE_MS) {
+            stopPolling();
+            setConnecting(false);
+            setError("Authorization popup was closed. Please try again.");
+          }
         }
       } catch (err: any) {
         console.warn("[Smithery Auth Poll Error]:", err);
@@ -170,9 +215,14 @@ export function SmitheryConnectDialog({
         setRequiresAuth(true);
         setAuthUrl(data.setupUrl);
         setAuthStatus("waiting");
+        setPendingNamespace(data.namespace);
+        setPendingSmitheryConnId(data.smitheryConnectionId);
+        setPendingConnectionId(data.connectionId);
+        // Auto-open the OAuth popup right away — we're still inside the Connect
+        // click's user-gesture window, so the browser won't block it. If it does
+        // get blocked, the manual "Open Authorization Window" button is the fallback.
         handleOpenPopup(data.setupUrl);
         startPolling(data.namespace, data.smitheryConnectionId, data.connectionId);
-        // Keep connecting=true while polling
         return;
       }
 
@@ -446,7 +496,12 @@ export function SmitheryConnectDialog({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleOpenPopup(authUrl)}
+                    onClick={() => {
+                      setError("");
+                      setConnecting(true);
+                      handleOpenPopup(authUrl);
+                      startPolling(pendingNamespace, pendingSmitheryConnId, pendingConnectionId);
+                    }}
                     className="h-8 text-[10.5px] border-violet-500/20 text-violet-700 dark:text-violet-400 hover:bg-violet-500/10 gap-1.5 w-full justify-center"
                   >
                     <ExternalLink className="h-3 w-3" />

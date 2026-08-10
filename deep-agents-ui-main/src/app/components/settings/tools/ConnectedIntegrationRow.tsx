@@ -7,6 +7,7 @@ import {
   CheckCircle2, AlertTriangle, Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { JanCard } from "@/components/settings/JanCard";
 
 export interface ToolSetting {
   id: string;
@@ -209,7 +210,7 @@ export function ConnectedIntegrationRow({
   }
 
   return (
-    <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
+    <JanCard className="p-0 overflow-hidden">
       <button
         onClick={handleExpand}
         className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/20 transition-colors"
@@ -305,6 +306,6 @@ export function ConnectedIntegrationRow({
           </div>
         </div>
       )}
-    </div>
+    </JanCard>
   );
 }

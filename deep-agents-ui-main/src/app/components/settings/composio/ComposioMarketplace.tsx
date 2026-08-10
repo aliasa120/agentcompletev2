@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { JanCard } from "@/components/settings/JanCard";
 import type { MCPConnection } from "../tools/ConnectedIntegrationRow";
 
 interface Toolkit {
@@ -212,7 +213,7 @@ export function ComposioMarketplace({
             const isConnecting = connecting === toolkit.slug;
             const errMsg = connectErrors[toolkit.slug];
             return (
-              <div key={toolkit.slug} className={`rounded-lg border p-3 flex flex-col gap-2 transition-all
+              <JanCard key={toolkit.slug} className={`rounded-lg p-3 flex flex-col gap-2 transition-all
                 ${connected ? "border-primary/30 bg-primary/5" : "border-border bg-card hover:border-primary/30 hover:shadow-sm"}`}>
                 <div className="flex items-center gap-2">
                   {toolkit.logo_url ? (
@@ -247,7 +248,7 @@ export function ComposioMarketplace({
                     : connected ? <><Unlink className="h-3 w-3" />Disconnect</>
                     : <><Link2 className="h-3 w-3" />Connect</>}
                 </Button>
-              </div>
+              </JanCard>
             );
           })}
           {toolkits.length === 0 && !loading && (

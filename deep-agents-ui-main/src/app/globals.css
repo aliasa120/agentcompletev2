@@ -2,6 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Jan-inspired self-hosted fonts ────────────────────────────────────── */
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter/Inter_18pt-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter/Inter_18pt-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter/Inter_18pt-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter/Inter_18pt-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Studio Feixen Sans";
+  src: url("/fonts/StudioFeixenSans-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Studio Feixen Sans";
+  src: url("/fonts/StudioFeixenSans-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Studio Feixen Sans";
+  src: url("/fonts/StudioFeixenSans-Semibold.otf") format("opentype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Studio Feixen Sans";
+  src: url("/fonts/StudioFeixenSans-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   /* Remove default focus box-shadows */
   input:focus,
@@ -21,41 +79,41 @@
   }
 
   :root {
-    --background: #ffffff;
-    --foreground: #18181b;
-    --card: #ffffff;
-    --card-foreground: #18181b;
-    --popover: #ffffff;
-    --popover-foreground: #18181b;
-    --primary: #18181b;
-    --primary-foreground: #fafafa;
-    --secondary: #f4f4f5;
-    --secondary-foreground: #18181b;
-    --muted: #f4f4f5;
-    --muted-foreground: #71717a;
-    --accent: #f4f4f5;
-    --accent-foreground: #18181b;
-    --destructive: #ef4444;
-    --destructive-foreground: #fafafa;
-    --border: #e4e4e7;
-    --input: #e4e4e7;
-    --ring: #18181b;
-    --radius: 0.75rem;
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.7003 0.1611 35.09);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: oklch(0.985 0 0);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --radius: 0.625rem;
 
-    --sidebar: #fafafa;
-    --sidebar-foreground: #18181b;
-    --sidebar-primary: #18181b;
-    --sidebar-primary-foreground: #fafafa;
-    --sidebar-accent: #f4f4f5;
-    --sidebar-accent-foreground: #18181b;
-    --sidebar-border: #e4e4e7;
-    --sidebar-ring: #18181b;
+    --sidebar: var(--background);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: #52525B;
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
 
-    --chart-1: #e11d48;
-    --chart-2: #f97316;
-    --chart-3: #2563eb;
-    --chart-4: #22c55e;
-    --chart-5: #eab308;
+    --chart-1: oklch(0.7 0.15 35);
+    --chart-2: oklch(0.65 0.15 165);
+    --chart-3: oklch(0.55 0.1 250);
+    --chart-4: oklch(0.7 0.12 90);
+    --chart-5: oklch(0.72 0.14 60);
 
     --bg-0: #FAF9F5;
     --bg-000: #FAF9F5;
@@ -168,9 +226,9 @@
     --spacing-xl: 2rem;
     --spacing-2xl: 3rem;
 
-    /* Font family variables */
-    --font-family-base: var(--font-outfit), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --font-family-serif: var(--font-instrument), Georgia, serif;
+    /* Font family variables — Inter body, Studio Feixen Sans display */
+    --font-family-base: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-family-serif: "Studio Feixen Sans", Georgia, serif;
     --font-family-mono: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono",
       Consolas, "Courier New", monospace;
 
@@ -213,44 +271,47 @@
     --header-height: 64px;
     --panel-width: 40vw;
     --chat-max-width: 900px;
+
+    /* Base font size (rem calc) — changed at runtime by Appearance settings */
+    --font-size-base-px: 14;
   }
 
   .dark {
-    --background: #09090b;
-    --foreground: #fafafa;
-    --card: #09090b;
-    --card-foreground: #fafafa;
-    --popover: #09090b;
-    --popover-foreground: #fafafa;
-    --primary: #fafafa;
-    --primary-foreground: #18181b;
-    --secondary: #27272a;
-    --secondary-foreground: #fafafa;
-    --muted: #27272a;
-    --muted-foreground: #a1a1aa;
-    --accent: #27272a;
-    --accent-foreground: #fafafa;
-    --destructive: #ef4444;
-    --destructive-foreground: #fafafa;
-    --border: #27272a;
-    --input: #27272a;
-    --ring: #fafafa;
-    --radius: 0.75rem;
+    --background: oklch(0.18 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.7003 0.1611 35.09);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --destructive-foreground: oklch(0.985 0 0);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --radius: 0.625rem;
 
-    --sidebar: #09090b;
-    --sidebar-foreground: #fafafa;
-    --sidebar-primary: #fafafa;
-    --sidebar-primary-foreground: #18181b;
-    --sidebar-accent: #27272a;
-    --sidebar-accent-foreground: #fafafa;
-    --sidebar-border: #27272a;
-    --sidebar-ring: #fafafa;
+    --sidebar: var(--background);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: #52525B;
+    --sidebar-primary-foreground: oklch(0.205 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
 
-    --chart-1: #3b82f6;
-    --chart-2: #10b981;
-    --chart-3: #f59e0b;
-    --chart-4: #8b5cf6;
-    --chart-5: #ec4899;
+    --chart-1: oklch(0.7 0.15 35);
+    --chart-2: oklch(0.65 0.15 165);
+    --chart-3: oklch(0.55 0.1 250);
+    --chart-4: oklch(0.7 0.12 90);
+    --chart-5: oklch(0.72 0.14 60);
 
     --bg-0: #09090b;
     --bg-000: #09090b;
@@ -366,7 +427,7 @@ html,
 body {
   height: 100%;
   font-family: var(--font-family-base);
-  font-size: 1rem;
+  font-size: calc(var(--font-size-base-px, 14) * 1px);
   line-height: 1.5;
   color: var(--foreground);
   background-color: var(--background);
@@ -991,4 +1052,386 @@ button {
   font-weight: 600;
   text-decoration: line-through;
   text-decoration-color: #f85149;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THEME 2 — "THE ARCHIVE" (vintage editorial)
+   Active when <html class="archive">. Isolated base colors + typography.
+   Accent colors stay SHARED with Theme 1: var(--primary) is still set by the
+   user's accent selection, so all 11 accent presets work in both themes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.archive {
+  /* ── Primary vintage palette ─────────────────────────────────────────── */
+  --background: #F3EBDD;              /* Aged Paper — main page background */
+  --foreground: #28231F;              /* Ink Black — body text */
+  --card: #FBF7EF;                    /* Warm Ivory — cards & sections */
+  --card-foreground: #28231F;
+  --popover: #FBF7EF;
+  --popover-foreground: #28231F;
+  --secondary: #E5D4B8;               /* Parchment — secondary backgrounds */
+  --secondary-foreground: #3B2A20;    /* Deep Walnut */
+  --muted: #E5D4B8;
+  --muted-foreground: #8A6548;        /* Sepia Brown — secondary text */
+  --accent: #EBDFC9;                  /* parchment hover surface */
+  --accent-foreground: #3B2A20;
+  --border: #CDBB9E;                  /* standard vintage border */
+  --input: #C3AE8D;
+  --ring: #8A6548;
+  --radius: 0.375rem;                 /* 6px — restrained vintage rounding */
+
+  --sidebar-accent: #E5D4B8;
+  --sidebar-accent-foreground: #3B2A20;
+  --sidebar-border: #CDBB9E;
+  --sidebar-ring: #8A6548;
+
+  /* Background / text ramps */
+  --bg-0: #F3EBDD;
+  --bg-000: #F3EBDD;
+  --bg-100: #FBF7EF;
+  --bg-200: #E5D4B8;
+  --bg-300: #CDBB9E;
+  --text-100: #28231F;
+  --text-200: #3B2A20;
+  --text-300: #8A6548;
+  --text-400: #A08564;
+  --text-500: #B6A284;
+  --accent-hover: #3B2A20;
+
+  /* Muted vintage status colors (Olive / Faded Gold / Dusty Terracotta) */
+  --success: #73785A;
+  --warning: #B08A45;
+  --error: #A75D46;
+
+  /* Typography — Cormorant Garamond headings, Libre Baskerville body */
+  --font-family-base: "Libre Baskerville", Georgia, "Times New Roman", serif;
+  --font-family-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --font-family-utility: "DM Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Soft vintage shadows (warm brown tint) */
+  --shadow-lg: 0 4px 16px rgba(59, 42, 32, 0.08),
+    0 2px 6px rgba(59, 42, 32, 0.05);
+  --shadow-xl: 0 8px 30px rgba(59, 42, 32, 0.12),
+    0 2px 8px rgba(59, 42, 32, 0.06);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #CDBB9E;
+  --scrollbar-thumb-hover: #8A6548;
+}
+
+/* ── Dark Archive variant — old library / evening archive ─────────────────── */
+.dark.archive {
+  --background: #29231E;              /* brown-black ink */
+  --foreground: #F1E5D1;              /* candlelit paper text */
+  --card: #382D25;
+  --card-foreground: #F1E5D1;
+  --popover: #382D25;
+  --popover-foreground: #F1E5D1;
+  --secondary: #453729;
+  --secondary-foreground: #F1E5D1;
+  --muted: #453729;
+  --muted-foreground: #C9B89D;
+  --accent: #4A3B2C;
+  --accent-foreground: #F1E5D1;
+  --border: #68513D;
+  --input: #68513D;
+  --ring: #C18A5A;
+
+  --sidebar-accent: #453729;
+  --sidebar-accent-foreground: #F1E5D1;
+  --sidebar-border: #68513D;
+  --sidebar-ring: #C18A5A;
+
+  --bg-0: #29231E;
+  --bg-000: #29231E;
+  --bg-100: #382D25;
+  --bg-200: #453729;
+  --bg-300: #68513D;
+  --text-100: #F1E5D1;
+  --text-200: #C9B89D;
+  --text-300: #AB987F;
+  --text-400: #8F7C64;
+  --text-500: #7A6A56;
+  --accent-hover: #F1E5D1;
+
+  --success: #858866;                 /* olive accent */
+  --warning: #C18A5A;
+  --error: #C4725A;
+
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.25);
+  --shadow-xl: 0 8px 30px rgba(0, 0, 0, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.3);
+
+  --scrollbar-thumb: #68513D;
+  --scrollbar-thumb-hover: #C9B89D;
+}
+
+/* ── Archive typography ────────────────────────────────────────────────────── */
+html.archive h1,
+html.archive h2,
+html.archive h3,
+html.archive h4,
+html.archive h5,
+html.archive h6 {
+  color: #3B2A20;                     /* Deep Walnut headings */
+  letter-spacing: -0.01em;
+}
+
+.dark.archive h1,
+.dark.archive h2,
+.dark.archive h3,
+.dark.archive h4,
+.dark.archive h5,
+.dark.archive h6 {
+  color: #F1E5D1;
+}
+
+/* Editorial heading scale (slightly larger, literary feel) */
+html.archive h1 { font-size: 2.25rem;  line-height: 1.05; }
+html.archive h2 { font-size: 1.875rem; line-height: 1.1; }
+html.archive h3 { font-size: 1.5rem;   line-height: 1.15; }
+html.archive h4 { font-size: 1.25rem;  line-height: 1.2; }
+html.archive h5 { font-size: 1.0625rem; }
+html.archive h6 { font-size: 0.9375rem; }
+
+/* Utility font (DM Sans) for controls — keeps interface modern & usable */
+html.archive button,
+html.archive input,
+html.archive textarea,
+html.archive select,
+html.archive label {
+  font-family: var(--font-family-utility);
+}
+
+/* Tailwind font utilities follow the archive stacks when active */
+.archive .font-serif,
+.archive .font-studio {
+  font-family: var(--font-family-serif) !important;
+}
+.archive .font-sans {
+  font-family: var(--font-family-utility) !important;
+}
+
+/* Generous reading line-height for long-form content */
+html.archive p,
+html.archive .prose {
+  line-height: 1.7;
+}
+
+/* Uppercase archival labels — wider tracking */
+.archive .agent-badge {
+  font-family: var(--font-family-utility);
+  letter-spacing: 0.12em;
+}
+
+/* ── Archive paper texture: barely-visible grain + soft vignette ──────────── */
+html.archive body {
+  background-image: radial-gradient(
+    ellipse at center,
+    transparent 55%,
+    rgba(59, 42, 32, 0.06) 100%
+  );
+  background-attachment: fixed;
+}
+
+html.archive body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  background-size: 240px 240px;
+}
+
+.dark.archive body {
+  background-image: radial-gradient(
+    ellipse at center,
+    transparent 55%,
+    rgba(0, 0, 0, 0.25) 100%
+  );
+}
+
+.dark.archive body::after {
+  opacity: 0.06;
+}
+
+/* ── Archive agent cards — catalog pages / archival documents ─────────────── */
+.archive .agent-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(59, 42, 32, 0.08);
+}
+
+.archive .agent-card-header {
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+
+.archive .agent-card-title {
+  font-family: var(--font-family-serif);
+  font-size: 15px;
+  letter-spacing: 0;
+  color: #3B2A20;
+}
+
+.dark.archive .agent-card {
+  border-color: var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.dark.archive .agent-card-title {
+  color: #F1E5D1;
+}
+
+/* ── Archive markdown headings keep the serif editorial look ──────────────── */
+.archive .prose {
+  --tw-prose-headings: #3B2A20;
+}
+
+.dark.archive .prose {
+  --tw-prose-headings: #F1E5D1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ARCHIVE — DEEP COMPONENT REFINEMENTS (buttons, prose, motion, details)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Warm ivory text on accent-colored buttons (foreground for archive accents) */
+.archive {
+  --primary-foreground: #FBF7EF;
+}
+
+/* ── Buttons: DM Sans, gentle translateY lift on hover (uses the standalone
+   `translate` property so Tailwind `transform` utilities are NOT broken) ── */
+html.archive button:not(:disabled),
+html.archive [role="button"]:not([aria-disabled="true"]) {
+  font-family: var(--font-family-utility);
+  transition: translate 0.25s cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 0.25s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+html.archive button:not(:disabled):hover {
+  translate: 0 -2px;
+}
+
+html.archive button:not(:disabled):active {
+  translate: 0 0;
+}
+
+/* ── Links: thin underline with sepia hover ────────────────────────────────── */
+.archive .prose a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease, text-decoration-color 0.2s ease;
+}
+
+.archive .prose a:hover {
+  color: #8A6548;
+}
+
+.dark.archive .prose a:hover {
+  color: #C18A5A;
+}
+
+/* ── Editorial section headings: short rule beneath ────────────────────────── */
+.archive .prose h2 {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.35em;
+}
+
+/* ── Vintage blockquotes: faded gold rule, ivory panel, italic serif ───────── */
+.archive .prose blockquote {
+  font-family: var(--font-family-serif);
+  font-style: italic;
+  font-weight: 400;
+  border-left: 3px solid #B08A45;
+  background: color-mix(in srgb, var(--card) 75%, transparent);
+  padding: 0.5rem 1rem;
+  border-radius: 0 6px 6px 0;
+}
+
+.dark.archive .prose blockquote {
+  border-left-color: #C18A5A;
+}
+
+/* ── Archival double-line dividers ─────────────────────────────────────────── */
+html.archive hr {
+  border: 0;
+  height: 4px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: 2rem auto;
+}
+
+/* ── Tables: thin parchment rules ──────────────────────────────────────────── */
+.archive .prose table th,
+.archive .prose table td {
+  border-color: var(--border) !important;
+}
+
+/* ── Code: ivory chip with parchment edge; pre = archival document panel ──── */
+html.archive code {
+  background: var(--card);
+  border: 1px solid var(--border);
+  padding: 0.1em 0.35em;
+}
+
+html.archive pre {
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(59, 42, 32, 0.08);
+}
+
+.dark.archive pre {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+html.archive pre code {
+  border: none;
+  background: transparent;
+}
+
+/* ── Archival tags: squared badges with wide tracking ──────────────────────── */
+.archive .agent-badge {
+  border-radius: 3px;
+}
+
+/* ── Image treatment: light sepia wash + thin border (scoped to media) ─────── */
+.archive .agent-image-thumb,
+.archive .agent-image-preview {
+  filter: sepia(0.12) saturate(0.92);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+/* ── Selection follows the shared accent, kept quiet ───────────────────────── */
+.archive ::selection {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  color: inherit;
+}
+
+/* ── Slow, calm motion (400–600ms, silk easing) ────────────────────────────── */
+.archive .agent-card {
+  animation-duration: 0.5s;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.archive .animate-agent-fade {
+  animation-duration: 0.5s;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ── Card hover: deeper soft shadow (no transform conflicts) ──────────────── */
+.archive .agent-card:hover {
+  box-shadow: 0 8px 24px rgba(59, 42, 32, 0.13);
+  border-color: #C3AE8D;
+}
+
+.dark.archive .agent-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }

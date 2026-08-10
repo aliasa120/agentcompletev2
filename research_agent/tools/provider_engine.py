@@ -140,11 +140,21 @@ def _fetch_settings_from_supabase(user_id: Optional[str] = None) -> dict[str, st
             except Exception:
                 pass
 
+        # Global fallback: ONLY rows with a NULL user_id (true global settings,
+        # written by legacy/setup paths). Never merge the first N rows across all
+        # users — that leaks one user's settings (e.g. tts_provider) into another's.
         if not res:
             try:
-                resp2 = client.table("agent_settings").select("key, value").limit(500).execute()
+                resp2 = (
+                    client.table("agent_settings")
+                    .select("key, value")
+                    .is_("user_id", None)
+                    .limit(500)
+                    .execute()
+                )
                 if resp2.data:
                     res = {row["key"]: row["value"] for row in resp2.data}
+                    logger.debug(f"[provider_engine] Settings fallback: {len(res)} global (user_id IS NULL) rows for user={user_id}")
             except Exception:
                 pass
 

@@ -18,6 +18,8 @@ import {
   PanelLeft,
   Plus,
   Trash2,
+  MenuIcon,
+  X,
 } from "lucide-react";
 import { useThreads } from "@/app/hooks/useThreads";
 import { Client } from "@langchain/langgraph-sdk";
@@ -46,6 +48,7 @@ function HomePageInner({ config }: HomePageInnerProps) {
   const [userEmail, setUserEmail] = useState<string>("");
   const [userId, setUserId] = useState<string>("");
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -468,10 +471,101 @@ function HomePageInner({ config }: HomePageInnerProps) {
       handleDeleteThread={handleDeleteThread}
     >
       <div className="bg-background flex h-screen w-full overflow-hidden">
-        {/* ── LEFT SIDEBAR ── */}
+        {/* ── MOBILE SIDEBAR OVERLAY ── */}
+        {isMobileSidebarOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40 bg-black/50 md:hidden"
+              onClick={() => setIsMobileSidebarOpen(false)}
+            />
+            <div className="fixed inset-y-0 left-0 z-50 w-72 bg-sidebar flex flex-col md:hidden shadow-xl">
+              {/* Mobile sidebar header */}
+              <div className="flex items-center justify-between h-12 px-4 border-b border-sidebar-border shrink-0">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-sidebar-primary shrink-0" />
+                  <span className="text-sidebar-foreground font-studio font-medium text-sm">
+                    Deep Agent UI
+                  </span>
+                </div>
+                <button
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="relative flex-1 overflow-y-auto p-3 min-h-0">
+                <ThreadListRoot className="p-0 w-full">
+                  <ThreadListNew className="w-full mb-1" />
+                  <ThreadListItems />
+                </ThreadListRoot>
+              </div>
+              {/* Queue in mobile sheet */}
+              <div className="shrink-0 border-t border-sidebar-border px-3 py-2">
+                <button
+                  onClick={() => setIsQueueCollapsed(!isQueueCollapsed)}
+                  className="flex items-center justify-between w-full py-1 text-[11px] font-semibold text-sidebar-foreground/70 hover:text-sidebar-foreground transition-colors uppercase tracking-wider"
+                >
+                  <span>Queue ({queueTotalPending})</span>
+                  {isQueueCollapsed ? (
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  )}
+                </button>
+                {!isQueueCollapsed && (
+                  <div className="mt-1 flex flex-col gap-1 max-h-[160px] overflow-y-auto">
+                    {queueArticles.length === 0 ? (
+                      <div className="text-[11px] text-sidebar-foreground/50 italic py-1">
+                        Queue is empty
+                      </div>
+                    ) : (
+                      queueArticles.map((article, index) => (
+                        <div
+                          key={article.id}
+                          className="p-2 rounded-lg bg-sidebar-accent/50 flex flex-col gap-0.5 text-[10px]"
+                          title={article.title}
+                        >
+                          <div className="font-medium text-sidebar-foreground line-clamp-1">
+                            {index + 1}. {article.title}
+                          </div>
+                          <div className="text-[9px] text-sidebar-foreground/60 flex justify-between">
+                            <span>{article.source_domain}</span>
+                            <span>
+                              {new Date(article.created_at).toLocaleDateString("en-PK", {
+                                timeZone: "Asia/Karachi",
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-t border-sidebar-border shrink-0">
+                <div className="flex items-center gap-2 overflow-hidden shrink min-w-0">
+                  <div className="h-7 w-7 rounded-full bg-sidebar-accent flex items-center justify-center text-sidebar-accent-foreground font-bold text-xs shrink-0 select-none">
+                    {userEmail ? userEmail[0].toUpperCase() : "U"}
+                  </div>
+                  <span className="text-xs font-medium truncate text-sidebar-foreground select-text">
+                    {userEmail || "User"}
+                  </span>
+                </div>
+                <Link href="/agent-settings" title="Agent Settings">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors cursor-pointer">
+                    <Settings className="h-4 w-4" />
+                  </div>
+                </Link>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── LEFT SIDEBAR (desktop only) ── */}
         <aside
           className={cn(
-            "bg-background flex flex-col shrink-0 transition-all duration-200 h-full",
+            "bg-sidebar flex-col shrink-0 transition-all duration-200 h-full hidden md:flex",
             isSidebarExpanded ? "w-64" : "w-12"
           )}
         >
@@ -482,10 +576,10 @@ function HomePageInner({ config }: HomePageInnerProps) {
               isSidebarExpanded ? "px-6" : "px-3.5"
             )}
           >
-            <Zap className="h-5 w-5 shrink-0 text-primary" />
+            <Zap className="h-5 w-5 shrink-0 text-sidebar-primary" />
             <span
               className={cn(
-                "text-foreground/90 ml-2 text-sm font-semibold tracking-tight whitespace-nowrap font-serif transition-opacity duration-200",
+                "text-sidebar-foreground ml-2 text-sm font-medium tracking-tight whitespace-nowrap font-studio transition-opacity duration-200",
                 !isSidebarExpanded && "opacity-0 pointer-events-none"
               )}
             >
@@ -496,7 +590,7 @@ function HomePageInner({ config }: HomePageInnerProps) {
           {/* Thread list */}
           <ThreadListRoot
             className={cn(
-              "relative flex-1 overflow-y-auto transition-[padding,width] duration-200 min-h-0",
+              "relative flex-1 overflow-y-auto transition-[padding,width] duration-200 min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]",
               isSidebarExpanded ? "w-64 p-3" : "w-12 px-2 pt-1"
             )}
           >
@@ -597,29 +691,29 @@ function HomePageInner({ config }: HomePageInnerProps) {
             )}
 
             {isSidebarExpanded ? (
-              <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-t border-sidebar-border">
                 <div className="flex items-center gap-2 overflow-hidden shrink min-w-0">
-                  <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-foreground font-bold text-xs shrink-0 select-none">
+                  <div className="h-7 w-7 rounded-full bg-sidebar-accent flex items-center justify-center text-sidebar-accent-foreground font-bold text-xs shrink-0 select-none">
                     {userEmail ? userEmail[0].toUpperCase() : "U"}
                   </div>
-                  <span className="text-xs font-medium truncate text-foreground select-text">
+                  <span className="text-xs font-medium truncate text-sidebar-foreground select-text">
                     {userEmail || "User"}
                   </span>
                 </div>
                 <Link href="/agent-settings" title="Agent Settings">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors cursor-pointer">
                     <Settings className="h-4 w-4" />
                   </div>
                 </Link>
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-1 py-2">
+              <div className="flex flex-col items-center gap-1 py-2 border-t border-sidebar-border">
                 <Link href="/agent-settings" title="Agent Settings">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors cursor-pointer">
                     <Settings className="h-4 w-4" />
                   </div>
                 </Link>
-                <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-foreground font-bold text-xs select-none">
+                <div className="h-7 w-7 rounded-full bg-sidebar-accent flex items-center justify-center text-sidebar-accent-foreground font-bold text-xs select-none">
                   {userEmail ? userEmail[0].toUpperCase() : "U"}
                 </div>
               </div>
@@ -628,11 +722,20 @@ function HomePageInner({ config }: HomePageInnerProps) {
         </aside>
 
         {/* ── MAIN CONTENT ── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <header className="flex h-12 shrink-0 items-center gap-2 px-4">
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+          <header className="flex h-12 shrink-0 items-center gap-2 px-4 bg-background">
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="size-8 flex md:hidden items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              title="Open menu"
+            >
+              <MenuIcon className="h-4 w-4" />
+            </button>
+            {/* Desktop sidebar toggle */}
             <button
               onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-              className="hidden size-8 md:flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              className="size-8 hidden md:flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
               title={isSidebarExpanded ? "Hide sidebar" : "Show sidebar"}
             >
               <PanelLeft className="h-4 w-4" />
@@ -687,26 +790,26 @@ function HomePageInner({ config }: HomePageInnerProps) {
             )}
           </header>
 
-          {/* Thread — new UI design, now backed by proven @langchain/langgraph-sdk/react */}
+          {/* Thread */}
           <main className="flex flex-1 flex-col overflow-hidden h-full w-full min-h-0">
             {workflows.length === 0 ? (
-              <div className="flex flex-col items-center justify-center flex-1 p-8 text-center bg-gradient-to-b from-background to-muted/20">
-                <div className="max-w-md p-8 border border-primary/20 rounded-2xl bg-card shadow-lg flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+              <div className="flex flex-col items-center justify-center flex-1 p-6 md:p-8 text-center">
+                <div className="max-w-md w-full p-6 md:p-8 border border-border/40 rounded-2xl bg-card shadow-sm flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
                   <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Zap className="h-7 w-7 text-primary animate-pulse" />
+                    <Zap className="h-7 w-7 text-primary" />
                   </div>
-                  <h1 className="text-xl font-bold text-foreground">Set Up Your Workspace</h1>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
+                  <h1 className="text-xl font-studio font-medium text-foreground">Set Up Your Workspace</h1>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
                     Start by creating a workflow and attaching an AI agent. This workspace is private and completely isolated to your account.
                   </p>
                   <div className="flex flex-col gap-2 w-full mt-2">
                     <Link href="/agent-settings?tab=workflows" className="w-full">
-                      <Button className="w-full h-9 text-xs font-semibold bg-primary hover:bg-primary/95 shadow">
+                      <Button className="w-full h-9 text-sm font-medium">
                         Create Your First Workflow
                       </Button>
                     </Link>
                     <Link href="/agent-settings?tab=tools" className="w-full">
-                      <Button variant="outline" className="w-full h-9 text-xs font-semibold hover:bg-muted">
+                      <Button variant="outline" className="w-full h-9 text-sm font-medium">
                         Configure Integration API Keys
                       </Button>
                     </Link>
@@ -760,14 +863,14 @@ function HomePageContent() {
   if (!config) {
     return (
       <div className="flex h-screen items-center justify-center bg-background p-6">
-        <div className="text-center max-w-md border border-border rounded-2xl bg-card shadow-lg p-8 animate-fade-in">
+        <div className="text-center max-w-md w-full border border-border/40 rounded-2xl bg-card shadow-sm p-6 md:p-8 animate-in fade-in">
           <Zap className="h-12 w-12 text-primary mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-foreground">Welcome to Deep Agent UI</h1>
+          <h1 className="text-2xl font-studio font-medium text-foreground">Welcome to Deep Agent UI</h1>
           <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
             Please configure your LangGraph deployment settings in Agent Settings to get started.
           </p>
           <Link href="/agent-settings">
-            <Button className="mt-6 w-full shadow-sm bg-primary text-primary-foreground hover:bg-primary/95">
+            <Button className="mt-6 w-full">
               Open Agent Settings
             </Button>
           </Link>

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { JanCard, CardItem } from "@/components/settings/JanCard";
 import { toast } from "sonner";
 import {
   AlarmClock, Play, Pause, Trash2, Eye, Plus, Calendar, RefreshCw,
@@ -318,23 +319,27 @@ export function ScheduledTasksSection() {
   return (
     <div className="space-y-6">
       {/* Header card */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 rounded-xl border bg-card/45 backdrop-blur shadow-sm">
-        <div>
-          <div className="flex items-center gap-2">
-            <AlarmClock className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold tracking-tight">Scheduled Tasks</h2>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Manage scheduled background agents and scripts (Hermes Unified Scheduler replicated natively).
-          </p>
-        </div>
-        <Button onClick={() => setIsCreateOpen(true)} className="sm:self-start gap-1.5 text-xs h-9">
-          <Plus className="h-4 w-4" /> Create Scheduled Task
-        </Button>
-      </div>
+      <JanCard>
+        <CardItem
+          align="start"
+          className="flex-col sm:flex-row gap-3"
+          title={
+            <span className="flex items-center gap-2">
+              <AlarmClock className="h-5 w-5 text-primary" />
+              Scheduled Tasks
+            </span>
+          }
+          description="Manage scheduled background agents and scripts (Hermes Unified Scheduler replicated natively)."
+          actions={
+            <Button onClick={() => setIsCreateOpen(true)} className="gap-1.5 text-xs h-9">
+              <Plus className="h-4 w-4" /> Create Scheduled Task
+            </Button>
+          }
+        />
+      </JanCard>
 
       {/* Task table / grid */}
-      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+      <JanCard className="p-0 overflow-hidden">
         {loading ? (
           <div className="p-12 flex flex-col items-center justify-center gap-3 text-muted-foreground">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -457,7 +462,7 @@ export function ScheduledTasksSection() {
             </table>
           </div>
         )}
-      </div>
+      </JanCard>
 
       {/* Modal: View log / response */}
       {activeLogTask && (
@@ -570,7 +575,7 @@ export function ScheduledTasksSection() {
               )}
 
               {/* Type toggle */}
-              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+              <div className="flex items-center justify-between p-3 rounded-lg border border-border/40 bg-muted/20">
                 <div className="space-y-0.5">
                   <Label className="text-xs font-semibold">Script Watchdog Mode</Label>
                   <p className="text-[10px] text-muted-foreground leading-tight">Run a local script instead of compiling an LLM agent.</p>

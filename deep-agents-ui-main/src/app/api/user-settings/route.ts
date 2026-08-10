@@ -35,14 +35,14 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabase
       .from("user_settings")
-      .select("composio_api_key")
+      .select("composio_api_key, appearance")
       .eq("id", user.id)
       .maybeSingle();
 
     if (error) throw error;
 
     return NextResponse.json({
-      settings: data ?? { composio_api_key: "" }
+      settings: data ?? { composio_api_key: "", appearance: {} }
     });
   } catch (e: unknown) {
     return NextResponse.json(
@@ -63,15 +63,31 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { composio_api_key } = body;
+    const { composio_api_key, appearance } = body;
+
+    // Read current row to preserve fields we're not updating
+    const { data: currentRow } = await supabase
+      .from("user_settings")
+      .select("composio_api_key, appearance")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const upsertPayload: Record<string, unknown> = {
+      id: user.id,
+      composio_api_key: composio_api_key !== undefined
+        ? composio_api_key
+        : (currentRow?.composio_api_key ?? ""),
+      updated_at: new Date().toISOString(),
+    };
+    if (appearance !== undefined) {
+      upsertPayload.appearance = appearance;
+    } else if (currentRow?.appearance) {
+      upsertPayload.appearance = currentRow.appearance;
+    }
 
     const { data, error } = await supabase
       .from("user_settings")
-      .upsert({
-        id: user.id,
-        composio_api_key: composio_api_key ?? "",
-        updated_at: new Date().toISOString(),
-      })
+      .upsert(upsertPayload)
       .select()
       .single();
 

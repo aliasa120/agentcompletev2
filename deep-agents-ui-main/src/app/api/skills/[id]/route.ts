@@ -69,7 +69,7 @@ export async function DELETE(_req: Request, { params }: RouteParams) {
     // Check origin/source of the skill first
     const { data: targetSkill } = await supabase
       .from("skills_library")
-      .select("origin, source")
+      .select("origin, source, skill_key")
       .eq("id", id)
       .single();
 

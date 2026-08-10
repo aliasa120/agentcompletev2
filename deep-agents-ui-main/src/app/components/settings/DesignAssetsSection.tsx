@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Upload, Trash2, Loader2, ImageIcon, RefreshCw, Plus, X, Check, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { JanCard, CardItem } from "@/components/settings/JanCard";
 
 interface DesignAsset {
   id: string;
@@ -113,28 +114,37 @@ export function DesignAssetsSection() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-semibold">Brand Reference Images</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Upload reference images and attach them to any agent, subagent, or image generator provider
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={fetchAssets} className="gap-1.5 text-xs">
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh
-          </Button>
-          <Button size="sm" onClick={() => setShowAdd(!showAdd)} className="gap-1.5 text-xs">
-            <Plus className="h-3.5 w-3.5" /> Add Image
-          </Button>
-        </div>
-      </div>
+      <JanCard>
+        <CardItem
+          align="start"
+          className="flex-col sm:flex-row gap-3"
+          title={
+            <span className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+                <ImageIcon className="h-4 w-4" />
+              </span>
+              Brand Reference Images
+            </span>
+          }
+          description="Upload reference images and attach them to any agent, subagent, or image generator provider"
+          actions={
+            <div className="flex items-center gap-2 shrink-0">
+              <Button size="sm" variant="outline" onClick={fetchAssets} className="gap-1.5 text-xs">
+                <RefreshCw className="h-3.5 w-3.5" /> Refresh
+              </Button>
+              <Button size="sm" onClick={() => setShowAdd(!showAdd)} className="gap-1.5 text-xs">
+                <Plus className="h-3.5 w-3.5" /> Add Image
+              </Button>
+            </div>
+          }
+        />
+      </JanCard>
 
       {/* Add New Image Panel */}
       {showAdd && (
-        <div className="rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-5 space-y-4">
+        <JanCard className="border-dashed border-primary/30 bg-primary/5">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-primary">Add New Reference Image</p>
+            <p className="text-sm font-medium text-primary font-studio">Add New Reference Image</p>
             <button onClick={() => { setShowAdd(false); setNewLabel(""); setNewFile(null); }}
               className="text-muted-foreground hover:text-foreground">
               <X className="h-4 w-4" />
@@ -144,7 +154,7 @@ export function DesignAssetsSection() {
           {/* File picker */}
           <div
             onClick={() => newFileInputRef.current?.click()}
-            className={`rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-all
+            className={`mt-4 rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-all
               ${newFile ? "border-primary/50 bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30"}`}
           >
             <input
@@ -180,17 +190,21 @@ export function DesignAssetsSection() {
           </div>
 
           {/* Label */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Image Label</label>
+          <CardItem
+            column
+            className="border-0 pb-0"
+            title="Image Label"
+            description="A friendly name, e.g. Brand Style Guide, Dark Theme Reference..."
+          >
             <Input
               value={newLabel}
               onChange={e => setNewLabel(e.target.value)}
               placeholder="e.g. Brand Style Guide, Dark Theme Reference..."
-              className="h-9 text-sm"
+              className="h-9 text-sm w-full"
             />
-          </div>
+          </CardItem>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 mt-4">
             <Button size="sm" variant="outline" onClick={() => { setShowAdd(false); setNewLabel(""); setNewFile(null); }}>
               Cancel
             </Button>
@@ -199,13 +213,13 @@ export function DesignAssetsSection() {
               {addingNew ? "Uploading…" : "Add to Library"}
             </Button>
           </div>
-        </div>
+        </JanCard>
       )}
 
       {/* Asset Gallery */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {assets.map(asset => (
-          <div key={asset.id} className="rounded-xl border bg-card shadow-sm overflow-hidden group">
+          <JanCard key={asset.id} className="p-0 overflow-hidden group">
             {/* Preview */}
             <div className="relative aspect-video bg-muted flex items-center justify-center overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -278,7 +292,7 @@ export function DesignAssetsSection() {
                 </Button>
               </div>
             </div>
-          </div>
+          </JanCard>
         ))}
       </div>
 
@@ -296,16 +310,15 @@ export function DesignAssetsSection() {
       )}
 
       {/* How it works */}
-      <div className="rounded-lg bg-muted/30 border p-4 text-xs text-muted-foreground space-y-2">
-        <p className="font-medium text-foreground">How reference images work</p>
-        <ul className="space-y-1 list-disc list-inside">
+      <JanCard title="How reference images work">
+        <ul className="space-y-1.5 list-disc list-inside text-sm text-muted-foreground">
           <li>Upload any brand or style reference images here (unlimited)</li>
-          <li>Go to <strong>Main Agents</strong> or <strong>Subagents</strong> → open any agent → attach images in the <strong>Reference Images</strong> section</li>
-          <li>Go to <strong>Providers</strong> → Image Generation section → attach images to any image provider</li>
+          <li>Go to <strong className="text-foreground">Main Agents</strong> or <strong className="text-foreground">Subagents</strong> → open any agent → attach images in the <strong className="text-foreground">Reference Images</strong> section</li>
+          <li>Go to <strong className="text-foreground">Providers</strong> → Image Generation section → attach images to any image provider</li>
           <li>The agent (vision model) sees the attached images directly — no separate analyzer tool needed</li>
           <li>Your system prompt controls when and how the images are used</li>
         </ul>
-      </div>
+      </JanCard>
     </div>
   );
 }

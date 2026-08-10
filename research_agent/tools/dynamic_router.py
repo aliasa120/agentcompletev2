@@ -42,6 +42,7 @@ from research_agent.memory.builtin_provider import (
     replace_memory,
     remove_memory,
 )
+from research_agent.tools.search_conversation_history import search_conversation_history
 from research_agent.memory.honcho_provider import (
     honcho_profile,
     honcho_search,
@@ -49,9 +50,9 @@ from research_agent.memory.honcho_provider import (
     honcho_context,
     honcho_conclude,
 )
-from research_agent.tools.search_conversation_history import (
-    search_conversation_history,
-)
+from research_agent.tools.text_to_speech import text_to_speech
+from research_agent.tools.terminal_tool import terminal
+from research_agent.tools.ask_permission import ask_permission
 
 # Registry mapping tool names to actual tool objects
 TOOL_OBJECTS: Dict[str, BaseTool] = {
@@ -81,6 +82,9 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
     "honcho_context": honcho_context,
     "honcho_conclude": honcho_conclude,
     "analyze_attachment": analyze_attachment,
+    "text_to_speech": text_to_speech,
+    "terminal": terminal,
+    "ask_permission": ask_permission,
 }
 
 # Rich tool metadata including descriptions, keywords (synonyms), and example triggers
@@ -236,6 +240,33 @@ TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
             "Search memories for the user's favorite drink.",
             "Find past facts about this user.",
             "Recall user preferences."
+        ]
+    },
+    "text_to_speech": {
+        "short_description": "Convert text to speech audio file link (ElevenLabs / Edge / OpenAI TTS).",
+        "keywords": ["text to speech", "tts", "voice reply", "speak text", "audio answer", "audio message", "read aloud"],
+        "example_triggers": [
+            "Say this in voice audio.",
+            "Convert my summary to speech audio.",
+            "Read this aloud to me as audio."
+        ]
+    },
+    "terminal": {
+        "short_description": "Execute OS terminal shell commands with smart human-in-the-loop approval.",
+        "keywords": ["terminal", "shell command", "run command", "os command", "cmd", "exec", "powershell"],
+        "example_triggers": [
+            "Run git status in terminal.",
+            "Execute shell command ls -la.",
+            "Check disk space via command line."
+        ]
+    },
+    "ask_permission": {
+        "short_description": "Ask the user for explicit human approval before performing critical or destructive actions.",
+        "keywords": ["ask permission", "permission", "request permission", "human approval", "confirm action", "confirm first"],
+        "example_triggers": [
+            "Ask permission before dropping database table.",
+            "Request confirmation from user before deleting files.",
+            "Ask permission to perform critical system update."
         ]
     }
 }
