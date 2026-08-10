@@ -11,9 +11,11 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TABLE IF NOT EXISTS public.user_settings (
   id                UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   composio_api_key  TEXT DEFAULT '',
+  appearance        JSONB DEFAULT '{}'::jsonb,
   created_at        TIMESTAMPTZ DEFAULT now(),
   updated_at        TIMESTAMPTZ DEFAULT now()
 );
+ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS appearance JSONB DEFAULT '{}'::jsonb;
 
 -- ── workflows ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS workflows (

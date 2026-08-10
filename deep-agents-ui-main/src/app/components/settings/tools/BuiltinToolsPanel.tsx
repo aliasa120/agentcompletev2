@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Loader2, Zap, Package, ChevronDown, ChevronRight, ToggleRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { JanCard } from "@/components/settings/JanCard";
 
 const BUILTIN_TOOLS = [
   { key: "unified_search", label: "Web Search", desc: "Tavily, Linkup, Parallel AI" },
@@ -27,6 +28,9 @@ const BUILTIN_TOOLS = [
   { key: "call_tool", label: "Call Tool", desc: "Execute dynamically routed tools" },
   { key: "cronjob", label: "Cron Scheduler", desc: "Manage scheduled tasks and background ticks" },
   { key: "analyze_attachment", label: "Analyze Attachment", desc: "Re-analyze previously uploaded audio, video, or PDF files" },
+  { key: "text_to_speech", label: "Text to Speech (Voice)", desc: "Convert text to spoken audio via ElevenLabs, Edge, or OpenAI" },
+  { key: "terminal", label: "Terminal", desc: "Execute OS shell commands (hardline blocklist enforced)" },
+  { key: "ask_permission", label: "Ask Permission (HITL)", desc: "Agent requests explicit human approval before risky/destructive actions" },
 ];
 
 export function BuiltinToolsPanel({ onReloadAgent }: { onReloadAgent?: () => void }) {
@@ -118,7 +122,7 @@ export function BuiltinToolsPanel({ onReloadAgent }: { onReloadAgent?: () => voi
   };
 
   return (
-    <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
+    <JanCard className="p-0 overflow-hidden">
       <button
         onClick={() => setExpanded((v) => !v)}
         className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/20 transition-colors"
@@ -143,7 +147,7 @@ export function BuiltinToolsPanel({ onReloadAgent }: { onReloadAgent?: () => voi
             {BUILTIN_TOOLS.map((tool) => {
               const currentMode = builtinModes[tool.key] || "primary";
               return (
-                <div key={tool.key} className="flex flex-col gap-2 p-3 rounded-lg border bg-card shadow-xs">
+                <div key={tool.key} className="flex flex-col gap-2 p-3 rounded-lg border border-border/40 bg-card shadow-xs">
                   <div className="flex items-center justify-between w-full">
                     <div className="flex items-center gap-2 min-w-0">
                       <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -174,6 +178,6 @@ export function BuiltinToolsPanel({ onReloadAgent }: { onReloadAgent?: () => voi
           </div>
         </div>
       )}
-    </div>
+    </JanCard>
   );
 }

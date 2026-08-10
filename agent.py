@@ -79,6 +79,11 @@ from research_agent.tools import (
     build_tools_index,
 )
 from research_agent.tools.provider_engine import get_llm_config
+from research_agent.tools.text_to_speech import text_to_speech
+from research_agent.tools.terminal_tool import terminal
+from research_agent.commands import resolve_command, help_lines as command_help_lines
+from research_agent.learn_prompt import build_learn_prompt
+from research_agent import tts as tts_engine
 
 # Inject today's date into the unified prompt
 INSTRUCTIONS = MAIN_AGENT_INSTRUCTIONS.format(date=datetime.now().strftime("%Y-%m-%d"))
@@ -1936,6 +1941,10 @@ def load_dynamic_agents_by_workflow():
             honcho_reasoning,
             honcho_context,
             honcho_conclude,
+            youtube_transcript,
+            text_to_speech,
+            terminal,
+            ask_permission,
         )
 
         tool_lookup = {
@@ -1958,6 +1967,9 @@ def load_dynamic_agents_by_workflow():
             "call_tool": call_tool,
             "youtube_transcript": youtube_transcript,
             "cronjob": cronjob,
+            "text_to_speech": text_to_speech,
+            "terminal": terminal,
+            "ask_permission": ask_permission,
             "search_conversation_history": search_conversation_history,
             "analyze_attachment": analyze_attachment,
             "search_memories": search_memories,
@@ -2399,9 +2411,186 @@ def route_workflow(state, config):
 
 from langchain_core.runnables import RunnableConfig
 
+import re as _re
+
+# assistant-ui directive syntax:  :type[label]{name=id}
+_DIRECTIVE_RE = _re.compile(r":([\w-]+)\[([^\]]+)\](?:\{name=([^}]+)\})?")
+
+
+def _message_text(msg) -> str:
+    """Extract plain text from a message whose content is str or content-blocks."""
+    content = msg.content
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for b in content:
+            if isinstance(b, str):
+                parts.append(b)
+            elif isinstance(b, dict) and b.get("type") == "text":
+                parts.append(b.get("text", ""))
+        return "".join(parts)
+    return ""
+
+
+def _set_message_text(msg, text: str) -> None:
+    """Replace the text of a message, preserving non-text (media) content blocks."""
+    content = msg.content
+    if isinstance(content, list):
+        new_blocks = []
+        text_written = False
+        for b in content:
+            if isinstance(b, str):
+                if not text_written:
+                    new_blocks.append(text)
+                    text_written = True
+            elif isinstance(b, dict) and b.get("type") == "text":
+                if not text_written:
+                    new_blocks.append({**b, "text": text})
+                    text_written = True
+            else:
+                new_blocks.append(b)
+        if not text_written:
+            new_blocks.insert(0, {"type": "text", "text": text})
+        msg.content = new_blocks
+    else:
+        msg.content = text
+
 
 def load_memories(state, config: RunnableConfig):
-    """Disable automatic memory loading; the agent retrieves memories on-demand via search_memories tool."""
+    """Preprocess inbound input before workflow routing.
+
+    1. Agent slash-commands (``/learn …`` from the web composer, ``!learn …`` from
+       messaging platforms) are rewritten here into their full agent instruction.
+    2. assistant-ui @-mention directives (:skill[…], :tool[…]) are converted into
+       explicit instructions and stripped from the visible text.
+
+    (Automatic memory loading stays disabled; memories are fetched on-demand via tools.)
+    """
+    messages = state.get("messages", [])
+    last_human = None
+    for msg in reversed(messages):
+        if msg.type == "human":
+            last_human = msg
+            break
+    if last_human is None:
+        return state
+
+    text = _message_text(last_human)
+    if not text.strip():
+        return state
+
+    # 1. Agent commands
+    try:
+        parsed_cmd = resolve_command(text)
+    except Exception as e:
+        print(f"[agent] command parse error: {e}")
+        parsed_cmd = None
+    if parsed_cmd is not None:
+        cmd, args = parsed_cmd
+        if cmd.name == "learn":
+            prompt = build_learn_prompt(args)
+            _set_message_text(last_human, prompt)
+            print(f"[agent] /learn command -> injected learn prompt ({len(prompt)} chars)")
+        # session-kind commands are handled by platform adapters and never reach the graph
+        return state
+
+    # 2. @-mention directives from the web composer
+    try:
+        skills, tools = [], []
+        for m in _DIRECTIVE_RE.finditer(text):
+            ttype, label, name = m.group(1), m.group(2), (m.group(3) or m.group(2))
+            if ttype == "skill":
+                skills.append(name.strip())
+            elif ttype == "tool":
+                tools.append(name.strip())
+        if skills or tools:
+            cleaned = _DIRECTIVE_RE.sub("", text).strip()
+            note_lines = []
+            if skills:
+                note_lines.append(
+                    "The user explicitly attached these skills to this message: "
+                    + ", ".join(skills)
+                    + ". Immediately call read_skill(skill_name) for EACH of them and follow their instructions exactly."
+                )
+            if tools:
+                note_lines.append(
+                    "The user explicitly requested these tools for this task: "
+                    + ", ".join(tools)
+                    + ". Prefer them whenever they fit the task."
+                )
+            note = "\n\n[System] " + "\n".join(note_lines)
+            _set_message_text(last_human, (cleaned + note) if cleaned else note.lstrip())
+            print(f"[agent] mention directives parsed: skills={skills} tools={tools}")
+    except Exception as e:
+        print(f"[agent] mention directive parse error: {e}")
+
+    return state
+
+
+def finalize_response(state, config: RunnableConfig):
+    """Voice-reply mirroring (all three Hermes layers).
+
+    If this turn was triggered by a voice message (``voice_mode=on``) or the chat
+    wants every reply spoken (``voice_mode=tts``), synthesize the final answer and
+    append an AUDIO_URL marker that the platform adapter delivers as native audio.
+    Skipped when the agent already called the text_to_speech tool this turn.
+    """
+    configurable = config.get("configurable", {})
+    voice_mode = str(configurable.get("voice_mode") or "voice_only").strip().lower()
+    if voice_mode in ("off", "", "none", "false"):
+        return state
+
+    messages = state.get("messages", [])
+    if not messages:
+        return state
+
+    last_human = None
+    last_ai = None
+    for msg in reversed(messages):
+        if msg.type == "human" and last_human is None:
+            last_human = msg
+        elif msg.type == "ai" and last_ai is None:
+            last_ai = msg
+        if last_human is not None and last_ai is not None:
+            break
+
+    if last_ai is None:
+        return state
+
+    final_text = _message_text(last_ai)
+    if not final_text.strip() or tts_engine.AUDIO_URL_MARKER in final_text:
+        return state  # nothing to say, or the agent already spoke via the tool
+
+    # Was the user input a voice message? (explicit flag or an audio content block)
+    was_voice_input = bool(configurable.get("voice_input"))
+    if last_human is not None and isinstance(last_human.content, list):
+        for b in last_human.content:
+            if isinstance(b, dict) and b.get("type") in ("audio", "input_audio"):
+                was_voice_input = True
+                break
+
+    should_speak = (voice_mode in ("all", "tts")) or (voice_mode in ("on", "voice_only") and was_voice_input)
+    if not should_speak:
+        return state
+
+    try:
+        marker = tts_engine.synthesize_reply_audio(
+            final_text,
+            platform=(configurable.get("platform") or "web"),
+            user_id=configurable.get("user_id"),
+        )
+    except Exception as e:
+        print(f"[agent] finalize_response voice synthesis failed: {e}")
+        marker = None
+    if not marker:
+        return state
+
+    if isinstance(last_ai.content, list):
+        last_ai.content = list(last_ai.content) + [{"type": "text", "text": marker}]
+    else:
+        last_ai.content = (last_ai.content or "") + marker
+    print(f"[agent] finalize_response: appended voice reply marker (mode={voice_mode})")
     return state
 
 
@@ -2573,98 +2762,6 @@ def save_chat_history(state, config: RunnableConfig):
             h_thread.daemon = True
             h_thread.start()
 
-            # 4. Skills Engine Intelligence & Evolution Auto-Pass
-            def run_skills_engine_bg_pass(u_text: str, uid_val: str, wf_val: str, tid_val: str, turn_msgs: list):
-                try:
-                    from blockbuster.blockbuster import blockbuster_skip
-                    skip_token = blockbuster_skip.set(True)
-                except Exception:
-                    skip_token = None
-
-                try:
-                    import asyncio
-                    from research_agent.skills_engine.orchestrator import process_completed_turn_skills
-                    
-                    tool_timeline = []
-                    selected_skill_ids = []
-                    conv_log = []
-                    error_traces = []
-                    fallback_sequences = []
-                    skill_read_seq = []
-                    last_failed_tool = None
-                    
-                    for idx, m in enumerate(turn_msgs):
-                        role = getattr(m, "type", None) or (m.get("role") if isinstance(m, dict) else "unknown")
-                        content = m.content if hasattr(m, "content") else (m.get("content") if isinstance(m, dict) else str(m))
-                        
-                        err_msg = getattr(m, "error", None) or (m.get("error") if isinstance(m, dict) else None)
-                        is_error = bool(err_msg or ("error" in str(content).lower()[:100] and role in ["tool", "tool_result", "function"]))
-
-                        conv_log.append({"role": role, "content": str(content)[:2000], "error": str(err_msg) if err_msg else None})
-                        
-                        t_calls = getattr(m, "tool_calls", None) or (m.get("tool_calls") if isinstance(m, dict) else None)
-                        if t_calls:
-                            for tc in t_calls:
-                                name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", str(tc))
-                                tool_timeline.append({"tool": name, "status": "executed"})
-                                
-                                if last_failed_tool and last_failed_tool != name:
-                                    fallback_sequences.append({
-                                        "failed_tool": last_failed_tool,
-                                        "fallback_tool": name,
-                                        "step_index": idx
-                                    })
-                                    last_failed_tool = None
-
-                                if name == "read_skill":
-                                    args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
-                                    sk_name = args.get("skill_name") or args.get("skill_key")
-                                    if sk_name:
-                                        skill_read_seq.append({"skill_key": sk_name, "read_at": idx})
-                                        if sk_name not in selected_skill_ids:
-                                            selected_skill_ids.append(sk_name)
-
-                        if is_error and role in ["tool", "tool_result", "function"]:
-                            tool_name = getattr(m, "name", None) or (m.get("name") if isinstance(m, dict) else "unknown_tool")
-                            error_traces.append({"tool": tool_name, "error": str(content)[:500], "step_index": idx})
-                            last_failed_tool = tool_name
-
-                    asyncio.run(process_completed_turn_skills(
-                        task_id=f"task_{tid_val[:8] if tid_val else 'turn'}",
-                        user_id=uid_val,
-                        workflow_id=wf_val,
-                        agent_id=wf_val,
-                        task_description=u_text[:500],
-                        execution_status="completed",
-                        iterations=len(turn_msgs),
-                        conversation_log=conv_log,
-                        tool_timeline=tool_timeline,
-                        selected_skill_ids=selected_skill_ids,
-                        error_traces=error_traces,
-                        fallback_sequences=fallback_sequences,
-                        skill_read_sequence=skill_read_seq,
-                    ))
-                except Exception as sk_err:
-                    print(f"[agent] [SkillsEngine] Background analysis error: {sk_err}")
-                finally:
-                    if skip_token is not None:
-                        try:
-                            from blockbuster.blockbuster import blockbuster_skip
-                            blockbuster_skip.reset(skip_token)
-                        except Exception:
-                            pass
-
-
-
-            s_thread = threading.Thread(
-                target=run_skills_engine_bg_pass,
-                args=(user_text, user_id, workflow_id, thread_id, messages)
-            )
-            s_thread.daemon = True
-            s_thread.start()
-
-
-
     except Exception as e:
         print(f"[agent] Error saving chat history turn: {e}")
 
@@ -2717,16 +2814,18 @@ def save_chat_history(state, config: RunnableConfig):
 builder = StateGraph(AgentState)
 
 if compiled_workflows:
-    # Add load_memories and save_chat_history nodes
+    # Add load_memories, finalize_response and save_chat_history nodes
     builder.add_node("load_memories", load_memories)
+    builder.add_node("finalize_response", finalize_response)
     builder.add_node("save_chat_history", save_chat_history)
 
     # Add each workflow graph as a node
     for wf_key, wf_agent in compiled_workflows.items():
         builder.add_node(wf_key, wf_agent)
-        builder.add_edge(wf_key, "save_chat_history")
+        builder.add_edge(wf_key, "finalize_response")
 
-    # Save chat history edge to END
+    # finalize -> save chat history -> END
+    builder.add_edge("finalize_response", "save_chat_history")
     builder.add_edge("save_chat_history", END)
 
     # Start goes to load_memories
@@ -2738,7 +2837,6 @@ if compiled_workflows:
         route_workflow,
         {wf_key: wf_key for wf_key in compiled_workflows.keys()}
     )
-    
     agent = builder.compile()
 else:
     # Fallback to static configuration if Supabase is offline or empty
@@ -2792,6 +2890,8 @@ else:
             youtube_transcript,
             search_conversation_history,
             analyze_attachment,
+            text_to_speech,
+            terminal,
         ],
         subagents=[research_subagent, content_subagent],
         system_prompt=INSTRUCTIONS,
@@ -2806,4 +2906,3 @@ else:
         
     builder.add_conditional_edges(START, route_fallback, {"static_fallback": "static_fallback"})  # triggered reload for RPC bootstrap update
     agent = builder.compile()
-

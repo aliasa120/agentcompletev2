@@ -38,12 +38,28 @@ import { convertLangChainBaseMessage } from "@assistant-ui/react-langchain";
 import { useClient } from "@/providers/ClientProvider";
 import { useQueryState } from "nuqs";
 import { LangGraphAttachmentAdapter } from "@/lib/attachment-adapter";
+import { readVoiceMode, writeVoiceMode, type VoiceMode } from "@/lib/voice-mode";
+
+// TTS markers appended by the backend (finalize_response node / text_to_speech tool)
+const AUDIO_URL_RE = /^AUDIO_URL:(\S+)\s*$/;
+const AUDIO_VOICE_RE = /^AUDIO_VOICE:(true|false)\s*$/;
 
 // ── Context: expose stream + helpers to children ───────────────────────────────
 interface LangGraphRuntimeContextValue {
   isLoading: boolean;
   isThreadLoading: boolean;
   submitRef: React.MutableRefObject<((input: any, options?: any) => void) | null>;
+  /** Pending human-in-the-loop interrupt(s) (terminal approval etc.), if any. */
+  interrupts: any[];
+  /** Resume the run with a decision payload, e.g. {decisions:[{type:"approve"}]} */
+  resumeInterrupt: (payload: any, interruptId?: string) => void;
+  /** Per-thread voice reply preference (finalize_response voice mirror). */
+  voiceMode: VoiceMode;
+  setVoiceMode: (mode: VoiceMode) => void;
+  /** Start a fresh thread (used by the /new slash command). */
+  newThread: () => void;
+  threadId: string | null;
+  workflowId: string | null;
 }
 
 const LangGraphRuntimeContext = createContext<LangGraphRuntimeContextValue | undefined>(undefined);
@@ -97,6 +113,21 @@ export function LangGraphRuntimeProvider({
 }: LangGraphRuntimeProviderProps) {
   const client = useClient();
 
+  // ── Voice reply mode (per thread, localStorage-backed) ──────────────────────
+  const [voiceMode, setVoiceModeState] = useState<VoiceMode>("voice_only");
+  useEffect(() => {
+    setVoiceModeState(readVoiceMode(threadId ?? null));
+  }, [threadId]);
+  const setVoiceMode = useCallback(
+    (mode: VoiceMode) => {
+      writeVoiceMode(threadId ?? null, mode);
+      setVoiceModeState(mode);
+    },
+    [threadId],
+  );
+  const voiceModeRef = useRef<VoiceMode>("voice_only");
+  voiceModeRef.current = voiceMode;
+
   // ── useStream from @langchain/langgraph-sdk/react (the proven old hook) ───────
   const stream = useStream<StateType>({
     assistantId: assistantId || "",
@@ -127,12 +158,47 @@ export function LangGraphRuntimeProvider({
     },
   });
 
+  // ── Human-in-the-loop interrupt resume (terminal command approval) ──────────
+  const resumeInterrupt = useCallback(
+    (payload: any, interruptId?: string) => {
+      const pending: any[] = (stream as any).interrupts ?? [];
+      // Multiple pending interrupts at one checkpoint need an id-keyed resume map
+      const resume =
+        interruptId && pending.length > 1 ? { [interruptId]: payload } : payload;
+      return stream.submit(null, {
+        command: { resume },
+        streamSubgraphs: true,
+        streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"],
+        metadata: {
+          workflow_id: workflowId,
+          user_id: userId || undefined,
+        },
+        config: {
+          ...(assistantConfig ?? {}),
+          recursion_limit: 200,
+          configurable: {
+            ...(assistantConfig?.configurable ?? {}),
+            platform: "web",
+            voice_mode: voiceModeRef.current,
+            workflow_id: workflowId,
+            user_id: userId || undefined,
+          },
+        },
+      });
+    },
+    [stream, workflowId, userId, assistantConfig],
+  );
+
+  const newThread = useCallback(() => {
+    void setThreadId(null);
+  }, [setThreadId]);
+
   // ── Expose stream.submit via ref for programmatic sends ───────────────────────
   useEffect(() => {
     submitRef.current = (input: any, options?: any) => {
       return stream.submit(input, {
         streamSubgraphs: true,
-        streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"],
+        streamMode: ["values", "messages", "updates", "custom"],
         ...options,
         onError: (_err: any, _run: any) => {
           onStreamError?.();
@@ -148,6 +214,8 @@ export function LangGraphRuntimeProvider({
           ...(options?.config ?? {}),
           configurable: {
             ...(assistantConfig?.configurable ?? {}),
+            platform: "web",
+            voice_mode: voiceModeRef.current,
             workflow_id: workflowId,
             user_id: userId || undefined,
             ...(options?.config?.configurable ?? {}),
@@ -285,6 +353,78 @@ export function LangGraphRuntimeProvider({
         if (converted && converted.role !== "tool") {
           if (!Array.isArray(converted.content) && typeof converted.content !== "string") {
             converted.content = converted.content ?? "";
+          }
+        }
+
+        // Extract AUDIO_URL/AUDIO_VOICE markers (text_to_speech tool / voice mirror)
+        // into message metadata so the UI can render an audio player, and strip
+        // the marker lines from all visible text (assistant messages & tool call results).
+        if (converted) {
+          const audios: { url: string; voice: boolean }[] = [];
+          let isVoice = false;
+
+          const cleanText = (text: string): string => {
+            if (!text || typeof text !== "string") return text;
+            const lines = text.split("\n");
+            const kept: string[] = [];
+            for (const line of lines) {
+              const trimmed = line.trim();
+              const voiceMatch = trimmed.match(/AUDIO_VOICE:(true|false)/);
+              if (voiceMatch) {
+                isVoice = voiceMatch[1] === "true";
+                if (/^AUDIO_VOICE:(true|false)\s*$/.test(trimmed)) continue;
+              }
+              const urlMatch = trimmed.match(/AUDIO_URL:(\S+)/);
+              if (urlMatch) {
+                audios.push({ url: urlMatch[1], voice: isVoice });
+                if (/^AUDIO_URL:\S+\s*$/.test(trimmed)) continue;
+              }
+              const cleanLine = line
+                .replace(/AUDIO_VOICE:(true|false)/g, "")
+                .replace(/AUDIO_URL:\S+/g, "")
+                .trim();
+              if (cleanLine || line === "") {
+                kept.push(cleanLine);
+              }
+            }
+            return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+          };
+
+          if (typeof converted.content === "string") {
+            converted.content = cleanText(converted.content);
+          } else if (Array.isArray(converted.content)) {
+            converted.content = converted.content.map((part: any) => {
+              if (part?.type === "text" && typeof part.text === "string") {
+                return { ...part, text: cleanText(part.text) };
+              }
+              if (part?.type === "tool-call") {
+                const cleanedResult = typeof part.result === "string"
+                  ? cleanText(part.result)
+                  : part.result;
+                const cleanedOutput = typeof part.output === "string"
+                  ? cleanText(part.output)
+                  : part.output;
+                return {
+                  ...part,
+                  ...(part.result ? { result: cleanedResult } : {}),
+                  ...(part.output ? { output: cleanedOutput } : {}),
+                };
+              }
+              return part;
+            });
+          }
+
+          if (audios.length > 0) {
+            converted.metadata = {
+              ...(converted.metadata ?? {}),
+              custom: {
+                ...(converted.metadata?.custom ?? {}),
+                audioReplies: [
+                  ...(converted.metadata?.custom?.audioReplies ?? []),
+                  ...audios,
+                ],
+              },
+            };
           }
         }
 
@@ -462,6 +602,9 @@ export function LangGraphRuntimeProvider({
             recursion_limit: 200,
             configurable: {
               ...(assistantConfig?.configurable ?? {}),
+              platform: "web",
+              voice_mode: voiceModeRef.current,
+              voice_input: parts.some((p: any) => p.type === "audio" || p.type === "input_audio"),
               workflow_id: workflowId,
               user_id: userId || undefined,
             },
@@ -614,6 +757,8 @@ export function LangGraphRuntimeProvider({
             recursion_limit: 200,
             configurable: {
               ...(assistantConfig?.configurable ?? {}),
+              platform: "web",
+              voice_mode: voiceModeRef.current,
               workflow_id: workflowId,
               user_id: userId || undefined,
             },
@@ -657,6 +802,8 @@ export function LangGraphRuntimeProvider({
             recursion_limit: 200,
             configurable: {
               ...(assistantConfig?.configurable ?? {}),
+              platform: "web",
+              voice_mode: voiceModeRef.current,
               workflow_id: workflowId,
               user_id: userId || undefined,
             },
@@ -693,11 +840,25 @@ export function LangGraphRuntimeProvider({
     },
   });
 
+  const streamInterrupts: any[] | undefined = (stream as any).interrupts;
+  const streamInterrupt: any = (stream as any).interrupt;
+  const interrupts: any[] = useMemo(() => {
+    if (Array.isArray(streamInterrupts)) return streamInterrupts.filter((i) => i != null);
+    return streamInterrupt ? [streamInterrupt] : [];
+  }, [streamInterrupts, streamInterrupt]);
+
   const contextValue = useMemo(() => ({
     isLoading: stream.isLoading,
     isThreadLoading: stream.isThreadLoading,
     submitRef,
-  }), [stream.isLoading, stream.isThreadLoading, submitRef]);
+    interrupts,
+    resumeInterrupt,
+    voiceMode,
+    setVoiceMode,
+    newThread,
+    threadId: threadId ?? null,
+    workflowId: workflowId ?? null,
+  }), [stream.isLoading, stream.isThreadLoading, submitRef, interrupts, resumeInterrupt, voiceMode, setVoiceMode, newThread, threadId, workflowId]);
 
   return (
     <LangGraphRuntimeContext.Provider value={contextValue}>

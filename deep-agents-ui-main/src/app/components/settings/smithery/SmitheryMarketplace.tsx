@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { JanCard } from "@/components/settings/JanCard";
 import { SmitheryConnectDialog } from "./SmitheryConnectDialog";
 
 interface SmitheryServer {
@@ -305,8 +306,8 @@ function SmitheryServerCard({
   onConnect: () => void;
 }) {
   return (
-    <div
-      className={`rounded-xl border p-3 flex flex-col gap-2.5 transition-all hover:shadow-md ${
+    <JanCard
+      className={`p-3 flex flex-col gap-2.5 transition-all hover:shadow-md ${
         server.isConnectedRemote
           ? "border-emerald-500/30 bg-emerald-500/5"
           : "border-border bg-card hover:border-primary/30"
@@ -404,6 +405,6 @@ function SmitheryServerCard({
           {server.isConnectedRemote ? "Configure" : "Connect"}
         </Button>
       </div>
-    </div>
+    </JanCard>
   );
 }

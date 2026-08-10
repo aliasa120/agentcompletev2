@@ -535,19 +535,49 @@ async function handleRemoteConnect(
     }
   }
 
-  const { data: conn, error: insertError } = await supabase
+  const { data: existingConn } = await supabase
     .from("mcp_connections")
-    .insert({
-      user_id: user.id,
-      label: label ?? `Smithery (Remote): ${displayName}`,
-      toolkit_slug: qualifiedName,
-      connection_type: "manual",
-      status: state === "auth_required" ? "inactive" : "active",
-      mcp_url: mcpUrlJson,
-      available_tools,
-    })
-    .select()
-    .single();
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("toolkit_slug", qualifiedName)
+    .maybeSingle();
+
+  let conn: any = null;
+  let insertError: any = null;
+
+  if (existingConn) {
+    const { data, error } = await supabase
+      .from("mcp_connections")
+      .update({
+        label: label ?? `Smithery (Remote): ${displayName}`,
+        status: state === "auth_required" ? "inactive" : "active",
+        mcp_url: mcpUrlJson,
+        available_tools,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existingConn.id)
+      .select()
+      .single();
+    conn = data;
+    insertError = error;
+  } else {
+    const { data, error } = await supabase
+      .from("mcp_connections")
+      .insert({
+        user_id: user.id,
+        label: label ?? `Smithery (Remote): ${displayName}`,
+        toolkit_slug: qualifiedName,
+        connection_type: "manual",
+        status: state === "auth_required" ? "inactive" : "active",
+        mcp_url: mcpUrlJson,
+        available_tools,
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+    conn = data;
+    insertError = error;
+  }
 
   if (insertError) {
     return NextResponse.json({ success: false, error: insertError.message });
@@ -605,14 +635,12 @@ export async function GET(req: Request) {
     const state = data.status?.state ?? "unknown";
 
     if (state === "connected") {
-      // Auto-activate connection in DB and fetch tools
       try {
-        const { data: inactiveConns } = await supabase
+        const { data: allUserConns } = await supabase
           .from("mcp_connections").select("id, mcp_url").eq("user_id", user.id)
-          .eq("connection_type", "manual")
-          .eq("status", "inactive");
+          .eq("connection_type", "manual");
         
-        for (const conn of inactiveConns ?? []) {
+        for (const conn of allUserConns ?? []) {
           if (conn.mcp_url?.includes(`/${namespace}/${connectionId}`)) {
             // Introspect tools first
             let available_tools: any[] = [];

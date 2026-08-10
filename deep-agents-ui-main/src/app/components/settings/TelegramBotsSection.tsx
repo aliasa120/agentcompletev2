@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { JanCard, CardItem } from "@/components/settings/JanCard";
 
 interface TelegramBot {
   id: string;
@@ -365,19 +366,20 @@ export function TelegramBotsSection() {
   return (
     <div className="space-y-6">
       {/* Header Card */}
-      <div className="rounded-xl border bg-card shadow-sm p-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-primary/10 text-primary rounded-lg">
-            <Layers className="h-6 w-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold tracking-tight">Platforms Connection</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Connect external messaging platforms to enable conversational workflows on Telegram, Slack, Discord, or Email.
-            </p>
-          </div>
-        </div>
-      </div>
+      <JanCard>
+        <CardItem
+          align="start"
+          title={
+            <span className="flex items-center gap-3">
+              <span className="p-2.5 bg-primary/10 text-primary rounded-lg">
+                <Layers className="h-6 w-6" />
+              </span>
+              Platforms Connection
+            </span>
+          }
+          description="Connect external messaging platforms to enable conversational workflows on Telegram, Slack, Discord, or Email."
+        />
+      </JanCard>
 
       {/* Tabs */}
       <div className="flex border-b gap-2">
@@ -412,25 +414,25 @@ export function TelegramBotsSection() {
         
         {/* Form Column */}
         <div className="md:col-span-1">
-          <div className="rounded-xl border bg-card shadow-sm p-5 space-y-4">
-            <h3 className="font-semibold text-sm">Register {activeTab.toUpperCase()} Gateway</h3>
+          <JanCard title={`Register ${activeTab.toUpperCase()} Gateway`}>
             
             {activeTab === "telegram" && (
-              <form onSubmit={handleRegisterTelegram} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">Bot API Token</label>
-                  <Input
-                    type="password"
-                    placeholder="8802642908:AAEd5X..."
-                    value={tgToken}
-                    onChange={e => setTgToken(e.target.value)}
-                    className="h-9 text-sm"
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    Obtained from <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="text-primary underline">@BotFather</a>.
-                  </p>
-                </div>
-                <Button type="submit" disabled={saving} className="w-full h-9 text-xs">
+              <form onSubmit={handleRegisterTelegram}>
+                <CardItem column className="mt-0" title="Bot API Token">
+                  <div className="space-y-1.5">
+                    <Input
+                      type="password"
+                      placeholder="8802642908:AAEd5X..."
+                      value={tgToken}
+                      onChange={e => setTgToken(e.target.value)}
+                      className="h-9 text-sm"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Obtained from <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="text-primary underline">@BotFather</a>.
+                    </p>
+                  </div>
+                </CardItem>
+                <Button type="submit" disabled={saving} className="w-full h-9 text-xs mt-4">
                   {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
                   Add Telegram Bot
                 </Button>
@@ -438,9 +440,8 @@ export function TelegramBotsSection() {
             )}
 
             {activeTab === "slack" && (
-              <form onSubmit={handleRegisterSlack} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">Bot User OAuth Token</label>
+              <form onSubmit={handleRegisterSlack}>
+                <CardItem column className="mt-0" title="Bot User OAuth Token">
                   <Input
                     type="password"
                     placeholder="xoxb-..."
@@ -448,21 +449,22 @@ export function TelegramBotsSection() {
                     onChange={e => setSlackBotToken(e.target.value)}
                     className="h-9 text-sm"
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">App-Level Token (Socket Mode)</label>
-                  <Input
-                    type="password"
-                    placeholder="xapp-..."
-                    value={slackAppToken}
-                    onChange={e => setSlackAppToken(e.target.value)}
-                    className="h-9 text-sm"
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    Required for Slack Socket Mode communication.
-                  </p>
-                </div>
-                <Button type="submit" disabled={saving} className="w-full h-9 text-xs">
+                </CardItem>
+                <CardItem column title="App-Level Token (Socket Mode)">
+                  <div className="space-y-1.5">
+                    <Input
+                      type="password"
+                      placeholder="xapp-..."
+                      value={slackAppToken}
+                      onChange={e => setSlackAppToken(e.target.value)}
+                      className="h-9 text-sm"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Required for Slack Socket Mode communication.
+                    </p>
+                  </div>
+                </CardItem>
+                <Button type="submit" disabled={saving} className="w-full h-9 text-xs mt-4">
                   {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
                   Add Slack Gateway
                 </Button>
@@ -470,21 +472,22 @@ export function TelegramBotsSection() {
             )}
 
             {activeTab === "discord" && (
-              <form onSubmit={handleRegisterDiscord} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">Discord Bot Token</label>
-                  <Input
-                    type="password"
-                    placeholder="MTY3..."
-                    value={discordToken}
-                    onChange={e => setDiscordToken(e.target.value)}
-                    className="h-9 text-sm"
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    Get from the Discord Developer Portal (enable Message Content Intent).
-                  </p>
-                </div>
-                <Button type="submit" disabled={saving} className="w-full h-9 text-xs">
+              <form onSubmit={handleRegisterDiscord}>
+                <CardItem column className="mt-0" title="Discord Bot Token">
+                  <div className="space-y-1.5">
+                    <Input
+                      type="password"
+                      placeholder="MTY3..."
+                      value={discordToken}
+                      onChange={e => setDiscordToken(e.target.value)}
+                      className="h-9 text-sm"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Get from the Discord Developer Portal (enable Message Content Intent).
+                    </p>
+                  </div>
+                </CardItem>
+                <Button type="submit" disabled={saving} className="w-full h-9 text-xs mt-4">
                   {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
                   Add Discord Bot
                 </Button>
@@ -492,18 +495,16 @@ export function TelegramBotsSection() {
             )}
 
             {activeTab === "email" && (
-              <form onSubmit={handleRegisterEmail} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">Username / Email Address</label>
+              <form onSubmit={handleRegisterEmail}>
+                <CardItem column className="mt-0" title="Username / Email Address">
                   <Input
                     placeholder="agent@company.com"
                     value={emailUsername}
                     onChange={e => setEmailUsername(e.target.value)}
                     className="h-9 text-sm"
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">Password / App Password</label>
+                </CardItem>
+                <CardItem column title="Password / App Password">
                   <Input
                     type="password"
                     placeholder="••••••••••••"
@@ -511,62 +512,62 @@ export function TelegramBotsSection() {
                     onChange={e => setEmailPassword(e.target.value)}
                     className="h-9 text-sm"
                   />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-semibold text-muted-foreground">SMTP Host</label>
+                </CardItem>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-3 mt-3">
+                  <CardItem column className="mt-0" title="SMTP Host">
                     <Input
                       placeholder="smtp.gmail.com"
                       value={emailSmtpHost}
                       onChange={e => setEmailSmtpHost(e.target.value)}
                       className="h-9 text-xs"
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-semibold text-muted-foreground">SMTP Port</label>
+                  </CardItem>
+                  <CardItem column className="mt-0" title="SMTP Port">
                     <Input
                       placeholder="587"
                       value={emailSmtpPort}
                       onChange={e => setEmailSmtpPort(e.target.value)}
                       className="h-9 text-xs"
                     />
-                  </div>
+                  </CardItem>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-semibold text-muted-foreground">IMAP Host</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-3 mt-3">
+                  <CardItem column className="mt-0" title="IMAP Host">
                     <Input
                       placeholder="imap.gmail.com"
                       value={emailImapHost}
                       onChange={e => setEmailImapHost(e.target.value)}
                       className="h-9 text-xs"
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-semibold text-muted-foreground">IMAP Port</label>
+                  </CardItem>
+                  <CardItem column className="mt-0" title="IMAP Port">
                     <Input
                       placeholder="993"
                       value={emailImapPort}
                       onChange={e => setEmailImapPort(e.target.value)}
                       className="h-9 text-xs"
                     />
-                  </div>
+                  </CardItem>
                 </div>
-                <Button type="submit" disabled={saving} className="w-full h-9 text-xs">
+                <Button type="submit" disabled={saving} className="w-full h-9 text-xs mt-4">
                   {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
                   Add Email Gateway
                 </Button>
               </form>
             )}
-          </div>
+          </JanCard>
         </div>
 
         {/* Listing Column */}
         <div className="md:col-span-2 space-y-4">
-          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-            <div className="p-4 border-b bg-muted/20">
-              <h3 className="font-semibold text-sm capitalize">Active {activeTab} Connections</h3>
-            </div>
+          <JanCard
+            className="p-0 overflow-hidden"
+            header={
+              <div className="p-4 border-b bg-muted/20">
+                <h3 className="font-semibold text-sm capitalize">Active {activeTab} Connections</h3>
+              </div>
+            }
+          >
 
             <div className="divide-y">
               {loading ? (
@@ -663,7 +664,7 @@ export function TelegramBotsSection() {
                 </>
               )}
             </div>
-          </div>
+          </JanCard>
         </div>
       </div>
     </div>

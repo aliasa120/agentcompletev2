@@ -2,6 +2,7 @@
 
 import type { ReactNode, ComponentProps } from "react";
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function DropdownMenu(
@@ -104,10 +105,37 @@ function DropdownMenuSeparator({
   );
 }
 
+function DropdownMenuCheckboxItem({
+  className,
+  children,
+  checked,
+  ...props
+}: ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>) {
+  return (
+    <DropdownMenuPrimitive.CheckboxItem
+      checked={checked}
+      className={cn(
+        itemClassName,
+        "relative pl-8 data-[state=checked]:text-foreground",
+        className,
+      )}
+      {...props}
+    >
+      <span className="absolute left-2 flex size-4 items-center justify-center">
+        <DropdownMenuPrimitive.ItemIndicator>
+          <Check className="size-3.5" />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </DropdownMenuPrimitive.CheckboxItem>
+  );
+}
+
 export {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuCheckboxItem,
   DropdownMenuSeparator,
 };

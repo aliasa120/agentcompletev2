@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { CheckCircle2, Loader2, Trash2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { JanCard } from "@/components/settings/JanCard";
 import { supabase } from "@/lib/supabase";
 
 export function ZapierSection({
@@ -141,16 +142,17 @@ export function ZapierSection({
       </div>
 
       {activeSubTab === "embed" ? (
-        <div className="rounded-lg border bg-card p-5 space-y-4 shadow-sm">
-          <div className="flex items-center gap-3 border-b pb-3.5">
-            <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-600">
-              <Zap className="h-5 w-5 animate-pulse" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold">Integrate Zapier Connections</h3>
+        <JanCard
+          title="Integrate Zapier Connections"
+          header={
+            <div className="flex items-center gap-3 border-b border-border/40 pb-3.5 mb-4">
+              <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-600">
+                <Zap className="h-5 w-5 animate-pulse" />
+              </div>
               <p className="text-[11px] text-muted-foreground">Connect your AI agent to Gmail, Slack, Salesforce, Google Sheets, and 9,000+ other apps.</p>
             </div>
-          </div>
+          }
+        >
 
           {loadingUser ? (
             <div className="flex flex-col items-center justify-center py-20 text-xs text-muted-foreground gap-2">
@@ -171,27 +173,23 @@ export function ZapierSection({
               })}
             </div>
           )}
-        </div>
+        </JanCard>
       ) : (
-        <div className="space-y-6">
-          <div className="rounded-lg border bg-card p-5 space-y-4 shadow-sm">
-            <div className="flex items-center gap-3 border-b pb-3.5">
-              <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-600">
-                <Zap className="h-5 w-5" />
+        <div className="space-y-4">
+          <JanCard
+            title="Zapier Developer Platform Integration"
+            header={
+              <div className="flex items-center gap-3 border-b border-border/40 pb-3.5 mb-4">
+                <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-600">
+                  <Zap className="h-5 w-5" />
+                </div>
+                <p className="text-[11px] text-muted-foreground">Standard OAuth2 settings to configure your private Zapier app &quot;easyclaw&quot;. Use the credentials and URLs below to set up OAuth v2 Authentication in your Zapier Developer dashboard.</p>
               </div>
-              <div>
-                <h3 className="text-sm font-semibold">Zapier Developer Platform Integration</h3>
-                <p className="text-[11px] text-muted-foreground">Standard OAuth2 settings to configure your private Zapier app &quot;easyclaw&quot;</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Use the credentials and URLs below to set up OAuth v2 Authentication in your Zapier Developer dashboard.
-            </p>
-
-            <div className="space-y-3">
+            }
+          >
+            <div className="space-y-2.5">
               {copyableFields.map(field => (
-                <div key={field.label} className="flex flex-col md:flex-row md:items-center justify-between gap-1 p-2 rounded-lg border bg-muted/30">
+                <div key={field.label} className="flex flex-col md:flex-row md:items-center justify-between gap-1 p-2 rounded-lg border border-border/40 bg-muted/30">
                   <span className="text-xs font-semibold text-muted-foreground min-w-[200px]">{field.label}</span>
                   <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
                     <span className="text-xs font-mono text-foreground truncate select-all">{field.value}</span>
@@ -202,13 +200,9 @@ export function ZapierSection({
                 </div>
               ))}
             </div>
-          </div>
+          </JanCard>
 
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold flex items-center gap-2">
-              Connected Zapier Accounts
-              <span className="text-xs font-normal text-muted-foreground">({connections.length})</span>
-            </h3>
+          <JanCard title={`Connected Zapier Accounts (${connections.length})`}>
             {loading ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground py-4">
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading connected accounts…
@@ -220,7 +214,7 @@ export function ZapierSection({
             ) : (
               <div className="space-y-2">
                 {connections.map(conn => (
-                  <div key={conn.id} className="flex items-center justify-between p-3 rounded-lg border bg-card shadow-xs">
+                  <div key={conn.id} className="flex items-center justify-between p-3 rounded-lg border border-border/40 bg-muted/30">
                     <div className="flex items-center gap-2 min-w-0">
                       <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                       <div className="min-w-0">
@@ -236,7 +230,7 @@ export function ZapierSection({
                 ))}
               </div>
             )}
-          </div>
+          </JanCard>
         </div>
       )}
     </div>

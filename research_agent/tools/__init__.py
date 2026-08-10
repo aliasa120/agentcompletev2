@@ -45,7 +45,13 @@ from .search_conversation_history import search_conversation_history, search_mem
 # ── Dynamic Tool Routing ──────────────────────────────────────────────────
 from .dynamic_router import list_tools, load_tools, unload_unused_tools, build_tools_index, call_tool
 
+# ── Voice & OS access ──────────────────────────────────────────────────────
+from .text_to_speech import text_to_speech
+from .terminal_tool import terminal
+from .ask_permission import ask_permission
+
 __all__ = [
+    "ask_permission",
     # ── Unified tools (exposed to agent) ─────────────────────────────────────
     "unified_search",
     "unified_extract",
@@ -92,4 +98,7 @@ __all__ = [
     "parallel_search",
     "exa_extract",
     "create_post_image_gemini",
+    # ── Voice & OS access ──────────────────────────────────────────────────────
+    "text_to_speech",
+    "terminal",
 ]

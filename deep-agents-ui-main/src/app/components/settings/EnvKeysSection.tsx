@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { JanCard, CardItem } from "@/components/settings/JanCard";
 import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -35,6 +36,7 @@ interface KeyField {
   type?: "password" | "text" | "url";
   testable?: boolean;
   testKey?: string;      // provider id for /api/test-provider
+  options?: { value: string; label: string }[];  // render as <select>, saves on change
 }
 
 interface KeyGroup {
@@ -119,6 +121,7 @@ const KEY_GROUPS: KeyGroup[] = [
       { key: "langsmith_api_key",  label: "LangSmith API Key",  placeholder: "lsv2_pt_...", helpUrl: "https://smith.langchain.com/",     testable: false, type: "text" },
     ],
   },
+
   {
     id: "social",
     label: "Social Media",
@@ -194,27 +197,58 @@ function KeyRow({
   };
 
   return (
-    <div className="flex flex-col gap-1.5 py-3 border-b border-border/50 last:border-0">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <label className="text-xs font-semibold text-foreground">{field.label}</label>
+    <CardItem
+      column
+      title={
+        <span className="flex items-center gap-1.5 text-sm">
+          {field.label}
           {field.helpUrl && (
             <a href={field.helpUrl} target="_blank" rel="noopener noreferrer"
                className="text-muted-foreground hover:text-primary transition-colors">
               <ExternalLink className="h-3 w-3" />
             </a>
           )}
-        </div>
-        <div className="flex items-center gap-1.5 text-[11px] font-medium">
-          {testState === "ok" && <span className="text-emerald-500 flex items-center gap-0.5"><CheckCircle2 className="h-3 w-3" />{testMsg}</span>}
-          {testState === "error" && <span className="text-rose-400 flex items-center gap-0.5"><AlertCircle className="h-3 w-3" />{testMsg}</span>}
-          {saveState === "saved" && <span className="text-emerald-500 flex items-center gap-0.5"><CheckCircle2 className="h-3 w-3" />Saved</span>}
-          {saveState === "error" && <span className="text-rose-400 flex items-center gap-0.5"><AlertCircle className="h-3 w-3" />Save failed</span>}
-        </div>
-      </div>
-
+        </span>
+      }
+      description={
+        (testState !== "idle" || saveState !== "idle") ? (
+          <span className="flex items-center gap-2 text-[11px] font-medium">
+            {testState === "ok" && <span className="text-emerald-500 flex items-center gap-0.5"><CheckCircle2 className="h-3 w-3" />{testMsg}</span>}
+            {testState === "error" && <span className="text-rose-400 flex items-center gap-0.5"><AlertCircle className="h-3 w-3" />{testMsg}</span>}
+            {saveState === "saved" && <span className="text-emerald-500 flex items-center gap-0.5"><CheckCircle2 className="h-3 w-3" />Saved</span>}
+            {saveState === "error" && <span className="text-rose-400 flex items-center gap-0.5"><AlertCircle className="h-3 w-3" />Save failed</span>}
+          </span>
+        ) : undefined
+      }
+    >
       <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+        {field.options ? (
+          <select
+            value={localValue || field.options[0]?.value || ""}
+            onChange={async (e) => {
+              const v = e.target.value;
+              setLocalValue(v);
+              setSaveState("saving");
+              try {
+                await onSave(field.key, v);
+                setSaveState("saved");
+                setTimeout(() => setSaveState("idle"), 2500);
+              } catch {
+                setSaveState("error");
+                setTimeout(() => setSaveState("idle"), 3000);
+              }
+            }}
+            className="h-8 flex-1 min-w-0 rounded-md border border-input bg-background px-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            {!field.options.some(o => o.value === localValue) && localValue && (
+              <option value={localValue}>{localValue}</option>
+            )}
+            {field.options.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        ) : (
+        <div className="relative flex-1 min-w-0">
           <Input
             type={showValue || field.type === "text" || field.type === "url" ? "text" : "password"}
             placeholder={field.placeholder}
@@ -231,10 +265,13 @@ function KeyRow({
             </button>
           )}
         </div>
+        )}
+        {!field.options && (
         <Button onClick={handleSave} disabled={saveState === "saving" || !isDirty}
           size="sm" variant={isDirty ? "default" : "outline"} className="h-8 px-3 text-xs font-semibold shrink-0">
           {saveState === "saving" ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
         </Button>
+        )}
         {field.testable && (
           <Button onClick={handleTest} disabled={testState === "testing" || !localValue}
             size="sm" variant="outline" className="h-8 px-3 text-xs font-semibold shrink-0">
@@ -242,7 +279,7 @@ function KeyRow({
           </Button>
         )}
       </div>
-    </div>
+    </CardItem>
   );
 }
 
@@ -263,31 +300,34 @@ function KeyGroupCard({
   const filledCount = group.fields.filter(f => values[f.key]?.trim()).length;
 
   return (
-    <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-      <button onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center gap-3 p-4 text-left hover:bg-muted/30 transition-colors">
-        <span className={cn("shrink-0", group.iconClass)}>{group.icon}</span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold">{group.label}</p>
-            <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full",
-              filledCount === group.fields.length
-                ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600"
-                : filledCount > 0
-                ? "bg-amber-100 dark:bg-amber-950/40 text-amber-600"
-                : "bg-muted text-muted-foreground")}>
-              {filledCount}/{group.fields.length}
-            </span>
+    <JanCard
+      className="p-0 overflow-hidden"
+      header={
+        <button onClick={() => setExpanded(e => !e)}
+          className="w-full flex items-center gap-3 p-4 md:p-5 text-left hover:bg-muted/30 transition-colors">
+          <span className={cn("shrink-0", group.iconClass)}>{group.icon}</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-foreground font-studio">{group.label}</p>
+              <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                filledCount === group.fields.length
+                  ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400"
+                  : filledCount > 0
+                  ? "bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400"
+                  : "bg-muted text-muted-foreground")}>
+                {filledCount}/{group.fields.length}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground truncate">{group.description}</p>
           </div>
-          <p className="text-xs text-muted-foreground truncate">{group.description}</p>
-        </div>
-        {expanded
-          ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-          : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
-      </button>
-
+          {expanded
+            ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+        </button>
+      }
+    >
       {expanded && (
-        <div className="px-4 pb-2 border-t border-border/50">
+        <div className="px-4 pb-4 md:px-5 border-t border-border/40">
           {group.fields.map(field => (
             <KeyRow
               key={field.key}
@@ -299,7 +339,7 @@ function KeyGroupCard({
           ))}
         </div>
       )}
-    </div>
+    </JanCard>
   );
 }
 
@@ -380,13 +420,13 @@ export function EnvKeysSection() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="flex items-start justify-between gap-4 flex-wrap px-1">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Shield className="h-5 w-5 text-primary" />
-            <h2 className="text-xl font-bold">ENV Keys — Your API Credentials</h2>
+            <h2 className="text-xl font-bold font-studio text-foreground">ENV Keys — Your API Credentials</h2>
           </div>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
             Enter your own API keys below. Keys are stored securely per-user and used automatically
@@ -396,9 +436,9 @@ export function EnvKeysSection() {
         <div className="flex items-center gap-2 shrink-0">
           <span className={cn("text-xs font-bold px-2.5 py-1.5 rounded-full",
             totalFilled >= ALL_KEYS.length * 0.7
-              ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600"
+              ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400"
               : totalFilled > 0
-              ? "bg-amber-100 dark:bg-amber-950/40 text-amber-600"
+              ? "bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400"
               : "bg-muted text-muted-foreground")}>
             {totalFilled}/{ALL_KEYS.length} configured
           </span>
@@ -433,28 +473,31 @@ export function EnvKeysSection() {
       </div>
 
       {/* Save all footer */}
-      <div className="flex items-center justify-between pt-2 border-t flex-wrap gap-2">
-        <p className="text-xs text-muted-foreground">
-          Click <strong>Save</strong> next to each key individually, or use Save All.
-        </p>
-        <div className="flex items-center gap-2">
-          {bulkSaveState === "saved" && (
-            <span className="text-xs text-emerald-500 font-semibold flex items-center gap-1">
-              <CheckCircle2 className="h-3.5 w-3.5" />All saved!
-            </span>
-          )}
-          {bulkSaveState === "error" && (
-            <span className="text-xs text-rose-400 font-semibold flex items-center gap-1">
-              <AlertCircle className="h-3.5 w-3.5" />Save failed
-            </span>
-          )}
-          <Button onClick={handleSaveAll} disabled={bulkSaveState === "saving"} className="h-9 px-6 font-semibold text-xs">
-            {bulkSaveState === "saving"
-              ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />Saving all keys…</>
-              : "Save All Keys"}
-          </Button>
-        </div>
-      </div>
+      <JanCard>
+        <CardItem
+          title="Persist all credentials"
+          description="Click Save next to each key individually, or write everything at once."
+          actions={
+            <div className="flex items-center gap-2">
+              {bulkSaveState === "saved" && (
+                <span className="text-xs text-emerald-500 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="h-3.5 w-3.5" />All saved!
+                </span>
+              )}
+              {bulkSaveState === "error" && (
+                <span className="text-xs text-rose-400 font-semibold flex items-center gap-1">
+                  <AlertCircle className="h-3.5 w-3.5" />Save failed
+                </span>
+              )}
+              <Button onClick={handleSaveAll} disabled={bulkSaveState === "saving"} className="h-9 px-6 font-semibold text-xs">
+                {bulkSaveState === "saving"
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />Saving all keys…</>
+                  : "Save All Keys"}
+              </Button>
+            </div>
+          }
+        />
+      </JanCard>
     </div>
   );
 }

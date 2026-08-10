@@ -63,7 +63,7 @@ export default {
       },
       fontFamily: {
         sans: [
-          `var(--font-outfit)`,
+          `"Inter"`,
           `-apple-system`,
           `BlinkMacSystemFont`,
           `"Segoe UI"`,
@@ -73,7 +73,7 @@ export default {
           `sans-serif`,
         ],
         serif: [
-          `var(--font-instrument)`,
+          `"Studio Feixen Sans"`,
           `Georgia`,
           `serif`,
         ],
@@ -87,6 +87,11 @@ export default {
           `"Liberation Mono"`,
           `"Courier New"`,
           `monospace`,
+        ],
+        studio: [
+          `"Studio Feixen Sans"`,
+          `Georgia`,
+          `serif`,
         ],
       },
       letterSpacing: {

@@ -16,7 +16,8 @@ import {
   DropdownMenuContent,
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
-} from "@relume_io/relume-ui";
+} from "@/components/shared/dropdown-menu";
+import { JanCard, CardItem } from "@/components/settings/JanCard";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -95,9 +96,12 @@ const BUILTIN_TOOLS = [
   { tool_key: "call_tool",              tool_label: "Call Tool",             category: "Routing" },
   { tool_key: "cronjob",                tool_label: "Cron Scheduler",        category: "Routing" },
   { tool_key: "analyze_attachment",      tool_label: "Analyze Attachment",    category: "Routing" },
+  { tool_key: "text_to_speech",         tool_label: "Text to Speech (Voice)", category: "Voice" },
+  { tool_key: "terminal",               tool_label: "Terminal", category: "Terminal" },
+  { tool_key: "ask_permission",         tool_label: "Ask Permission (HITL)", category: "Terminal" },
 ];
 
-const TOOL_CATEGORIES = ["Search", "Memory", "Reasoning", "Images", "Skills", "Output", "Routing"];
+const TOOL_CATEGORIES = ["Search", "Memory", "Reasoning", "Images", "Skills", "Output", "Routing", "Voice", "Terminal"];
 
 interface ToolSetting {
   id: string;
@@ -1003,24 +1007,19 @@ function AgentEditorCard({
         <div className="lg:col-span-2 space-y-6">
           
           {/* Card 1: Identity & Scope */}
-          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
-            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Identity & Scope</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Agent Name</label>
+          <JanCard title="Identity & Scope">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+              <CardItem column className="mt-0" title="Agent Name">
                 <Input
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="Enter agent name..."
-                  className="h-9 text-xs bg-background"
+                  className="h-9 text-xs bg-background w-full"
                 />
-              </div>
-              
+              </CardItem>
+
               {/* Workflow associations dropdown instead of checkboxes! */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground block">
-                  Workflow Associations
-                </label>
+              <CardItem column className="mt-0" title="Workflow Associations" description="Pipelines this agent participates in">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-lg border border-input bg-background px-3 py-1.5 text-left text-xs focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all hover:bg-muted/10">
@@ -1074,30 +1073,35 @@ function AgentEditorCard({
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
-              </div>
+              </CardItem>
             </div>
 
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Description</label>
+            <CardItem column title="Description">
               <Input
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Enter agent description/role..."
-                className="h-9 text-xs bg-background"
+                className="h-9 text-xs bg-background w-full"
               />
-            </div>
-          </div>
+            </CardItem>
+          </JanCard>
 
           {/* Card 2: Persona & Instructions (System Prompt) */}
-          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b pb-2 mb-3">
-              <h3 className="text-sm font-semibold flex items-center gap-1.5">
-                <Sparkles className="h-4 w-4 text-primary" /> Persona & Instructions
-              </h3>
-              <span className="text-[10px] font-mono text-muted-foreground">
-                {systemPrompt.length.toLocaleString()} chars
-              </span>
-            </div>
+          <JanCard
+            title={
+              "Persona & Instructions"
+            }
+            header={
+              <div className="flex items-center justify-between -mt-2 mb-4">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" /> System prompt
+                </span>
+                <span className="text-[10px] font-mono text-muted-foreground">
+                  {systemPrompt.length.toLocaleString()} chars
+                </span>
+              </div>
+            }
+          >
             <textarea
               value={systemPrompt}
               onChange={e => setSystemPrompt(e.target.value)}
@@ -1107,11 +1111,10 @@ function AgentEditorCard({
                 leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-primary/50
                 focus:border-primary transition-all min-h-[320px]"
             />
-          </div>
+          </JanCard>
 
           {/* Card 3: Attached Tools & Skills (Fully Visible) */}
-          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
-            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Capabilities (Tools & Skills)</h3>
+          <JanCard title="Capabilities (Tools & Skills)">
             <ToolAssignmentPanel
               assigned={tools}
               onChange={setTools}
@@ -1122,87 +1125,79 @@ function AgentEditorCard({
               attachAllSkills={attachAllSkills}
               agentId={agent.id}
             />
-          </div>
+          </JanCard>
         </div>
 
         {/* Right Column - Model Parameters & Assets */}
         <div className="space-y-6">
           
           {/* Card 4: Model Parameters */}
-          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
-            <h3 className="text-sm font-semibold border-b pb-2 mb-3">LLM Configuration</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">LLM Provider</label>
-                <select
-                  value={provider}
-                  onChange={e => {
-                    const newProv = e.target.value;
-                    setProvider(newProv);
-                    const meta = updatedProviderMetas.find(p => p.id === newProv);
-                    if (meta && meta.defaultModels && meta.defaultModels.length > 0) {
-                      setModel(meta.defaultModels[0].value);
-                    }
-                  }}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-                  disabled={updatedProviderMetas.length === 0}
-                >
-                  {updatedProviderMetas.length === 0 ? (
-                    <option value="">No gateway providers configured</option>
-                  ) : (
-                    updatedProviderMetas.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.label} {!p.keySet ? "⚠️ no key" : ""}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
+          <JanCard title="LLM Configuration">
+            <CardItem column className="mt-0" title="LLM Provider">
+              <select
+                value={provider}
+                onChange={e => {
+                  const newProv = e.target.value;
+                  setProvider(newProv);
+                  const meta = updatedProviderMetas.find(p => p.id === newProv);
+                  if (meta && meta.defaultModels && meta.defaultModels.length > 0) {
+                    setModel(meta.defaultModels[0].value);
+                  }
+                }}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                disabled={updatedProviderMetas.length === 0}
+              >
+                {updatedProviderMetas.length === 0 ? (
+                  <option value="">No gateway providers configured</option>
+                ) : (
+                  updatedProviderMetas.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.label} {!p.keySet ? "⚠️ no key" : ""}
+                    </option>
+                  ))
+                )}
+              </select>
+            </CardItem>
 
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">LLM Model</label>
-                <select
-                  value={model}
-                  onChange={e => setModel(e.target.value)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary font-mono"
-                  disabled={loadingModels || updatedProviderMetas.find(p => p.id === provider)?.defaultModels?.length === 0}
-                >
-                  {(() => {
-                    const meta = updatedProviderMetas.find(p => p.id === provider);
-                    const modelsList = meta?.defaultModels || [];
-                    if (modelsList.length === 0) {
-                      return <option value="">No models available</option>;
-                    }
-                    return modelsList.map((m: any) => (
-                      <option key={m.value} value={m.value}>
-                        {m.label} ({m.value})
-                      </option>
-                    ));
-                  })()}
-                </select>
-              </div>
+            <CardItem column title="LLM Model">
+              <select
+                value={model}
+                onChange={e => setModel(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+                disabled={loadingModels || updatedProviderMetas.find(p => p.id === provider)?.defaultModels?.length === 0}
+              >
+                {(() => {
+                  const meta = updatedProviderMetas.find(p => p.id === provider);
+                  const modelsList = meta?.defaultModels || [];
+                  if (modelsList.length === 0) {
+                    return <option value="">No models available</option>;
+                  }
+                  return modelsList.map((m: any) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label} ({m.value})
+                    </option>
+                  ));
+                })()}
+              </select>
+            </CardItem>
 
-              <div className="border-t pt-3">
-                <div className="flex items-center justify-between h-9">
-                  <div>
-                    <span className="text-xs font-semibold text-muted-foreground block">Auto-Attach Skills</span>
-                    <span className="text-[10px] text-muted-foreground block leading-tight">Attach General & Self Skills</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setAttachAllSkills(!attachAllSkills)}
-                    className="text-primary hover:opacity-85 focus:outline-none"
-                  >
-                    {attachAllSkills ? <ToggleRight className="h-6 w-6 text-primary" /> : <ToggleLeft className="h-6 w-6 text-muted-foreground" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+            <CardItem
+              title="Auto-Attach Skills"
+              description="Attach General & Self Skills"
+              actions={
+                <button
+                  type="button"
+                  onClick={() => setAttachAllSkills(!attachAllSkills)}
+                  className="text-primary hover:opacity-85 focus:outline-none"
+                >
+                  {attachAllSkills ? <ToggleRight className="h-6 w-6 text-primary" /> : <ToggleLeft className="h-6 w-6 text-muted-foreground" />}
+                </button>
+              }
+            />
+          </JanCard>
 
           {/* Card 5: Picture & Presets */}
-          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
-            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Avatar Profile</h3>
+          <JanCard title="Avatar Profile">
             <div className="space-y-4">
               <div className="flex justify-center">
                 <div className="size-24 rounded-full border border-primary/20 bg-muted/30 p-1 flex items-center justify-center overflow-hidden">
@@ -1214,8 +1209,7 @@ function AgentEditorCard({
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Avatar Image URL</label>
+              <CardItem column title="Avatar Image URL" description="Paste a custom image URL or pick a preset below">
                 <div className="flex gap-2">
                   <Input
                     value={avatarUrl}
@@ -1234,9 +1228,9 @@ function AgentEditorCard({
                     </Button>
                   )}
                 </div>
-              </div>
+              </CardItem>
 
-              <div className="space-y-2 border-t pt-3">
+              <div className="space-y-2 border-t border-border/40 pt-3">
                 <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Choose Preset:</span>
                 <div className="grid grid-cols-3 gap-1.5">
                   {[
@@ -1263,13 +1257,12 @@ function AgentEditorCard({
                 </div>
               </div>
             </div>
-          </div>
+          </JanCard>
 
           {/* Card 6: Reference Assets */}
-          <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
-            <h3 className="text-sm font-semibold border-b pb-2 mb-3">Reference Images</h3>
+          <JanCard title="Reference Images">
             <ReferenceImagesPicker agentId={agent.id} />
-          </div>
+          </JanCard>
         </div>
       </div>
     </div>
@@ -1498,9 +1491,9 @@ export function AgentsSection({ agentType, skills, mcpConnections, toolSettings 
             : "AG";
 
           return (
-            <div
+            <JanCard
               key={agent.id}
-              className="border border-border rounded-2xl bg-card p-6 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col items-center text-center relative group"
+              className="hover:shadow-md transition-all duration-300 flex flex-col items-center text-center relative group"
             >
               {/* Quick Delete Option */}
               <button
@@ -1555,7 +1548,7 @@ export function AgentsSection({ agentType, skills, mcpConnections, toolSettings 
                   Configure
                 </Button>
               </div>
-            </div>
+            </JanCard>
           );
         })}
       </div>

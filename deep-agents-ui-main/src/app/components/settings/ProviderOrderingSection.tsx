@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { JanCard, CardItem } from "@/components/settings/JanCard";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -458,9 +459,11 @@ function ProviderCategoryPanel({
   const isBuiltInCat = ["search", "extract", "image"].includes(category);
 
   return (
-    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-2.5 px-4 py-3 border-b bg-muted/20">
+    <JanCard
+      className="p-0 overflow-hidden"
+      header={
+        /* Header */
+        <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border/40 bg-muted/20">
         <span className={meta.color}>{meta.icon}</span>
         <span className="font-semibold text-sm">{meta.label} Tool Category</span>
         <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full ml-1">
@@ -481,8 +484,9 @@ function ProviderCategoryPanel({
             </Button>
           )}
         </div>
-      </div>
-
+        </div>
+      }
+    >
       {/* Provider list */}
       <div className="p-4 space-y-2">
         {localProviders.length === 0 && (
@@ -546,7 +550,7 @@ function ProviderCategoryPanel({
           </div>
         </div>
       )}
-    </div>
+    </JanCard>
   );
 }
 
@@ -705,21 +709,23 @@ function LLMProvidersPanel() {
   }
 
   return (
-    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-2.5 px-4 py-3 border-b bg-muted/20">
+    <JanCard
+      className="p-0 overflow-hidden"
+      header={
+        /* Header */
+        <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border/40 bg-muted/20">
         <Brain className="h-4 w-4 text-primary" />
         <span className="font-semibold text-sm">LLM Providers & Models</span>
         <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full ml-1">
           API keys · models · test connection
         </span>
-      </div>
-
+        </div>
+      }
+    >
       <div className="p-5 space-y-6">
         {/* Row 1: Select Provider & Status */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-          <div className="md:col-span-2 space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">AI Provider</label>
+          <CardItem column className="mt-0 md:col-span-2" title="AI Provider">
             <select
               value={activeProviderId}
               onChange={e => setActiveProviderId(e.target.value)}
@@ -741,10 +747,9 @@ function LLMProvidersPanel() {
                 })
               )}
             </select>
-          </div>
+          </CardItem>
 
-          <div className="flex flex-col gap-2">
-            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">Status</span>
+          <CardItem column className="mt-0" title="Status">
             <span className={`h-10 px-4 rounded-lg border flex items-center justify-center gap-1.5 shadow-sm font-medium text-xs transition-all w-full
               ${keySet
                 ? "bg-success-primary text-success border border-success/30"
@@ -753,11 +758,11 @@ function LLMProvidersPanel() {
               <span className={`w-1.5 h-1.5 rounded-full ${keySet ? "bg-success animate-pulse" : "bg-destructive"}`} />
               {keySet ? "Connected" : "Key Not Set"}
             </span>
-          </div>
+          </CardItem>
         </div>
 
         {/* Info Box */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg border bg-muted/20 text-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg border border-border/40 bg-muted/20 text-xs">
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
               <Key className="h-3.5 w-3.5 text-muted-foreground" />
@@ -776,7 +781,7 @@ function LLMProvidersPanel() {
         </div>
 
         {/* Row 2: Select Model & Test */}
-        <div className="rounded-lg border bg-card p-4 space-y-4 shadow-inner">
+        <div className="rounded-lg border border-border/40 bg-card p-4 space-y-4 shadow-inner">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
             <TestTube className="h-3.5 w-3.5 text-primary" /> Test Connection
           </p>
@@ -831,26 +836,30 @@ function LLMProvidersPanel() {
 
         {/* Row 3: Custom Models */}
         <div className="space-y-3 pt-3 border-t">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-primary" /> Custom Models
-            </p>
-            <div className="flex items-center gap-1.5">
-              {savedOk === activeProvider.id && (
-                <span className="text-[11px] text-emerald-500 font-semibold flex items-center gap-1 animate-fade-in">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Saved successfully
-                </span>
-              )}
-              <button
-                onClick={() => handleSave(activeProvider.id)}
-                disabled={saving === activeProvider.id}
-                className="flex items-center gap-1 h-7 px-3 rounded bg-primary text-primary-foreground hover:bg-primary/90 text-[11px] font-semibold transition-colors disabled:opacity-50"
-              >
-                {saving === activeProvider.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                Save Changes
-              </button>
-            </div>
-          </div>
+          <CardItem
+            title={
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-primary" /> Custom Models
+              </span>
+            }
+            actions={
+              <div className="flex items-center gap-1.5">
+                {savedOk === activeProvider.id && (
+                  <span className="text-[11px] text-emerald-500 font-semibold flex items-center gap-1 animate-fade-in">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Saved successfully
+                  </span>
+                )}
+                <button
+                  onClick={() => handleSave(activeProvider.id)}
+                  disabled={saving === activeProvider.id}
+                  className="flex items-center gap-1 h-7 px-3 rounded bg-primary text-primary-foreground hover:bg-primary/90 text-[11px] font-semibold transition-colors disabled:opacity-50"
+                >
+                  {saving === activeProvider.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                  Save Changes
+                </button>
+              </div>
+            }
+          />
 
           {customModels.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -890,7 +899,7 @@ function LLMProvidersPanel() {
           </div>
         </div>
       </div>
-    </div>
+    </JanCard>
   );
 }
 
@@ -1086,7 +1095,7 @@ export function ProviderOrderingSection({
 
       {/* Create New Category Form */}
       {showNewCategory && (
-        <div className="rounded-xl border bg-muted/10 p-4 space-y-3">
+        <div className="rounded-xl border border-border/40 bg-muted/10 p-4 space-y-3">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Create New Unified Tool Category</p>
           <div className="flex gap-2">
             <Input

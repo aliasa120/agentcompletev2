@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { JanCard } from "@/components/settings/JanCard";
 import { ComposioMarketplace } from "./composio/ComposioMarketplace";
 import { SmitheryMarketplace } from "./smithery/SmitheryMarketplace";
 import { ToolsTab } from "./tools/ToolsTab";
@@ -138,11 +139,12 @@ function ManualMCPForm({ onRefresh, onReloadAgent }: { onRefresh: () => void; on
   }, [url, transport, lastTestedContent, testing]);
 
   return (
-    <div className="rounded-lg border bg-card p-6 space-y-5 shadow-sm">
-      <div className="border-b pb-3">
-        <h3 className="text-sm font-semibold">Add Manual MCP Connection</h3>
-        <p className="text-[11px] text-muted-foreground">Add custom MCP servers via SSE, direct HTTP, or local stdio processes</p>
-      </div>
+    <JanCard
+      title="Add Manual MCP Connection"
+      header={
+        <p className="text-[11px] text-muted-foreground mb-5">Add custom MCP servers via SSE, direct HTTP, or local stdio processes</p>
+      }
+    >
       <div className="space-y-4">
         <div>
           <label className="text-xs font-semibold text-muted-foreground block mb-1.5">MCP Server Name</label>
@@ -200,7 +202,7 @@ function ManualMCPForm({ onRefresh, onReloadAgent }: { onRefresh: () => void; on
           </div>
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-3 pt-3.5 border-t mt-2">
+      <div className="flex flex-wrap items-center gap-3 pt-3.5 border-t mt-5">
         <Button size="sm" variant="outline" onClick={handleTest} disabled={!url.trim() || testing} className="h-8 gap-1.5 text-xs font-semibold">
           {testing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
           Test Connection
@@ -213,7 +215,7 @@ function ManualMCPForm({ onRefresh, onReloadAgent }: { onRefresh: () => void; on
           Add Connection
         </Button>
       </div>
-    </div>
+    </JanCard>
   );
 }
 
@@ -324,7 +326,7 @@ export function ToolsSection({ initialTab = "tools", onRefresh }: { initialTab?:
         <div className="space-y-4">
           <ManualMCPForm onRefresh={fetchConnections} onReloadAgent={reloadAgent} />
           {connections.filter(c => c.connection_type === "manual").map(conn => (
-            <div key={conn.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+            <div key={conn.id} className="flex items-center gap-3 p-3 rounded-lg border border-border/40 bg-card">
               <Link2 className="h-4 w-4 text-muted-foreground shrink-0" />
               <div className="flex-1 min-w-0">
                 {(() => {

@@ -59,3 +59,4 @@ tmp/
 *.png
 *.pdf
 agent_load.log
+.freebuff/

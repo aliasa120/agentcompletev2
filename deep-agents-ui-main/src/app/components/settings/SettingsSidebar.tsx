@@ -3,11 +3,12 @@
 import React from "react";
 import {
   Wrench, Cpu, Bot, Users, LayoutList, BookOpen, Image as ImageIcon,
-  ChevronRight, Database, Settings, Menu, Brain, Route, AlarmClock, LayoutGrid, Shield
+  ChevronRight, Database, Settings, Menu, Brain, Route, AlarmClock, LayoutGrid, Shield, Palette
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type SettingsSection =
+  | "appearance"
   | "env-keys"
   | "workflows"
   | "tools"
@@ -28,7 +29,8 @@ export type SettingsSection =
   | "telegram-bots"
   | "scheduled-tasks"
   | "omni-settings"
-  | "additional-features";
+  | "additional-features"
+  | "additional-features-voice";
 
 interface NavItem {
   id: SettingsSection;
@@ -39,6 +41,12 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  {
+    id: "appearance",
+    label: "Appearance",
+    description: "Theme, accent color, font size",
+    icon: <Palette className="h-4 w-4" />,
+  },
   {
     id: "env-keys",
     label: "ENV Keys",

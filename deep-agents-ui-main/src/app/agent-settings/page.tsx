@@ -7,7 +7,6 @@ import { supabase } from "@/lib/supabase";
 import { signOut } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Zap, Home, Play, List, Activity, AlarmClock, CheckCircle2, XCircle,
   Search, FileText, ImageIcon, FlaskConical, Loader2, Bot, Cpu,
@@ -17,7 +16,7 @@ import {
 import { getConfig, saveConfig } from "@/lib/config";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { cn } from "@/lib/utils";
-import { SettingsSidebar, type SettingsSection } from "@/app/components/settings/SettingsSidebar";
+import { type SettingsSection } from "@/app/components/settings/SettingsSidebar";
 import { ApplicationShell } from "@/app/components/settings/ApplicationShell";
 import { ToolsSection } from "@/app/components/settings/ToolsSection";
 import { AgentsSection } from "@/app/components/settings/AgentsSection";
@@ -29,6 +28,9 @@ import { MemoriesSection } from "@/app/components/settings/MemoriesSection";
 import { TelegramBotsSection } from "@/app/components/settings/TelegramBotsSection";
 import { ScheduledTasksSection } from "@/app/components/settings/ScheduledTasksSection";
 import { EnvKeysSection } from "@/app/components/settings/EnvKeysSection";
+import { AppearanceSection } from "@/app/components/settings/AppearanceSection";
+import { VoiceSection } from "@/app/components/settings/VoiceSection";
+import { JanCard, CardItem } from "@/components/settings/JanCard";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Article { id: string; title: string; description: string; url: string; source_domain: string; status: string; created_at: string; }
@@ -242,7 +244,6 @@ export default function AgentSettingsPage() {
   const [allArticles, setAllArticles] = useState<Article[]>([]);
   const [batchSize, setBatchSizeState] = useState(2);
   const [userEmail, setUserEmail] = useState<string>("");
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
 
   // Gateway Models state
   const [gatewayModels, setGatewayModels] = useState<any[]>([]);
@@ -455,54 +456,55 @@ export default function AgentSettingsPage() {
   }, [section, loadFeederData]);
 
   const ConfigurationSection = () => (
-    <div className="space-y-5">
-      <h2 className="font-semibold text-lg">API Configuration</h2>
-      <section className="rounded-xl border bg-card shadow-sm p-6 space-y-4">
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Configure your LangGraph deployment settings. These settings are saved in your browser's local storage.
-        </p>
-        <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="configUrl" className="text-xs font-semibold">Deployment URL</Label>
-            <Input
-              id="configUrl"
-              placeholder="https://<deployment-url>"
-              value={configUrl}
-              onChange={(e) => setConfigUrl(e.target.value)}
-              className="h-10 text-sm"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="configAssistantId" className="text-xs font-semibold">Assistant ID</Label>
-            <Input
-              id="configAssistantId"
-              placeholder="<assistant-id>"
-              value={configAssistantId}
-              onChange={(e) => setConfigAssistantId(e.target.value)}
-              className="h-10 text-sm"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="configApiKey" className="text-xs font-semibold">
-              LangSmith API Key <span className="text-muted-foreground font-normal">(Optional)</span>
-            </Label>
-            <Input
-              id="configApiKey"
-              type="password"
-              placeholder="lsv2_pt_..."
-              value={configApiKey}
-              onChange={(e) => setConfigApiKey(e.target.value)}
-              className="h-10 text-sm"
-            />
-          </div>
-        </div>
-        <div className="flex items-center gap-3 pt-4 border-t">
-          <Button onClick={saveConfiguration} disabled={configSaveStatus === "saving"} className="bg-primary text-primary-foreground">
-            {configSaveStatus === "saving" ? "Saving..." : "Save Configuration"}
-          </Button>
-          {configSaveStatus === "saved" && <span className="text-xs font-semibold text-emerald-500 animate-pulse">Saved successfully!</span>}
-        </div>
-      </section>
+    <div className="space-y-4">
+      <JanCard title="API Configuration"
+        header={
+          <p className="text-sm text-muted-foreground leading-relaxed -mt-2 mb-4">
+            Configure your LangGraph deployment settings. These settings are saved in your browser's local storage.
+          </p>
+        }
+      >
+        <CardItem column className="mt-0" title="Deployment URL">
+          <Input
+            id="configUrl"
+            placeholder="https://<deployment-url>"
+            value={configUrl}
+            onChange={(e) => setConfigUrl(e.target.value)}
+            className="h-10 text-sm w-full"
+          />
+        </CardItem>
+        <CardItem column title="Assistant ID">
+          <Input
+            id="configAssistantId"
+            placeholder="<assistant-id>"
+            value={configAssistantId}
+            onChange={(e) => setConfigAssistantId(e.target.value)}
+            className="h-10 text-sm w-full"
+          />
+        </CardItem>
+        <CardItem column title={<>LangSmith API Key <span className="text-muted-foreground font-normal">(Optional)</span></>}>
+          <Input
+            id="configApiKey"
+            type="password"
+            placeholder="lsv2_pt_..."
+            value={configApiKey}
+            onChange={(e) => setConfigApiKey(e.target.value)}
+            className="h-10 text-sm w-full"
+          />
+        </CardItem>
+        <CardItem
+          title="Persist configuration"
+          description="Saved to browser local storage"
+          actions={
+            <div className="flex items-center gap-3">
+              {configSaveStatus === "saved" && <span className="text-xs font-semibold text-emerald-500 animate-pulse">Saved successfully!</span>}
+              <Button onClick={saveConfiguration} disabled={configSaveStatus === "saving"} className="bg-primary text-primary-foreground">
+                {configSaveStatus === "saving" ? "Saving..." : "Save Configuration"}
+              </Button>
+            </div>
+          }
+        />
+      </JanCard>
     </div>
   );
 
@@ -519,38 +521,45 @@ export default function AgentSettingsPage() {
     };
 
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-lg">Feeder Dashboard</h2>
-          <div className="flex gap-2">
-            <Link href="/feeder">
-              <Button variant="outline" size="sm" className="text-xs flex items-center gap-1.5 hover:bg-accent/40 transition-colors">
-                <Database className="h-3.5 w-3.5" />
-                Go to Feeder Page
-              </Button>
-            </Link>
-            <Button
-              onClick={triggerFeederPipeline}
-              disabled={feederIsFetching}
-              size="sm"
-              className="bg-primary text-primary-foreground text-xs"
-            >
-              {feederIsFetching ? "Running..." : "Run Feeder"}
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={clearFeederPending}
-              disabled={feederIsFetching}
-              className="text-xs"
-            >
-              Clear Pending
-            </Button>
-            <Button variant="outline" size="sm" onClick={loadFeederData} className="text-xs">
-              Refresh
-            </Button>
-          </div>
-        </div>
+      <div className="space-y-4">
+        <JanCard>
+          <CardItem
+            align="start"
+            className="flex-col sm:flex-row gap-3"
+            title="Feeder Dashboard"
+            description="Run the feeder pipeline and monitor the article queue"
+            actions={
+              <div className="flex flex-wrap gap-2">
+                <Link href="/feeder">
+                  <Button variant="outline" size="sm" className="text-xs flex items-center gap-1.5 hover:bg-accent/40 transition-colors">
+                    <Database className="h-3.5 w-3.5" />
+                    Go to Feeder Page
+                  </Button>
+                </Link>
+                <Button
+                  onClick={triggerFeederPipeline}
+                  disabled={feederIsFetching}
+                  size="sm"
+                  className="bg-primary text-primary-foreground text-xs"
+                >
+                  {feederIsFetching ? "Running..." : "Run Feeder"}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={clearFeederPending}
+                  disabled={feederIsFetching}
+                  className="text-xs"
+                >
+                  Clear Pending
+                </Button>
+                <Button variant="outline" size="sm" onClick={loadFeederData} className="text-xs">
+                  Refresh
+                </Button>
+              </div>
+            }
+          />
+        </JanCard>
 
         {/* Stats row */}
         <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
@@ -560,7 +569,7 @@ export default function AgentSettingsPage() {
             { label: "Done", value: feederStats.done, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/20", sub: "Completed" },
             { label: "Total", value: feederStats.total, color: "text-muted-foreground", bg: "bg-muted", sub: "All articles" },
           ].map(({ label, value, color, bg, sub }) => (
-            <div key={label} className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1 shadow-sm">
+            <div key={label} className="rounded-xl border border-border/40 bg-card p-4 flex flex-col gap-1">
               <span className="text-xs text-muted-foreground font-semibold">{label}</span>
               <span className={`text-2xl font-bold ${color}`}>{value}</span>
               <span className="text-[10px] text-muted-foreground">{sub}</span>
@@ -570,23 +579,24 @@ export default function AgentSettingsPage() {
 
         {/* Pipeline log */}
         {feederPipelineLog && (
-          <div className="rounded-xl border bg-card p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">
-              Last Pipeline Output
-            </p>
-            <pre className="text-xs whitespace-pre-wrap text-foreground font-mono max-h-48 overflow-auto bg-muted/20 p-3 rounded-lg border">
+          <JanCard title="Last Pipeline Output">
+            <pre className="text-xs whitespace-pre-wrap text-foreground font-mono max-h-48 overflow-auto bg-muted/20 p-3 rounded-lg border border-border/40">
               {feederPipelineLog}
             </pre>
-          </div>
+          </JanCard>
         )}
 
         {/* Pending articles list */}
-        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-          <div className="p-4 border-b bg-muted/10 flex items-center justify-between">
-            <span className="font-semibold text-sm">Pending Articles</span>
-            <span className="text-xs text-muted-foreground">{feederStats.pending} ready · FIFO order</span>
-          </div>
-          <div className="divide-y max-h-[380px] overflow-auto">
+        <JanCard
+          className="p-0 overflow-hidden"
+          header={
+            <div className="p-4 border-b border-border/40 bg-muted/10 flex items-center justify-between">
+              <span className="font-medium text-sm text-foreground font-studio">Pending Articles</span>
+              <span className="text-xs text-muted-foreground">{feederStats.pending} ready · FIFO order</span>
+            </div>
+          }
+        >
+          <div className="divide-y divide-border/40 max-h-[380px] overflow-auto">
             {feederPendingArticles.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground text-sm">
                 No pending articles. Run the feeder pipeline to fetch new ones.
@@ -614,7 +624,7 @@ export default function AgentSettingsPage() {
               ))
             )}
           </div>
-        </div>
+        </JanCard>
       </div>
     );
   };
@@ -813,19 +823,15 @@ export default function AgentSettingsPage() {
 
   // ── Queue section (from old page) ────────────────────────────────────────────
   const QueueSection = () => (
-    <div className="space-y-5">
-      <h2 className="font-semibold">Queue & Schedule</h2>
-
+    <div className="space-y-4">
       {/* Queue Config */}
-      <section className="rounded-xl border bg-card shadow-sm">
-        <div className="p-4 border-b flex items-center gap-2">
-          <Activity className="h-4 w-4 text-primary" />
-          <h3 className="font-semibold text-sm">Queue Configuration</h3>
-        </div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-2 block">Batch Size</label>
-            <div className="flex gap-1.5">
+      <JanCard title="Queue Configuration">
+          <CardItem
+            column
+            title="Batch Size"
+            description="How many pending articles process per run"
+          >
+            <div className="flex gap-1.5 w-full">
               {["1","2","3","4","5","6"].map(n => (
                 <button key={n} onClick={() => setSetting("queue_batch_size", n)}
                   className={`flex-1 h-9 rounded-lg border text-sm font-semibold transition-all
@@ -834,26 +840,29 @@ export default function AgentSettingsPage() {
                 </button>
               ))}
             </div>
-          </div>
-          <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
-            <AlarmClock className="h-4 w-4 text-primary shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium">Auto-trigger</p>
-              <p className="text-xs text-muted-foreground">Run agent automatically on schedule</p>
-            </div>
-            <button onClick={() => setSetting("auto_trigger_enabled", settings.auto_trigger_enabled === "true" ? "false" : "true")}
-              className={`relative w-11 h-6 rounded-full transition-colors ${settings.auto_trigger_enabled === "true" ? "bg-primary" : "bg-muted-foreground/30"}`}>
-              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${settings.auto_trigger_enabled === "true" ? "left-6" : "left-1"}`} />
-            </button>
-          </div>
+          </CardItem>
+          <CardItem
+            title={
+              <span className="flex items-center gap-2">
+                <AlarmClock className="h-4 w-4 text-primary shrink-0" />
+                Auto-trigger
+              </span>
+            }
+            description="Run agent automatically on schedule"
+            actions={
+              <button onClick={() => setSetting("auto_trigger_enabled", settings.auto_trigger_enabled === "true" ? "false" : "true")}
+                className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${settings.auto_trigger_enabled === "true" ? "bg-primary" : "bg-muted-foreground/30"}`}>
+                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${settings.auto_trigger_enabled === "true" ? "left-6" : "left-1"}`} />
+              </button>
+            }
+          />
           {settings.auto_trigger_enabled === "true" && (
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-2 block">Interval (minutes)</label>
+            <CardItem column title="Interval (minutes)">
               {(() => {
                 const presets = ["15", "30", "60", "120", "240"];
                 const isCustom = !presets.includes(settings.auto_trigger_interval_minutes);
                 return (
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 w-full">
                     <select
                       value={isCustom ? "custom" : settings.auto_trigger_interval_minutes}
                       onChange={e => {
@@ -888,30 +897,36 @@ export default function AgentSettingsPage() {
                   </div>
                 );
               })()}
-            </div>
+            </CardItem>
           )}
-          <div className="flex gap-3 pt-2 border-t">
-            <Button onClick={saveSettings} disabled={saveStatus === "saving" || !isDirty} variant="outline" className="flex-1">
-              {saveStatus === "saving" ? "Saving…" : isDirty ? "Save" : "No Changes"}
-            </Button>
-            {saveStatus === "saved" && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
-          </div>
-        </div>
-      </section>
+          <CardItem
+            title="Persist queue settings"
+            description={saveStatus === "saved" ? "Saved ✓" : "Applies to all workflows using this queue"}
+            actions={
+              <Button onClick={saveSettings} disabled={saveStatus === "saving" || !isDirty} className="font-semibold text-xs px-6">
+                {saveStatus === "saving" ? "Saving…" : isDirty ? "Save Changes" : "No Changes"}
+              </Button>
+            }
+          />
+      </JanCard>
 
       {/* Queue Preview */}
-      <section className="rounded-xl border bg-card shadow-sm">
-        <div className="p-4 border-b flex items-center gap-2">
-          <Activity className="h-4 w-4 text-primary" />
-          <h3 className="font-semibold text-sm">Current Queue</h3>
-          <span className="ml-auto text-xs text-muted-foreground">Next {batchSize} pending articles</span>
-          <Button onClick={resetStuckArticles} size="sm" variant="outline" className="ml-2">Reset Stuck</Button>
-          <Button onClick={fireAgent} size="sm" className="ml-2" disabled={queue.length === 0}>
-            <Play className="mr-2 h-3.5 w-3.5" />
-            Start Agent ({Math.min(queue.length, batchSize)})
-          </Button>
-        </div>
-        <div className="divide-y">
+      <JanCard
+        className="p-0 overflow-hidden"
+        header={
+          <div className="p-4 border-b border-border/40 flex flex-wrap items-center gap-2">
+            <Activity className="h-4 w-4 text-primary shrink-0" />
+            <h3 className="font-medium text-sm text-foreground font-studio">Current Queue</h3>
+            <span className="ml-auto text-xs text-muted-foreground">Next {batchSize} pending articles</span>
+            <Button onClick={resetStuckArticles} size="sm" variant="outline" className="ml-1 sm:ml-2 h-8 text-xs">Reset Stuck</Button>
+            <Button onClick={fireAgent} size="sm" className="h-8 text-xs" disabled={queue.length === 0}>
+              <Play className="mr-1.5 h-3.5 w-3.5" />
+              Start Agent ({Math.min(queue.length, batchSize)})
+            </Button>
+          </div>
+        }
+      >
+        <div className="divide-y divide-border/40">
           {queue.length === 0 && (
             <div className="p-6 text-center text-muted-foreground text-sm">No pending articles. Run the feeder to populate the queue.</div>
           )}
@@ -927,16 +942,20 @@ export default function AgentSettingsPage() {
             </div>
           ))}
         </div>
-      </section>
+      </JanCard>
 
       {/* Recent Articles */}
-      <section className="rounded-xl border bg-card shadow-sm">
-        <div className="p-4 border-b flex items-center gap-2">
-          <List className="h-4 w-4 text-muted-foreground" />
-          <h3 className="font-semibold text-sm">Recent Articles</h3>
-          <span className="ml-auto text-xs text-muted-foreground">Last 30</span>
-        </div>
-        <div className="divide-y max-h-80 overflow-auto">
+      <JanCard
+        className="p-0 overflow-hidden"
+        header={
+          <div className="p-4 border-b border-border/40 flex items-center gap-2">
+            <List className="h-4 w-4 text-muted-foreground" />
+            <h3 className="font-medium text-sm text-foreground font-studio">Recent Articles</h3>
+            <span className="ml-auto text-xs text-muted-foreground">Last 30</span>
+          </div>
+        }
+      >
+        <div className="divide-y divide-border/40 max-h-80 overflow-auto">
           {allArticles.length === 0 && <div className="p-6 text-center text-muted-foreground text-sm">No articles yet.</div>}
           {allArticles.map(art => (
             <div key={art.id} className="p-3 flex items-center gap-3">
@@ -948,7 +967,7 @@ export default function AgentSettingsPage() {
             </div>
           ))}
         </div>
-      </section>
+      </JanCard>
     </div>
   );
 
@@ -976,20 +995,20 @@ export default function AgentSettingsPage() {
         {/* OpenRouter Setup & Model List */}
         <div className="space-y-6 flex flex-col">
           {/* OpenRouter Custom Models Card */}
-          <div className="rounded-xl border bg-card p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary animate-pulse" />
-                <h3 className="font-semibold text-sm">OpenRouter Custom Models</h3>
+          <JanCard
+            title="OpenRouter Custom Models"
+            header={
+              <div className="flex items-center justify-between -mt-2 mb-4">
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse shrink-0" />
+                  <span>Paste the model ID (e.g. <code>tencent/hy3:free</code> or <code>xiaomi/mimo-v2.5</code>). These models will then appear in the AI Providers settings section under the <strong>openrouter</strong> provider.</span>
+                </p>
+                {savingOpenRouterModels && (
+                  <span className="text-[10px] text-muted-foreground animate-pulse shrink-0">Saving...</span>
+                )}
               </div>
-              {savingOpenRouterModels && (
-                <span className="text-[10px] text-muted-foreground animate-pulse">Saving...</span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Paste the model ID (e.g. <code>tencent/hy3:free</code> or <code>xiaomi/mimo-v2.5</code>). These models will then appear in the AI Providers settings section under the <strong>openrouter</strong> provider.
-            </p>
-
+            }
+          >
             {loadingOpenRouterModels ? (
               <div className="p-4 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> Loading models...
@@ -997,7 +1016,7 @@ export default function AgentSettingsPage() {
             ) : openRouterCustomModels.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {openRouterCustomModels.map((m) => (
-                  <div key={m} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-card/50 text-xs shadow-sm">
+                  <div key={m} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/40 bg-card/50 text-xs shadow-sm">
                     <Sparkles className="h-3 w-3 text-primary shrink-0" />
                     <p className="flex-1 text-[11px] font-mono truncate text-foreground">{m}</p>
                     <button
@@ -1013,25 +1032,32 @@ export default function AgentSettingsPage() {
               <p className="text-xs text-muted-foreground italic">No custom OpenRouter models configured. Paste models below to add them.</p>
             )}
 
-            <div className="flex gap-2 pt-1">
-              <Input
-                type="text"
-                value={newOpenRouterModel}
-                onChange={(e) => setNewOpenRouterModel(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAddOpenRouterModel()}
-                placeholder="Enter model ID (e.g. tencent/hy3:free)"
-                className="flex-1 h-9 text-xs font-mono"
-              />
-              <Button
-                onClick={handleAddOpenRouterModel}
-                disabled={!newOpenRouterModel.trim()}
-                size="sm"
-                className="h-9 font-semibold text-xs px-4"
-              >
-                Add Model
-              </Button>
-            </div>
-          </div>
+            <CardItem
+              column
+              className="mt-4"
+              title="Add a model"
+              description="Enter the full OpenRouter model ID and press Add"
+            >
+              <div className="flex gap-2 w-full">
+                <Input
+                  type="text"
+                  value={newOpenRouterModel}
+                  onChange={(e) => setNewOpenRouterModel(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddOpenRouterModel()}
+                  placeholder="Enter model ID (e.g. tencent/hy3:free)"
+                  className="flex-1 h-9 text-xs font-mono"
+                />
+                <Button
+                  onClick={handleAddOpenRouterModel}
+                  disabled={!newOpenRouterModel.trim()}
+                  size="sm"
+                  className="h-9 font-semibold text-xs px-4 shrink-0"
+                >
+                  Add Model
+                </Button>
+              </div>
+            </CardItem>
+          </JanCard>
         </div>
       </div>
     );
@@ -1042,17 +1068,17 @@ export default function AgentSettingsPage() {
     const modelOptions = selectedProviderMeta?.defaultModels ?? [];
 
     return (
-      <div className="rounded-xl border bg-card p-6 shadow-sm space-y-5">
-        <div className="flex items-center gap-2">
-          <Cpu className="h-5 w-5 text-primary animate-pulse" />
-          <h2 className="font-bold text-lg">Omni Analyzer Settings</h2>
-        </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Configure which Omni model will process incompatible attachments (like audio, video, PDF) during preflight normalization.
-        </p>
-        <div className="grid grid-cols-2 gap-4 pt-2">
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-muted-foreground">Omni Provider</label>
+      <JanCard
+        title="Omni Analyzer Settings"
+        header={
+          <p className="text-xs text-muted-foreground leading-relaxed -mt-2 mb-4 flex items-start gap-2">
+            <Cpu className="h-4 w-4 text-primary animate-pulse shrink-0 mt-0.5" />
+            Configure which Omni model will process incompatible attachments (like audio, video, PDF) during preflight normalization.
+          </p>
+        }
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+          <CardItem column className="mt-0" title="Omni Provider">
             <select
               value={settings.omni_provider || "openrouter"}
               onChange={(e) => {
@@ -1070,9 +1096,8 @@ export default function AgentSettingsPage() {
               <option value="openrouter">OpenRouter Gateway</option>
               <option value="gemini">Gemini Direct API</option>
             </select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-muted-foreground">Omni Model ID</label>
+          </CardItem>
+          <CardItem column className="mt-0" title="Omni Model ID">
             {modelOptions.length > 0 ? (
               <select
                 value={settings.omni_model || ""}
@@ -1091,32 +1116,40 @@ export default function AgentSettingsPage() {
                 placeholder="e.g. xiaomi/mimo-v2.5"
                 value={settings.omni_model || ""}
                 onChange={(e) => setSetting("omni_model", e.target.value)}
-                className="h-9 text-xs"
+                className="h-9 text-xs w-full"
               />
             )}
-          </div>
+          </CardItem>
         </div>
-        <div className="flex justify-end pt-4 border-t flex items-center gap-3">
-          {saveStatus === "saved" && (
-            <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1">
-              <CheckCircle2 className="h-4 w-4" /> Saved
-            </span>
-          )}
-          <Button
-            onClick={saveSettings}
-            disabled={saveStatus === "saving" || !isDirty}
-            size="sm"
-            className="font-semibold text-xs px-6"
-          >
-            {saveStatus === "saving" ? "Saving settings…" : "Save Omni Config"}
-          </Button>
-        </div>
-      </div>
+        <CardItem
+          className="mt-4"
+          title="Persist omni config"
+          description="Used by the preflight attachment normalizer"
+          actions={
+            <div className="flex items-center gap-3">
+              {saveStatus === "saved" && (
+                <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1">
+                  <CheckCircle2 className="h-4 w-4" /> Saved
+                </span>
+              )}
+              <Button
+                onClick={saveSettings}
+                disabled={saveStatus === "saving" || !isDirty}
+                size="sm"
+                className="font-semibold text-xs px-6"
+              >
+                {saveStatus === "saving" ? "Saving settings…" : "Save Omni Config"}
+              </Button>
+            </div>
+          }
+        />
+      </JanCard>
     );
   };
 
   const renderSection = () => {
     switch (section) {
+      case "appearance": return <AppearanceSection />;
       case "env-keys":   return <EnvKeysSection />;
       case "workflows": return <WorkflowsSection />;
       case "tools":     return <ToolsSection initialTab="tools" onRefresh={refreshSettingsAndTools} />;
@@ -1152,6 +1185,7 @@ export default function AgentSettingsPage() {
       case "scheduled-tasks": return <ScheduledTasksSection />;
       case "gateway": return renderGatewayPanel("");
       case "additional-features": return <AdditionalFeaturesSection />;
+      case "additional-features-voice": return <VoiceSection />;
       default:          return null;
     }
   };
@@ -1175,30 +1209,32 @@ export default function AgentSettingsPage() {
 
 function AdditionalFeaturesSection() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold font-serif text-foreground">Additional Features</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Access additional modules and custom content creation tools.
-        </p>
-      </div>
-
-      <div className="border border-border rounded-2xl bg-card p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
-            <LayoutGrid className="h-4 w-4 text-primary" />
-            Posts Editor & Publisher
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Manage generated articles, edit drafts, and publish them to WordPress or download them.
+    <div className="space-y-4">
+      <JanCard title="Additional Features"
+        header={
+          <p className="text-sm text-muted-foreground -mt-2 mb-4">
+            Access additional modules and custom content creation tools.
           </p>
-        </div>
-        <Link href="/posts">
-          <Button className="shrink-0 gap-1.5 text-xs font-semibold">
-            Open Posts Editor
-          </Button>
-        </Link>
-      </div>
+        }
+      >
+        <CardItem
+          className="flex-col sm:flex-row items-start sm:items-center gap-3"
+          title={
+            <span className="flex items-center gap-2">
+              <LayoutGrid className="h-4 w-4 text-primary" />
+              Posts Editor & Publisher
+            </span>
+          }
+          description="Manage generated articles, edit drafts, and publish them to WordPress or download them."
+          actions={
+            <Link href="/posts">
+              <Button className="shrink-0 gap-1.5 text-xs font-semibold">
+                Open Posts Editor
+              </Button>
+            </Link>
+          }
+        />
+      </JanCard>
     </div>
   );
 }

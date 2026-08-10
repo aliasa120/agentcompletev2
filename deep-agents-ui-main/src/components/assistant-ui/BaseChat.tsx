@@ -57,6 +57,7 @@ import {
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  BookOpenIcon,
   ChartColumnIcon,
   CheckIcon,
   ChevronLeftIcon,
@@ -69,18 +70,22 @@ import {
   GlobeIcon,
   HelpCircleIcon,
   Bot,
+  InfoIcon,
   LanguagesIcon,
   LightbulbIcon,
   MenuIcon,
   MicIcon,
+  MicOffIcon,
   MoreHorizontalIcon,
   PanelLeftIcon,
   PencilIcon,
   PencilLineIcon,
+  PlusIcon,
   RefreshCwIcon,
   ShareIcon,
   SlashIcon,
   SquareIcon,
+  Volume2Icon,
   WrenchIcon,
   Play,
 } from "lucide-react";
@@ -89,7 +94,7 @@ import {
   type DirectiveChipProps,
 } from "@assistant-ui/react-lexical";
 import Image from "next/image";
-import { useState, useEffect, useRef, useCallback, type FC, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, type FC, type ReactNode } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Tooltip,
@@ -97,6 +102,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ModelSelector } from "@/components/assistant-ui/model-selector";
+import { ToolApprovalInterruptList } from "@/components/assistant-ui/tool-approval";
+import { AudioReplyList } from "@/components/assistant-ui/audio-reply";
+import { useLangGraphRuntime } from "@/providers/LangGraphRuntimeProvider";
+import { toast } from "sonner";
 
 const Logo: FC = () => {
   return (
@@ -297,6 +306,7 @@ export const Thread: FC<{ onStartAgent?: () => void }> = ({ onStartAgent }) => {
           )}
         >
           <ThreadScrollToBottom />
+          <ToolApprovalInterruptList />
           <Composer onStartAgent={onStartAgent} />
           <AuiIf condition={isNewChatView}>
             <div className="aui-thread-welcome-suggestions-shell min-h-19">
@@ -504,39 +514,137 @@ const ThreadSuggestions: FC = () => {
   );
 };
 
-const slashCommands: readonly Unstable_SlashCommand[] = [
-  {
-    id: "summarize",
-    description: "Summarize the conversation",
-    icon: "FileText",
-    execute: () => console.log("[base example] /summarize invoked"),
-  },
-  {
-    id: "translate",
-    description: "Translate text to another language",
-    icon: "Languages",
-    execute: () => console.log("[base example] /translate invoked"),
-  },
-  {
-    id: "search",
-    description: "Search the web for information",
-    icon: "Globe",
-    execute: () => console.log("[base example] /search invoked"),
-  },
-  {
-    id: "help",
-    description: "List available commands",
-    icon: "HelpCircle",
-    execute: () => console.log("[base example] /help invoked"),
-  },
-];
-
 const slashIconMap: Record<string, FC<{ className?: string }>> = {
+  Lightbulb: LightbulbIcon,
+  Plus: PlusIcon,
+  Mic: MicIcon,
+  Volume2: Volume2Icon,
+  MicOff: MicOffIcon,
+  Info: InfoIcon,
+  HelpCircle: HelpCircleIcon,
   FileText: FileTextIcon,
   Languages: LanguagesIcon,
   Globe: GlobeIcon,
-  HelpCircle: HelpCircleIcon,
 };
+
+const mentionIconMap: Record<string, FC<{ className?: string }>> = {
+  Wrench: WrenchIcon,
+  BookOpen: BookOpenIcon,
+  skills: BookOpenIcon,
+  tools: WrenchIcon,
+};
+
+/**
+ * Shared slash-command + mention adapters for the composer (and edit composer).
+ * Slash chips stay in the composer as an audit trail (:command[/learn]{...});
+ * the backend parses them. Session commands run locally via execute().
+ */
+function useComposerTriggers() {
+  const { newThread, setVoiceMode, threadId, workflowId } = useLangGraphRuntime();
+
+  const [mentionsData, setMentionsData] = useState<{ tools: any[]; skills: any[] }>({
+    tools: [],
+    skills: [],
+  });
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/mentions")
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        setMentionsData({ tools: d.tools ?? [], skills: d.skills ?? [] });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const mention = unstable_useMentionAdapter({
+    categories: [
+      { id: "skills", label: "Skills", items: mentionsData.skills },
+      { id: "tools", label: "Tools", items: mentionsData.tools },
+    ],
+    includeModelContextTools: false,
+    iconMap: mentionIconMap,
+    fallbackIcon: WrenchIcon,
+  });
+
+  const slashCommands: readonly Unstable_SlashCommand[] = useMemo(
+    () => [
+      {
+        id: "learn",
+        description: "Learn a reusable skill — type what to learn after the chip, then send",
+        icon: "Lightbulb",
+        execute: () =>
+          toast.info("Type what to learn after the /learn chip, then send. Leave it empty to learn from this conversation.", {
+            duration: 6000,
+          }),
+      },
+      {
+        id: "new",
+        description: "Start a new conversation",
+        icon: "Plus",
+        execute: () => newThread(),
+      },
+      {
+        id: "voice-on",
+        description: "Voice replies on — the agent speaks replies to your voice messages",
+        icon: "Mic",
+        execute: () => {
+          setVoiceMode("voice_only");
+          toast.success("Voice replies on — the agent will speak replies to your voice messages.");
+        },
+      },
+      {
+        id: "voice-tts",
+        description: "Speak every reply out loud (audio on every answer)",
+        icon: "Volume2",
+        execute: () => {
+          setVoiceMode("all");
+          toast.success("Voice replies: every answer will include an audio version.");
+        },
+      },
+      {
+        id: "voice-off",
+        description: "Voice replies off (text only)",
+        icon: "MicOff",
+        execute: () => {
+          setVoiceMode("off");
+          toast.success("Voice replies off — text only.");
+        },
+      },
+      {
+        id: "status",
+        description: "Show the current workflow and thread",
+        icon: "Info",
+        execute: () =>
+          toast.info(
+            `Workflow: ${workflowId ?? "none selected"} · Thread: ${threadId ?? "new (unsaved)"}`,
+          ),
+      },
+      {
+        id: "help",
+        description: "List available commands",
+        icon: "HelpCircle",
+        execute: () =>
+          toast.info(
+            "/learn · /new · /voice-on · /voice-tts · /voice-off · /status · /help — type @ to mention skills or tools.",
+            { duration: 8000 },
+          ),
+      },
+    ],
+    [newThread, setVoiceMode, threadId, workflowId],
+  );
+
+  const slash = unstable_useSlashCommandAdapter({
+    commands: slashCommands,
+    iconMap: slashIconMap,
+    fallbackIcon: SlashIcon,
+  });
+
+  return { mention, slash };
+}
 
 function DirectiveChip(props: DirectiveChipProps) {
   const { directiveId, directiveType, label } = props;
@@ -558,12 +666,7 @@ function DirectiveChip(props: DirectiveChipProps) {
 }
 
 const Composer: FC<{ onStartAgent?: () => void }> = ({ onStartAgent }) => {
-  const mention = unstable_useMentionAdapter({ fallbackIcon: WrenchIcon });
-  const slash = unstable_useSlashCommandAdapter({
-    commands: slashCommands,
-    iconMap: slashIconMap,
-    fallbackIcon: SlashIcon,
-  });
+  const { mention, slash } = useComposerTriggers();
 
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
@@ -839,6 +942,7 @@ const AssistantMessage: FC = () => {
             }
           }}
         </MessagePrimitive.GroupedParts>
+        <AudioReplyList />
         <MessageError />
       </div>
 
@@ -950,6 +1054,7 @@ const UserActionBar: FC = () => {
 };
 
 const EditComposer: FC = () => {
+  const { mention, slash } = useComposerTriggers();
   return (
     <MessagePrimitive.Root
       data-slot="aui_edit-composer-wrapper"
@@ -979,6 +1084,8 @@ const EditComposer: FC = () => {
             </ComposerPrimitive.Send>
           </div>
         </ComposerPrimitive.Root>
+        <ComposerTriggerPopover char="@" {...mention} />
+        <ComposerTriggerPopover char="/" {...slash} emptyItemsLabel="No matching commands" />
       </ComposerPrimitive.Unstable_TriggerPopoverRoot>
     </MessagePrimitive.Root>
   );
