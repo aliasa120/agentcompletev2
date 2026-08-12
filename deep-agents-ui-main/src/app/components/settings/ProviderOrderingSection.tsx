@@ -930,7 +930,7 @@ const ALL_BUILTIN_TOOLS = [
   { key: "load_tools", label: "Load Tools", badge: "Built-in" },
   { key: "call_tool", label: "Call Tool", badge: "Built-in" },
   { key: "cronjob", label: "Cron Scheduler", badge: "Built-in" },
-  { key: "analyze_attachment", label: "Analyze Attachment", badge: "Built-in" },
+  { key: "omni_analyzer", label: "Omni Analyzer", badge: "Built-in" },
 ];
 
 export function ProviderOrderingSection({

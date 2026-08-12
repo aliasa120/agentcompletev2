@@ -12,7 +12,7 @@ from .unified_search import unified_search
 from .unified_extract import unified_extract
 from .unified_image import create_post_image
 from .youtube_transcript import youtube_transcript
-from .analyze_attachment import analyze_attachment
+from .analyze_attachment import omni_analyzer
 
 # Raw providers kept for backward compatibility (called internally by unified tools)
 from .exa_extract import exa_extract
@@ -57,7 +57,7 @@ __all__ = [
     "unified_extract",
     "create_post_image",
     "youtube_transcript",
-    "analyze_attachment",
+    "omni_analyzer",
     # ── Memory tools ─────────────────────────────────────────────────────────
     "add_memory",
     "replace_memory",

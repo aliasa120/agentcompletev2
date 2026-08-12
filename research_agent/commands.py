@@ -35,7 +35,7 @@ class CommandDef:
 COMMAND_REGISTRY: tuple[CommandDef, ...] = (
     CommandDef("new",    "Start a new conversation thread",                       "Session",        "session"),
     CommandDef("status", "Show the active workflow and thread",                 "Session",        "session"),
-    CommandDef("voice",  "Voice replies: on=mirror voice, tts=always, off=never", "Session",      "session", "[on|off|tts]"),
+    CommandDef("voice",  "Voice replies: on=mirror voice, tts=always, off=never", "Voice Control",  "session", "[on|off|tts]", aliases=("voice-on", "voice-off", "voice-tts", "voice_on", "voice_off", "voice_tts")),
     CommandDef("model",  "Change the agent model for this thread",              "Session",        "session"),
     CommandDef("help",   "List available commands",                             "Info",           "session", aliases=("commands",)),
     CommandDef("learn",  "Learn a reusable skill from a description or this chat", "Tools & Skills", "agent", "<what to learn from>"),

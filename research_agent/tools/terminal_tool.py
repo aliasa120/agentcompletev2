@@ -1,4 +1,12 @@
-"""Terminal tool — executes OS shell commands on the server.
+"""Terminal tool — executes OS shell commands with full system access.
+
+This tool has COMPLETE access to the operating system, similar to Hermes.
+It can:
+- Read and write files anywhere on the filesystem
+- Install packages and software
+- Create documents, PDFs, and other files
+- Run scripts and programs
+- Access system resources
 
 There is NO built-in approval popup for this tool: risky/critical actions are
 gated by the agent calling the ``ask_permission`` tool BEFORE running the
@@ -6,6 +14,14 @@ command (see the main agent system prompt). This tool simply executes.
 
 A hardline blocklist (rm -rf /, mkfs, dd to block devices, fork bombs,
 shutdown, formatting drives, …) is ALWAYS refused and cannot be overridden.
+
+File Visibility:
+- Every file created by a command is auto-detected and uploaded to Supabase
+- The tool result includes a FILE_URL:<url> line per file; the chat UI renders
+  these as download/preview cards so users can see the files immediately
+- The file also remains on disk at its local path (server filesystem)
+- In Docker deployments, ./output and ./logs are mounted to the host so files
+  are visible there too (see docker-compose.yml)
 """
 
 from __future__ import annotations
@@ -14,6 +30,8 @@ import logging
 import os
 import re
 import subprocess
+import time
+import uuid
 from typing import Optional
 
 from langchain_core.runnables import RunnableConfig
@@ -24,6 +42,20 @@ logger = logging.getLogger("research_agent.terminal")
 MAX_OUTPUT_CHARS = 6000
 DEFAULT_TIMEOUT = 120
 MAX_TIMEOUT = 600
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB cap for auto-uploaded files
+
+# Directories that are pointless to scan when detecting newly created files
+# (huge dependency/checkpoint trees that would make every command slow).
+_SKIP_DIRS = {
+    "node_modules", ".venv", "venv", "env", ".git", "__pycache__",
+    ".next", ".langgraph_api", "checkpoints", "site-packages",
+    "dist", "build", ".cache", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    "shared_npm_cache", "shared-node-modules", "Egg-info", "*.egg-info",
+}
+
+# Marker used to hand generated files to the UI, which renders them as
+# download/preview cards (mirrors the AUDIO_URL: pattern used by TTS).
+FILE_URL_MARKER = "FILE_URL:"
 
 # ── Hardline blocklist — never executed, approval cannot override ───────────────
 
@@ -91,6 +123,81 @@ _BENIGN_RE = re.compile(
 )
 
 
+def upload_file_to_supabase(file_path: str, user_id: Optional[str] = None) -> Optional[str]:
+    """Upload a file to Supabase Storage and return the public URL.
+    
+    This makes files created by the terminal tool visible to users.
+    Files are stored under ``terminal/YYYY-MM-DD/`` so a daily cleanup cron can
+    delete entire day-folders older than 30 days.
+    """
+    try:
+        import datetime
+        from supabase import create_client
+        
+        supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
+        if not supabase_url or not key:
+            logger.warning("[terminal] Supabase not configured, cannot upload file")
+            return None
+        
+        if not os.path.exists(file_path):
+            logger.warning(f"[terminal] File does not exist: {file_path}")
+            return None
+        
+        client = create_client(supabase_url, key)
+        today = datetime.date.today().isoformat()
+        filename = os.path.basename(file_path)
+        unique_id = str(uuid.uuid4())[:8]
+        storage_path = f"terminal/{today}/{unique_id}_{filename}"
+        
+        with open(file_path, "rb") as f:
+            file_content = f.read()
+        
+        # Determine content type
+        ext = filename.lower().split(".")[-1] if "." in filename else ""
+        content_type_map = {
+            "pdf": "application/pdf",
+            "png": "image/png",
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "gif": "image/gif",
+            "webp": "image/webp",
+            "svg": "image/svg+xml",
+            "mp3": "audio/mpeg",
+            "wav": "audio/wav",
+            "ogg": "audio/ogg",
+            "m4a": "audio/mp4",
+            "mp4": "video/mp4",
+            "webm": "video/webm",
+            "txt": "text/plain",
+            "md": "text/markdown",
+            "csv": "text/csv",
+            "json": "application/json",
+            "html": "text/html",
+            "py": "text/x-python",
+            "js": "text/javascript",
+            "ts": "text/typescript",
+            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "zip": "application/zip",
+        }
+        content_type = content_type_map.get(ext, "application/octet-stream")
+        
+        client.storage.from_("uploads").upload(
+            path=storage_path,
+            file=file_content,
+            file_options={"content-type": content_type},
+        )
+        
+        public_url = f"{supabase_url}/storage/v1/object/public/uploads/{storage_path}"
+        logger.info(f"[terminal] File uploaded to Supabase: {public_url}")
+        return public_url
+    except Exception as e:
+        logger.error(f"[terminal] Failed to upload file to Supabase: {e}")
+        return None
+
+
 def detect_hardline(command: str) -> Optional[str]:
     """Return block reason if command matches the hardline blocklist."""
     for pattern, desc in HARDLINE_PATTERNS:
@@ -114,17 +221,73 @@ def detect_dangerous(command: str) -> Optional[str]:
 
 
 def _run_command(command: str, workdir: Optional[str], timeout: int) -> str:
-    cwd = None
+    cwd = workdir if workdir else os.getcwd()
     if workdir:
         workdir = os.path.expanduser(workdir)
         if not os.path.isdir(workdir):
             return f"❌ workdir does not exist: {workdir}"
         cwd = workdir
 
+    cmd = (command or "").strip()
+
+    # ── Heredoc support: cat > file << 'DELIM' ... DELIM [&&/; trailing cmd] ──
+    # cmd.exe has no heredocs, so we intercept the block, write the file directly,
+    # and run any commands that follow the closing delimiter (agents commonly
+    # chain `...EOF\npython3 script.py` in one call).
+    heredoc_match = re.search(
+        r"cat\s*(?:>\s*(\S+)\s*)?<<\s*['\"]?([A-Za-z0-9_-]+)['\"]?\s*(?:>\s*(\S+)\s*)?\n(.*?)\n\2(?=\s*(?:\n|$))",
+        cmd,
+        re.DOTALL,
+    )
+    heredoc_notes = []
+    run_command = cmd
+    if heredoc_match:
+        target_file = heredoc_match.group(1) or heredoc_match.group(3)
+        file_content = heredoc_match.group(4)
+        if target_file:
+            if target_file.startswith("/c/"):
+                target_file = "C:/" + target_file[3:]
+            target_path = os.path.join(cwd, target_file) if not os.path.isabs(target_file) else target_file
+            try:
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                with open(target_path, "w", encoding="utf-8") as f:
+                    f.write(file_content)
+                public_url = upload_file_to_supabase(target_path)
+                url_msg = f"\n{FILE_URL_MARKER}{public_url}" if public_url else ""
+                heredoc_notes.append(
+                    f"✅ Written heredoc file to {target_path} ({len(file_content)} bytes){url_msg}"
+                )
+            except Exception as fe:
+                heredoc_notes.append(f"❌ Failed writing heredoc file: {fe}")
+        # Anything after the closing delimiter (e.g. `python3 script.py`) still runs.
+        run_command = (cmd[: heredoc_match.start()] + cmd[heredoc_match.end() :]).strip()
+
+    if not run_command:
+        # Heredoc-only call (no trailing command) — nothing to execute.
+        return "$ " + cmd + "\n(exit 0)\n" + "\n\n".join(heredoc_notes) if heredoc_notes else "$ " + cmd + "\n(exit 0)\n(no output)"
+
+    def _walk_files(base: str):
+        """Yield files under base, skipping heavy dependency/checkpoint dirs."""
+        try:
+            for root, dirs, files in os.walk(base):
+                dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+                for f in files:
+                    yield os.path.join(root, f)
+        except Exception:
+            return
+
+    # Snapshot existing files to detect newly created output files
+    before_files = set()
+    try:
+        if os.path.exists(cwd):
+            before_files = set(_walk_files(cwd))
+    except Exception:
+        pass
+
     timeout = max(1, min(int(timeout), MAX_TIMEOUT))
     try:
         proc = subprocess.run(
-            command,
+            run_command,
             shell=True,
             capture_output=True,
             text=True,
@@ -146,7 +309,46 @@ def _run_command(command: str, workdir: Optional[str], timeout: int) -> str:
         combined = f"{head}\n… [truncated {len(combined) - 6000} chars] …\n{tail}"
     if not combined.strip():
         combined = "(no output)"
-    return f"$ {command}\n(exit {proc.returncode})\n{combined.strip()}"
+
+    # Detect ANY newly created file (any extension) and upload it so the user
+    # can see/download it. A path that didn't exist before the command ran is a
+    # new file; also catch in-place rewrites via mtime within the last few seconds.
+    uploaded_files = []
+    try:
+        if os.path.exists(cwd):
+            now = time.time()
+            for full_p in _walk_files(cwd):
+                if full_p in before_files:
+                    continue
+                try:
+                    if os.path.getsize(full_p) > MAX_UPLOAD_BYTES:
+                        logger.info(f"[terminal] Skipping upload of large file: {full_p}")
+                        continue
+                except OSError:
+                    continue
+                url = upload_file_to_supabase(full_p)
+                if url:
+                    uploaded_files.append((full_p, url))
+    except Exception as e:
+        logger.warning(f"[terminal] Output file upload check failed: {e}")
+
+    result_text = f"$ {cmd}\n(exit {proc.returncode})\n{combined.strip()}"
+    if heredoc_notes:
+        result_text += "\n\n" + "\n\n".join(heredoc_notes)
+    if uploaded_files:
+        notes = []
+        for full_p, url in uploaded_files:
+            notes.append(
+                f"📄 Generated File: {os.path.basename(full_p)}\n"
+                f"{FILE_URL_MARKER}{url}\n"
+                f"   Local path: {full_p}"
+            )
+        result_text += "\n\n" + "\n\n".join(notes)
+        result_text += (
+            "\n\nTell the user the files are ready and include the download links "
+            "(they are also shown as file cards in the chat)."
+        )
+    return result_text
 
 
 @tool(parse_docstring=True)
@@ -155,11 +357,33 @@ def terminal(
     workdir: Optional[str] = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> str:
-    """Execute an OS shell command on the server and return its output.
+    """Execute an OS shell command with full system access and return its output.
+
+    This tool has COMPLETE access to the operating system, similar to Hermes.
+    You can:
+    - Create files and documents (PDFs, images, scripts, etc.)
+    - Install packages and software
+    - Access and modify files anywhere on the filesystem
+    - Run any program or script
+    - Access system resources and hardware
 
     Use for real system operations the user asks for: running scripts,
-    installing packages, inspecting files/processes, git operations, etc.
+    installing packages, inspecting files/processes, git operations, reading
+    server logs (the logs/ directory), installing packages, etc.
     Commands run as the server's OS user (cmd.exe on Windows, sh on Linux).
+
+    Examples of what you can do:
+    - Create a PDF with charts: write a Python script that uses reportlab /
+      matplotlib, then run it (e.g. `python make_report.py`).
+    - Install a package: `pip install matplotlib`
+    - Create an image: `python -c "from PIL import Image; ..."`
+    - Run a script: `python script.py`
+    - Inspect server logs: `tail -n 100 logs/server_stdout.log`
+    - Access system info: `uname -a` or `systeminfo`
+
+    Files you create are automatically detected, uploaded, and returned with a
+    FILE_URL marker so the chat UI shows them as downloadable file cards.
+    The file also stays on disk at its local path (server filesystem).
 
     Safety: before running a risky/destructive command you MUST first call
     ``ask_permission(action=..., reason=...)`` and only execute once the user
@@ -169,12 +393,14 @@ def terminal(
     Args:
         command: The full shell command line to execute.
         workdir: Optional working directory (absolute path). Defaults to the
-                 server process directory.
+                 server process directory. You can use this to specify where
+                 to create files (e.g., the user's home directory).
         timeout: Max seconds to wait (default 120, max 600).
 
     Returns:
         The command's exit code and combined stdout/stderr (truncated), or a
-        block notice for hardline-blocked commands.
+        block notice for hardline-blocked commands. Created files are listed
+        with a FILE_URL:<url> line that the UI renders as a file card.
     """
     command = (command or "").strip()
     if not command:
@@ -189,7 +415,8 @@ def terminal(
             "and can never be executed, regardless of approval. Do NOT retry it."
         )
 
-    # 2. Execute
+    # 2. Execute — file detection + upload + FILE_URL markers happen inside
+    # _run_command (it knows the cwd and can diff before/after file sets).
     risk = detect_dangerous(command)
     logger.info(f"[terminal] executing (risk={risk or 'none'}): {command}")
     return _run_command(command, workdir, timeout)

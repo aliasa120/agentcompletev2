@@ -25,7 +25,7 @@ export function createDirectiveText(
 
   const Component: TextMessagePartComponent = ({ text }) => {
     let cleanText = text;
-    const systemNoteIndex = text.indexOf("[System Note:");
+    const systemNoteIndex = text.search(/\[System/i);
     if (systemNoteIndex !== -1) {
       cleanText = text.substring(0, systemNoteIndex).trim();
     }

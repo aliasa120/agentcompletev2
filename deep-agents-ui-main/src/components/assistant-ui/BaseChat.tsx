@@ -104,6 +104,7 @@ import {
 import { ModelSelector } from "@/components/assistant-ui/model-selector";
 import { ToolApprovalInterruptList } from "@/components/assistant-ui/tool-approval";
 import { AudioReplyList } from "@/components/assistant-ui/audio-reply";
+import { FileReplyList } from "@/components/assistant-ui/file-reply";
 import { useLangGraphRuntime } from "@/providers/LangGraphRuntimeProvider";
 import { toast } from "sonner";
 
@@ -943,6 +944,7 @@ const AssistantMessage: FC = () => {
           }}
         </MessagePrimitive.GroupedParts>
         <AudioReplyList />
+        <FileReplyList />
         <MessageError />
       </div>
 

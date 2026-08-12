@@ -50,6 +50,19 @@ export function clearPendingNewMode(): void {
   window.sessionStorage.removeItem(NEW_SLOT);
 }
 
+/**
+ * Migrate a pre-thread voice mode onto a just-created thread's key.
+ * Returns the migrated mode, or null when there was nothing pending.
+ */
+export function migratePendingMode(threadId: string): VoiceMode | null {
+  if (typeof window === "undefined") return null;
+  const pending = readPendingNewMode();
+  if (!pending) return null;
+  window.localStorage.setItem(key(threadId), pending);
+  clearPendingNewMode();
+  return pending;
+}
+
 export const VOICE_MODE_LABELS: Record<VoiceMode, string> = {
   off: "off — the agent will reply in text only",
   voice_only: "on — the agent will speak replies to your voice messages",

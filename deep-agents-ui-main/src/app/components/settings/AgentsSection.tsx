@@ -95,7 +95,7 @@ const BUILTIN_TOOLS = [
   { tool_key: "load_tools",             tool_label: "Load Tools",            category: "Routing" },
   { tool_key: "call_tool",              tool_label: "Call Tool",             category: "Routing" },
   { tool_key: "cronjob",                tool_label: "Cron Scheduler",        category: "Routing" },
-  { tool_key: "analyze_attachment",      tool_label: "Analyze Attachment",    category: "Routing" },
+  { tool_key: "omni_analyzer",         tool_label: "Omni Analyzer",        category: "Routing" },
   { tool_key: "text_to_speech",         tool_label: "Text to Speech (Voice)", category: "Voice" },
   { tool_key: "terminal",               tool_label: "Terminal", category: "Terminal" },
   { tool_key: "ask_permission",         tool_label: "Ask Permission (HITL)", category: "Terminal" },
