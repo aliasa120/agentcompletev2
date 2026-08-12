@@ -232,7 +232,7 @@ export function LangGraphRuntimeProvider({
     if (!threadId || !client) return;
     const shouldPoll = opts?.poll ?? false;
     const POLL_INTERVAL_MS = 3000;  // check every 3 s
-    const POLL_MAX_MS = 120_000;    // give up after 2 min (MiMo long text)
+    const POLL_MAX_MS = 300_000;    // give up after 5 min for long 3000-char text synthesis
 
     // Cancel any existing poll loop before starting a new one.
     pollCancelRef.current?.();

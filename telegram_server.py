@@ -64,7 +64,7 @@ except ImportError as ie:
     resolve_command = None
     cmd_help_lines = lambda: []  # noqa: E731
     COMMAND_REGISTRY = ()
-    extract_audio_markers = lambda t: (None, False, t or "")  # noqa: E731
+    extract_audio_markers = lambda t: (None, False, None, t or "")  # noqa: E731
 
 # Env config validation
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
@@ -820,7 +820,7 @@ class TelegramBotInstance:
                         now = time.time()
                         if now - last_edit_time > 1.5 and accumulated_text.strip() != last_edit_text.strip():
                             try:
-                                preview_text = extract_audio_markers(accumulated_text)[2]
+                                preview_text = extract_audio_markers(accumulated_text)[-1]
                                 await bot.edit_message_text(
                                     text=preview_text[:3900] + " ▉",
                                     chat_id=chat_id,
@@ -856,29 +856,39 @@ class TelegramBotInstance:
             return
 
         # 2. Final text from thread state (includes voice-mirror AUDIO_URL markers
-        #    appended after streaming); fall back to the streamed text
+        #    appended after streaming); fall back to the streamed text.
+        #    For long 3000-char synthesis, poll get_state every 3s (up to 120s) for marker.
         audio_url, is_voice, final_text = None, False, streamed_text
-        try:
-            state = await langgraph_client.threads.get_state(thread_id)
-            messages = (state.get("values", {}) or {}).get("messages", []) if isinstance(state, dict) else []
-            for msg in reversed(messages):
-                role = msg.get("type") or msg.get("role")
-                if role in ("ai", "assistant"):
-                    content = msg.get("content", "")
-                    if isinstance(content, list):
-                        content = "".join(
-                            (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else (b if isinstance(b, str) else ""))
-                            for b in content
-                        )
-                    if content.strip():
-                        audio_url, is_voice, cleaned = extract_audio_markers(content)
-                        if cleaned.strip():
-                            final_text = cleaned
-                        break
-        except Exception as e:
-            logger.warning(f"Final state fetch failed (using streamed text): {e}")
+        for _attempt in range(40):  # 40 * 3s = 120s max
+            try:
+                state = await langgraph_client.threads.get_state(thread_id)
+                messages = (state.get("values", {}) or {}).get("messages", []) if isinstance(state, dict) else []
+                for msg in reversed(messages):
+                    role = msg.get("type") or msg.get("role")
+                    if role in ("ai", "assistant"):
+                        content = msg.get("content", "")
+                        if isinstance(content, list):
+                            content = "".join(
+                                (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else (b if isinstance(b, str) else ""))
+                                for b in content
+                            )
+                        if content.strip():
+                            url_m, v_m, _provider, cleaned = extract_audio_markers(content)
+                            if cleaned.strip():
+                                final_text = cleaned
+                            if url_m:
+                                audio_url = url_m
+                                is_voice = v_m
+                                break
+                if audio_url:
+                    break
+            except Exception as e:
+                logger.warning(f"Final state fetch attempt failed: {e}")
+            if _attempt < 39:
+                await asyncio.sleep(3)
+
         if audio_url is None and streamed_text:
-            audio_url, is_voice, cleaned = extract_audio_markers(streamed_text)
+            audio_url, is_voice, _provider, cleaned = extract_audio_markers(streamed_text)
             if audio_url:
                 final_text = cleaned
 
@@ -913,19 +923,16 @@ class TelegramBotInstance:
                 except Exception:
                     pass
 
-        # 4. Deliver the audio reply (voice bubble for .ogg opus, audio file otherwise)
+        # 4. Deliver the audio reply (native voice bubble first, fallback to audio file)
         if audio_url:
             try:
-                if is_voice:
-                    await bot.send_voice(chat_id=chat_id, voice=audio_url)
-                else:
-                    await bot.send_audio(chat_id=chat_id, audio=audio_url)
-            except Exception as e:
-                logger.error(f"Failed to deliver audio reply: {e}")
+                await bot.send_voice(chat_id=chat_id, voice=audio_url)
+            except Exception as ve:
+                logger.info(f"send_voice failed ({ve}), falling back to send_audio...")
                 try:
-                    await bot.send_message(chat_id=chat_id, text=f"🔊 Audio reply: {audio_url}")
-                except Exception:
-                    pass
+                    await bot.send_audio(chat_id=chat_id, audio=audio_url)
+                except Exception as ae:
+                    logger.error(f"Failed to deliver audio reply: {ae}")
 
     # ── Message Handler ───────────────────────────────────────────────────────
 
@@ -1144,7 +1151,7 @@ class TelegramBotInstance:
                             now = time.time()
                             if now - last_edit_time > 1.5 and accumulated_text.strip() != last_edit_text.strip():
                                 try:
-                                    preview_text = extract_audio_markers(accumulated_text)[2]
+                                    preview_text = extract_audio_markers(accumulated_text)[-1]
                                     await context.bot.edit_message_text(
                                         text=preview_text[:3900] + " ▉",
                                         chat_id=chat_id,

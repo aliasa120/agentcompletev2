@@ -48,7 +48,7 @@ except ImportError as ie:
     logger.warning(f"research_agent helpers not importable ({ie}); !commands and voice replies disabled")
     resolve_command = None
     cmd_help_lines = lambda: []  # noqa: E731
-    extract_audio_markers = lambda t: (None, False, t or "")  # noqa: E731
+    extract_audio_markers = lambda t: (None, False, None, t or "")  # noqa: E731
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or os.environ.get("SUPABASE_ANON_KEY", "").strip()
@@ -484,7 +484,7 @@ class DiscordBotInstance:
                             if now - last_edit_time > 2.0 and accumulated_text.strip() != last_edit_text.strip():
                                 try:
                                     # Discord limits message length to 2000 characters
-                                    preview = (extract_audio_markers(accumulated_text)[2][:1900] + " ▉")
+                                    preview = (extract_audio_markers(accumulated_text)[-1][:1900] + " ▉")
                                     await placeholder_msg.edit(content=preview)
                                     last_edit_text = accumulated_text
                                     last_edit_time = now
@@ -559,7 +559,7 @@ class DiscordBotInstance:
                             now = time.time()
                             if now - last_edit_time > 2.0 and accumulated_text.strip() != last_edit_text.strip():
                                 try:
-                                    await placeholder_msg.edit(content=extract_audio_markers(accumulated_text)[2][:1900] + " ▉")
+                                    await placeholder_msg.edit(content=extract_audio_markers(accumulated_text)[-1][:1900] + " ▉")
                                     last_edit_text = accumulated_text
                                     last_edit_time = now
                                 except Exception:
@@ -607,14 +607,14 @@ class DiscordBotInstance:
                             for b in content
                         )
                     if content.strip():
-                        audio_url, is_voice, cleaned = extract_audio_markers(content)
+                        audio_url, is_voice, _provider, cleaned = extract_audio_markers(content)
                         if cleaned.strip():
                             final_text = cleaned
                         break
         except Exception as e:
             logger.warning(f"Final state fetch failed (using streamed text): {e}")
         if audio_url is None and streamed_text:
-            audio_url, is_voice, cleaned = extract_audio_markers(streamed_text)
+            audio_url, is_voice, _provider, cleaned = extract_audio_markers(streamed_text)
             if audio_url:
                 final_text = cleaned
 

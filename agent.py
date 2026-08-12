@@ -2641,13 +2641,32 @@ def finalize_response(state, config: RunnableConfig):
     if not messages:
         return state
 
+    def _is_human(m):
+        if isinstance(m, dict):
+            return m.get("type") == "human" or m.get("role") in ("human", "user")
+        role = getattr(m, "type", None) or getattr(m, "role", None)
+        return role in ("human", "user")
+
+    def _is_ai(m):
+        if isinstance(m, dict):
+            return m.get("type") == "ai" or m.get("role") in ("ai", "assistant")
+        role = getattr(m, "type", None) or getattr(m, "role", None)
+        return role in ("ai", "assistant")
+
     last_human = None
     last_ai = None
     for msg in reversed(messages):
-        if msg.type == "human" and last_human is None:
+        if _is_human(msg) and last_human is None:
             last_human = msg
-        elif msg.type == "ai" and last_ai is None:
-            last_ai = msg
+        elif _is_ai(msg) and last_ai is None:
+            text = _message_text(msg).strip()
+            tool_calls = getattr(msg, "tool_calls", None) or (isinstance(msg, dict) and msg.get("tool_calls"))
+            # Prefer the final response AI message (has text and no tool_calls)
+            if text and not tool_calls:
+                last_ai = msg
+            elif last_ai is None and text:
+                last_ai = msg
+
         if last_human is not None and last_ai is not None:
             break
 
@@ -2682,6 +2701,7 @@ def finalize_response(state, config: RunnableConfig):
             platform=(configurable.get("platform") or "web"),
             user_id=configurable.get("user_id"),
             purpose="mirror",
+            max_chars=3000,
         )
     except Exception as e:
         print(f"[agent] finalize_response voice synthesis failed: {e}")
