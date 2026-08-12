@@ -35,7 +35,7 @@ from research_agent.tools import (
     manage_skill,
     get_wordpress_categories,
     publish_to_wordpress,
-    analyze_attachment,
+    omni_analyzer,
 )
 from research_agent.memory.builtin_provider import (
     add_memory,
@@ -81,7 +81,9 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
     "honcho_reasoning": honcho_reasoning,
     "honcho_context": honcho_context,
     "honcho_conclude": honcho_conclude,
-    "analyze_attachment": analyze_attachment,
+    "omni_analyzer": omni_analyzer,
+    # Backward-compat alias for pre-rename tool_key rows
+    "analyze_attachment": omni_analyzer,
     "text_to_speech": text_to_speech,
     "terminal": terminal,
     "ask_permission": ask_permission,
@@ -89,13 +91,15 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
 
 # Rich tool metadata including descriptions, keywords (synonyms), and example triggers
 TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
-    "analyze_attachment": {
-        "short_description": "Re-analyze or search for details inside a previously uploaded file (audio, video, PDF).",
-        "keywords": ["analyze attachment", "inspect file", "re-read video", "re-read audio", "previous file", "check pdf", "audio details"],
+    "omni_analyzer": {
+        "short_description": "Universal file analysis tool — analyze any file via URL, attachment, or data.",
+        "keywords": ["analyze file", "inspect file", "analyze image", "analyze audio", "analyze video", "analyze pdf", "analyze document", "analyze url", "omni analyzer", "file analysis"],
         "example_triggers": [
-            "Look at the video again and tell me what was shown.",
-            "Inspect the previously uploaded audio file.",
-            "Re-analyze the document to check the date."
+            "What's in this image?",
+            "Summarize this video",
+            "Transcribe this audio",
+            "Extract text from this PDF",
+            "Analyze the file at this URL"
         ]
     },
     "youtube_transcript": {

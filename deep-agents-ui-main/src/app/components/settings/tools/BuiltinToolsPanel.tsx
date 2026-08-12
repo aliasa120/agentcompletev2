@@ -27,7 +27,7 @@ const BUILTIN_TOOLS = [
   { key: "load_tools", label: "Load Tools", desc: "Load parameters and schemas on demand" },
   { key: "call_tool", label: "Call Tool", desc: "Execute dynamically routed tools" },
   { key: "cronjob", label: "Cron Scheduler", desc: "Manage scheduled tasks and background ticks" },
-  { key: "analyze_attachment", label: "Analyze Attachment", desc: "Re-analyze previously uploaded audio, video, or PDF files" },
+  { key: "omni_analyzer", label: "Omni Analyzer", desc: "Analyze ANY file or URL (images, audio, video, documents)" },
   { key: "text_to_speech", label: "Text to Speech (Voice)", desc: "Convert text to spoken audio via ElevenLabs, Edge, or OpenAI" },
   { key: "terminal", label: "Terminal", desc: "Execute OS shell commands (hardline blocklist enforced)" },
   { key: "ask_permission", label: "Ask Permission (HITL)", desc: "Agent requests explicit human approval before risky/destructive actions" },

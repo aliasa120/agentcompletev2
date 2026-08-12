@@ -38,11 +38,51 @@ import { convertLangChainBaseMessage } from "@assistant-ui/react-langchain";
 import { useClient } from "@/providers/ClientProvider";
 import { useQueryState } from "nuqs";
 import { LangGraphAttachmentAdapter } from "@/lib/attachment-adapter";
-import { readVoiceMode, writeVoiceMode, type VoiceMode } from "@/lib/voice-mode";
+import {
+  readVoiceMode,
+  writeVoiceMode,
+  migratePendingMode,
+  type VoiceMode,
+} from "@/lib/voice-mode";
 
-// TTS markers appended by the backend (finalize_response node / text_to_speech tool)
-const AUDIO_URL_RE = /^AUDIO_URL:(\S+)\s*$/;
-const AUDIO_VOICE_RE = /^AUDIO_VOICE:(true|false)\s*$/;
+// ── Audio replies extracted from late-polled server state (bypasses converter cache) ──
+export type AudioReplyEntry = { url: string; voice: boolean; provider?: string };
+export type AudioRepliesMap = Map<string, AudioReplyEntry[]>;
+
+/** Extract AUDIO_URL/VOICE/PROVIDER markers from a raw message content string or array. */
+function extractAudioFromContent(content: any): AudioReplyEntry[] {
+  const audios: AudioReplyEntry[] = [];
+  const seenUrls = new Set<string>();
+  let isVoice = false;
+  let provider: string | undefined;
+
+  const scanLine = (line: string) => {
+    const trimmed = line.trim();
+    const vm = trimmed.match(/AUDIO_VOICE:(true|false)/);
+    if (vm) isVoice = vm[1] === "true";
+    const pm = trimmed.match(/AUDIO_PROVIDER:(\S+)/);
+    if (pm) provider = pm[1];
+    const um = trimmed.match(/AUDIO_URL:(\S+)/);
+    if (um) {
+      const url = um[1];
+      if (!seenUrls.has(url)) {
+        seenUrls.add(url);
+        audios.push({ url, voice: isVoice, provider });
+      }
+    }
+  };
+
+  if (typeof content === "string") {
+    content.split("\n").forEach(scanLine);
+  } else if (Array.isArray(content)) {
+    content.forEach((part: any) => {
+      if (part?.type === "text" && typeof part.text === "string") {
+        part.text.split("\n").forEach(scanLine);
+      }
+    });
+  }
+  return audios;
+}
 
 // ── Context: expose stream + helpers to children ───────────────────────────────
 interface LangGraphRuntimeContextValue {
@@ -60,6 +100,12 @@ interface LangGraphRuntimeContextValue {
   newThread: () => void;
   threadId: string | null;
   workflowId: string | null;
+  /**
+   * Audio replies extracted directly from the server-polled state AFTER the
+   * run finishes. Keyed by message ID. Used by AudioReplyList as a fallback
+   * when the message converter's cache didn't re-process the updated message.
+   */
+  audioRepliesMap: AudioRepliesMap;
 }
 
 const LangGraphRuntimeContext = createContext<LangGraphRuntimeContextValue | undefined>(undefined);
@@ -114,19 +160,194 @@ export function LangGraphRuntimeProvider({
   const client = useClient();
 
   // ── Voice reply mode (per thread, localStorage-backed) ──────────────────────
-  const [voiceMode, setVoiceModeState] = useState<VoiceMode>("voice_only");
+  const [voiceModeState, setVoiceModeState] = useState<VoiceMode>(() =>
+    readVoiceMode(threadId ?? null),
+  );
+  const voiceMode = threadId ? voiceModeState : (readVoiceMode(null) ?? voiceModeState);
   useEffect(() => {
+    // When a thread is created, migrate a voice mode chosen BEFORE the thread
+    // existed (sessionStorage slot) onto the thread's localStorage key so it is
+    // not lost on the first message (e.g. /voice-tts typed as the first message
+    // of a brand-new chat). Without this the mode silently reset to voice_only.
+    if (threadId) {
+      const pending = migratePendingMode(threadId);
+      if (pending) {
+        setVoiceModeState(pending);
+        return;
+      }
+    }
     setVoiceModeState(readVoiceMode(threadId ?? null));
   }, [threadId]);
   const setVoiceMode = useCallback(
     (mode: VoiceMode) => {
       writeVoiceMode(threadId ?? null, mode);
       setVoiceModeState(mode);
+      // Update the ref SYNCHRONOUSLY so a message sent in the same tick as the
+      // slash command (before React re-renders) already carries the new mode.
+      voiceModeRef.current = mode;
     },
     [threadId],
   );
   const voiceModeRef = useRef<VoiceMode>("voice_only");
   voiceModeRef.current = voiceMode;
+
+  // ── Post-run authoritative re-sync ────────────────────────────────────────────
+  // The client stream disconnects during long TTS synthesis (MiMo ~40-60 s,
+  // Edge/OpenAI ~5-15 s) BEFORE the LangGraph run finishes persisting the
+  // AUDIO_URL marker. A single 500 ms one-shot sync is therefore too early for
+  // long responses — it fetches state before the marker is written.
+  //
+  // Fix: poll every POLL_INTERVAL_MS for up to POLL_MAX_MS, stopping as soon as
+  // we find an AUDIO_URL marker in the messages (meaning synthesis is done).
+  // For short responses the first poll (≤ 2 s) succeeds immediately; for long
+  // ones we keep retrying until the marker appears.
+  const [syncedMessages, setSyncedMessages] = useState<any[] | null>(null);
+
+  // Cancel handle for the active poll loop (cleared on unmount / new thread).
+  const pollCancelRef = useRef<(() => void) | null>(null);
+
+  // ── Late-audio bypass: markers extracted directly from polled server messages ────
+  // useExternalMessageConverter caches converted messages by ID and does NOT
+  // re-process them when their content changes after the fact.  When the poll
+  // finds an updated message with AUDIO_URL: we park the audio entries here so
+  // AudioReplyList can render them without going through the converter.
+  const [audioRepliesMap, setAudioRepliesMap] = useState<AudioRepliesMap>(new Map());
+
+  const hasAudioMarker = useCallback((msgs: any[]): boolean => {
+    return msgs.some((m: any) => {
+      const c = typeof m?.content === "string" ? m.content : JSON.stringify(m?.content ?? "");
+      return c.includes("AUDIO_URL:") || c.includes("FILE_URL:");
+    });
+  }, []);
+
+  /**
+   * Poll the server thread state every POLL_INTERVAL_MS until:
+   *   (a) An AUDIO_URL/FILE_URL marker is found in the messages, OR
+   *   (b) The server run is no longer active (status ≠ running/pending), OR
+   *   (c) POLL_MAX_MS elapses.
+   * On each poll that returns new messages, call setSyncedMessages so the
+   * converter re-runs and the audio card appears in the chat.
+   */
+  const syncFromServer = useCallback(async (opts?: { poll?: boolean }) => {
+    if (!threadId || !client) return;
+    const shouldPoll = opts?.poll ?? false;
+    const POLL_INTERVAL_MS = 3000;  // check every 3 s
+    const POLL_MAX_MS = 120_000;    // give up after 2 min (MiMo long text)
+
+    // Cancel any existing poll loop before starting a new one.
+    pollCancelRef.current?.();
+    let cancelled = false;
+    pollCancelRef.current = () => { cancelled = true; };
+
+    const fetchOnce = async (): Promise<any[]> => {
+      try {
+        const state: any = await client.threads.getState(threadId);
+        return state?.values?.messages ?? [];
+      } catch {
+        return [];
+      }
+    };
+
+    const deadline = Date.now() + POLL_MAX_MS;
+    let attempt = 0;
+
+    const tick = async () => {
+      if (cancelled) return;
+      attempt++;
+      try {
+        console.log(`[LangGraphRuntime] Poll attempt ${attempt} for thread ${threadId}...`);
+        const msgs = await fetchOnce();
+        if (cancelled) return;
+
+        console.log(`[LangGraphRuntime] Poll ${attempt}: ${msgs.length} msgs`);
+
+        if (Array.isArray(msgs) && msgs.length > 0) {
+          setSyncedMessages(msgs);
+          // If we already have the marker, stop polling.
+          if (hasAudioMarker(msgs)) {
+            console.log(`[LangGraphRuntime] ✅ AUDIO_URL marker found after ${attempt} poll(s).`);
+            // ── Extract audio entries and push them to the bypass map ──────────
+            setAudioRepliesMap(prev => {
+              const next = new Map(prev);
+              let changed = false;
+
+              // 1. Store per-message audio entries
+              for (const m of msgs) {
+                if (!m?.id) continue;
+                const entries = extractAudioFromContent(m.content);
+                if (entries.length > 0) {
+                  const existing = next.get(m.id);
+                  if (!existing || existing.length !== entries.length) {
+                    next.set(m.id, entries);
+                    changed = true;
+                    console.log(`[LangGraphRuntime] ✅ Set audioRepliesMap[${m.id}] =`, entries);
+                  }
+                }
+              }
+
+              // 2. Find the LAST assistant message in msgs and store ONLY ITS audio entries as "__latest__"
+              let latestAssistantAudio: AudioReplyEntry[] = [];
+              for (let i = msgs.length - 1; i >= 0; i--) {
+                const m = msgs[i];
+                const role = m?.role || m?.type;
+                if (role === "assistant" || role === "ai") {
+                  const entries = extractAudioFromContent(m.content);
+                  if (entries.length > 0) {
+                    latestAssistantAudio = entries;
+                    break;
+                  }
+                }
+              }
+
+              if (latestAssistantAudio.length > 0) {
+                const existingLatest = next.get("__latest__");
+                if (!existingLatest || existingLatest[0]?.url !== latestAssistantAudio[0]?.url) {
+                  next.set("__latest__", latestAssistantAudio);
+                  console.log(`[LangGraphRuntime] ✅ Set audioRepliesMap[__latest__] =`, latestAssistantAudio);
+                  changed = true;
+                }
+              }
+
+              return changed ? next : prev;
+            });
+            return;
+          } else {
+            console.log(`[LangGraphRuntime] No AUDIO_URL marker yet on poll ${attempt}.`);
+          }
+        }
+
+        // Keep polling until deadline.
+        if (shouldPoll && Date.now() < deadline && !cancelled) {
+          console.log(`[LangGraphRuntime] Scheduling next poll in ${POLL_INTERVAL_MS}ms...`);
+          setTimeout(tick, POLL_INTERVAL_MS);
+        } else if (shouldPoll) {
+          console.log(`[LangGraphRuntime] Poll timeout reached after ${attempt} attempt(s).`);
+        }
+      } catch (err) {
+        console.warn(`[LangGraphRuntime] Post-run state sync attempt ${attempt} failed:`, err);
+        if (shouldPoll && Date.now() < deadline && !cancelled) {
+          setTimeout(tick, POLL_INTERVAL_MS);
+        }
+      }
+    };
+
+    // First poll after a short initial delay so the server has time to checkpoint.
+    console.log(`[LangGraphRuntime] Starting poll loop for thread ${threadId} (poll=${shouldPoll})`);
+    setTimeout(tick, 1000);
+  }, [threadId, client, hasAudioMarker]);
+
+  useEffect(() => {
+    if (!threadId) {
+      // Cancel any active poll when switching threads.
+      pollCancelRef.current?.();
+      pollCancelRef.current = null;
+      setSyncedMessages(null);
+      setAudioRepliesMap(new Map());
+    }
+  }, [threadId]);
+
+  // Cleanup on unmount.
+  useEffect(() => () => { pollCancelRef.current?.(); }, []);
 
   // ── useStream from @langchain/langgraph-sdk/react (the proven old hook) ───────
   const stream = useStream<StateType>({
@@ -141,6 +362,16 @@ export function LangGraphRuntimeProvider({
     onFinish: (_state, run) => {
       onHistoryRevalidate?.();
       onStreamFinish?.();
+      // Stream finished cleanly — start polling so the AUDIO_URL marker (written
+      // by the TTS synthesis step that may outlast the stream) is captured.
+      void syncFromServer({ poll: true });
+    },
+    // When the stream disconnects mid-run (e.g. during the long silent MiMo TTS
+    // synthesis), the SDK calls onError instead of onFinish. Poll the server so
+    // the persisted AUDIO_URL/FILE_URL markers still reach the message converter.
+    onError: (_err: any) => {
+      onStreamFinish?.();
+      void syncFromServer({ poll: true });
     },
     onCreated: (run: any) => {
       // Tag new threads with workflow_id / user_id metadata
@@ -157,6 +388,20 @@ export function LangGraphRuntimeProvider({
       onHistoryRevalidate?.();
     },
   });
+
+  // Belt & suspenders: whenever loading flips true → false through ANY path
+  // (onFinish, onError, abort, disconnect), kick off a polling sync so markers
+  // the stream never delivered still render in the chat window.
+  const prevLoadingRef = useRef(stream.isLoading);
+  useEffect(() => {
+    const was = prevLoadingRef.current;
+    const now = stream.isLoading;
+    prevLoadingRef.current = now;
+    if (was && !now) {
+      // Poll the server until AUDIO_URL marker appears or run finishes.
+      void syncFromServer({ poll: true });
+    }
+  }, [stream.isLoading, syncFromServer]);
 
   // ── Human-in-the-loop interrupt resume (terminal command approval) ──────────
   const resumeInterrupt = useCallback(
@@ -232,8 +477,12 @@ export function LangGraphRuntimeProvider({
       prevErrorRef.current = stream.error;
       onStreamError?.();
       onHistoryRevalidate?.();
+      // Run may have completed server-side even though the stream errored
+      // (connection dropped during the long TTS phase); pull the markers from
+      // the persisted state.
+      void syncFromServer();
     }
-  }, [stream.error, onStreamError, onHistoryRevalidate]);
+  }, [stream.error, onStreamError, onHistoryRevalidate, syncFromServer]);
 
 
   // ── Rejoin active runs on thread switch / refresh ─────────────────────────────
@@ -356,12 +605,15 @@ export function LangGraphRuntimeProvider({
           }
         }
 
-        // Extract AUDIO_URL/AUDIO_VOICE markers (text_to_speech tool / voice mirror)
-        // into message metadata so the UI can render an audio player, and strip
-        // the marker lines from all visible text (assistant messages & tool call results).
+        // Extract AUDIO_URL/AUDIO_VOICE and FILE_URL markers (text_to_speech
+        // tool / voice mirror / terminal tool) into message metadata so the UI
+        // can render audio players and downloadable file cards, and strip the
+        // marker lines from all visible text (assistant messages & tool results).
         if (converted) {
-          const audios: { url: string; voice: boolean }[] = [];
+          const audios: { url: string; voice: boolean; provider?: string }[] = [];
+          const files: { url: string; name: string }[] = [];
           let isVoice = false;
+          let audioProvider: string | undefined = undefined;
 
           const cleanText = (text: string): string => {
             if (!text || typeof text !== "string") return text;
@@ -374,14 +626,28 @@ export function LangGraphRuntimeProvider({
                 isVoice = voiceMatch[1] === "true";
                 if (/^AUDIO_VOICE:(true|false)\s*$/.test(trimmed)) continue;
               }
+              const provMatch = trimmed.match(/AUDIO_PROVIDER:(\S+)/);
+              if (provMatch) {
+                audioProvider = provMatch[1];
+                if (/^AUDIO_PROVIDER:\S+\s*$/.test(trimmed)) continue;
+              }
               const urlMatch = trimmed.match(/AUDIO_URL:(\S+)/);
               if (urlMatch) {
-                audios.push({ url: urlMatch[1], voice: isVoice });
+                audios.push({ url: urlMatch[1], voice: isVoice, provider: audioProvider });
                 if (/^AUDIO_URL:\S+\s*$/.test(trimmed)) continue;
+              }
+              const fileMatch = trimmed.match(/FILE_URL:(\S+)/);
+              if (fileMatch) {
+                const url = fileMatch[1];
+                const name = decodeURIComponent(url.split("/").pop() ?? "file");
+                files.push({ url, name });
+                if (/^FILE_URL:\S+\s*$/.test(trimmed)) continue;
               }
               const cleanLine = line
                 .replace(/AUDIO_VOICE:(true|false)/g, "")
+                .replace(/AUDIO_PROVIDER:\S+/g, "")
                 .replace(/AUDIO_URL:\S+/g, "")
+                .replace(/FILE_URL:\S+/g, "")
                 .trim();
               if (cleanLine || line === "") {
                 kept.push(cleanLine);
@@ -414,7 +680,7 @@ export function LangGraphRuntimeProvider({
             });
           }
 
-          if (audios.length > 0) {
+          if (audios.length > 0 || files.length > 0) {
             converted.metadata = {
               ...(converted.metadata ?? {}),
               custom: {
@@ -423,6 +689,7 @@ export function LangGraphRuntimeProvider({
                   ...(converted.metadata?.custom?.audioReplies ?? []),
                   ...audios,
                 ],
+                files: [...(converted.metadata?.custom?.files ?? []), ...files],
               },
             };
           }
@@ -466,13 +733,42 @@ export function LangGraphRuntimeProvider({
         };
       }
     },
-    messages: Array.isArray(stream.messages)
-      ? stream.messages.filter(Boolean).map((m: any) => ({
-          ...m,
-          // Ensure content is never null — null ?? "" returns null, so use || fallback
-          content: m.content != null ? m.content : "",
-        }))
-      : [],
+    messages: (() => {
+      const base = Array.isArray(stream.messages)
+        ? stream.messages.filter(Boolean).map((m: any) => ({
+            ...m,
+            // Ensure content is never null — null ?? "" returns null, so use || fallback
+            content: m.content != null ? m.content : "",
+          }))
+        : [];
+      if (!syncedMessages || syncedMessages.length === 0) return base;
+      // Merge authoritative server messages by id, preferring the server copy
+      // when it carries markers the streamed copy lacks.
+      const byId = new Map<string, any>();
+      for (const m of base) if (m?.id) byId.set(m.id, m);
+      let changed = false;
+      for (const sm of syncedMessages) {
+        if (!sm?.id) continue;
+        const local = byId.get(sm.id);
+        const hasMarker = (v: any) => {
+          const c = typeof v === "string" ? v : JSON.stringify(v ?? "");
+          return c.includes("AUDIO_URL:") || c.includes("FILE_URL:");
+        };
+        if (!local) {
+          byId.set(sm.id, sm);
+          changed = true;
+        } else if (hasMarker(sm.content) && !hasMarker(local.content)) {
+          byId.set(sm.id, sm);
+          changed = true;
+        }
+      }
+      if (!changed) return base;
+      const merged = base.map((m: any) => (m?.id && byId.has(m.id) ? byId.get(m.id) : m));
+      for (const sm of syncedMessages) {
+        if (sm?.id && !merged.some((m: any) => m?.id === sm.id)) merged.push(sm);
+      }
+      return merged;
+    })(),
     isRunning: stream.isLoading,
   });
 
@@ -858,7 +1154,8 @@ export function LangGraphRuntimeProvider({
     newThread,
     threadId: threadId ?? null,
     workflowId: workflowId ?? null,
-  }), [stream.isLoading, stream.isThreadLoading, submitRef, interrupts, resumeInterrupt, voiceMode, setVoiceMode, newThread, threadId, workflowId]);
+    audioRepliesMap,
+  }), [stream.isLoading, stream.isThreadLoading, submitRef, interrupts, resumeInterrupt, voiceMode, setVoiceMode, newThread, threadId, workflowId, audioRepliesMap]);
 
   return (
     <LangGraphRuntimeContext.Provider value={contextValue}>

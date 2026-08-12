@@ -22,6 +22,11 @@ services:
       - shared-node-modules:/app/deep-agents-ui-main/node_modules
       - shared-npm-cache:/app/shared_npm_cache
       - ./data:/app/data
+      # Mount output/ and logs/ so files the agent creates via the terminal tool
+      # (PDFs, images, scripts) and server logs are visible on the HOST filesystem
+      # instead of being trapped inside the container ("sandbox").
+      - ./output:/app/output
+      - ./logs:/app/logs
 
   # ── Feeder HTTP server (port 8080, HTTP-only, no scheduler) ────────────
   feeder_svc:

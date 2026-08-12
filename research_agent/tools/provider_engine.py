@@ -132,31 +132,29 @@ def _fetch_settings_from_supabase(user_id: Optional[str] = None) -> dict[str, st
             return {}
         client = create_client(url, key)
         res = {}
-        if user_id:
+        uid = user_id or active_user_id.get() or _LAST_ACTIVE_USER_ID
+
+        if uid:
             try:
-                resp = client.table("agent_settings").select("key, value").eq("user_id", str(user_id)).execute()
+                resp = client.table("agent_settings").select("key, value").eq("user_id", str(uid)).execute()
                 if resp.data:
                     res = {row["key"]: row["value"] for row in resp.data}
             except Exception:
                 pass
 
-        # Global fallback: ONLY rows with a NULL user_id (true global settings,
-        # written by legacy/setup paths). Never merge the first N rows across all
-        # users — that leaks one user's settings (e.g. tts_provider) into another's.
+        # Fallback: if user_id is missing or user has 0 rows, load settings from the latest registered user
         if not res:
             try:
-                resp2 = (
-                    client.table("agent_settings")
-                    .select("key, value")
-                    .is_("user_id", None)
-                    .limit(500)
-                    .execute()
-                )
-                if resp2.data:
-                    res = {row["key"]: row["value"] for row in resp2.data}
-                    logger.debug(f"[provider_engine] Settings fallback: {len(res)} global (user_id IS NULL) rows for user={user_id}")
-            except Exception:
-                pass
+                resp_latest = client.table("agent_settings").select("user_id").not_.is_("user_id", "null").limit(1).execute()
+                if resp_latest.data and len(resp_latest.data) > 0:
+                    latest_uid = resp_latest.data[0].get("user_id")
+                    if latest_uid:
+                        resp2 = client.table("agent_settings").select("key, value").eq("user_id", str(latest_uid)).execute()
+                        if resp2.data:
+                            res = {row["key"]: row["value"] for row in resp2.data}
+                            logger.debug(f"[provider_engine] Settings fallback: loaded {len(res)} rows for latest user {latest_uid}")
+            except Exception as err:
+                logger.warning(f"[provider_engine] Settings fallback error: {err}")
 
         return res
     except Exception as e:
@@ -273,13 +271,14 @@ def invalidate_settings_cache(user_id: Optional[str] = None) -> None:
     """Force next call to get_settings() to re-fetch from Supabase and update Redis."""
     global _cache_loaded_at
     uid_str = str(user_id) if user_id else "all"
-    if uid_str in _cache_loaded_at:
-        _cache_loaded_at[uid_str] = 0.0
+    _cache_loaded_at[uid_str] = 0.0
+    _cache_loaded_at["all"] = 0.0
     r_client = get_redis_client()
     if r_client:
         try:
             r_client.delete(f"agent_settings:{uid_str}")
-            logger.debug(f"[provider_engine] Redis settings cache invalidated for user {uid_str}.")
+            r_client.delete("agent_settings:all")
+            logger.debug(f"[provider_engine] Redis settings cache invalidated for user {uid_str} and all.")
         except Exception as e:
             logger.warning(f"[provider_engine] Failed to delete settings cache in Redis for {uid_str}: {e}")
 

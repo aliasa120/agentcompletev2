@@ -99,13 +99,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid rows parameter" }, { status: 400 });
     }
 
-    // 1. Save to Supabase with user_id
-    const rowsWithUser = rows.map((r: any) => ({
-      user_id: user.id,
-      key: r.key,
-      value: r.value,
-      updated_at: new Date().toISOString()
-    }));
+    // 1. Save to Supabase with user_id (deduplicated by key to prevent PostgreSQL ON CONFLICT batch errors)
+    const uniqueMap = new Map<string, any>();
+    for (const r of rows) {
+      if (r && r.key) {
+        uniqueMap.set(r.key, {
+          user_id: user.id,
+          key: r.key,
+          value: r.value ?? "",
+          updated_at: new Date().toISOString()
+        });
+      }
+    }
+    const rowsWithUser = Array.from(uniqueMap.values());
     const { error } = await supabase.from("agent_settings").upsert(rowsWithUser, { onConflict: "user_id,key" });
     if (error) throw error;
 
@@ -120,6 +126,7 @@ export async function POST(req: Request) {
             dict[row.key] = row.value;
           }
           await redis.setex(`agent_settings:${user.id}`, 3600, JSON.stringify(dict));
+          await redis.del("agent_settings:all");
           console.log(`[Redis] Successfully updated settings cache for user ${user.id}.`);
         }
       } catch (err: any) {

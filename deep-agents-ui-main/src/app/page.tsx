@@ -862,8 +862,8 @@ function HomePageContent() {
 
   if (!config) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background p-6">
-        <div className="text-center max-w-md w-full border border-border/40 rounded-2xl bg-card shadow-sm p-6 md:p-8 animate-in fade-in">
+      <div className="flex h-screen items-center justify-center bg-background p-6" suppressHydrationWarning>
+        <div className="text-center max-w-md w-full border border-border/40 rounded-2xl bg-card shadow-sm p-6 md:p-8 animate-in fade-in" suppressHydrationWarning>
           <Zap className="h-12 w-12 text-primary mx-auto mb-4" />
           <h1 className="text-2xl font-studio font-medium text-foreground">Welcome to Deep Agent UI</h1>
           <p className="mt-2 text-sm text-muted-foreground leading-relaxed">

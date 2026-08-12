@@ -22,6 +22,20 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+# Force UTF-8 on stdout/stderr (Windows cp1252 cannot encode characters like → U+2192
+# used in preflight/omni prints, which crashed runs with UnicodeEncodeError).
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 import time
 import asyncio
 import random
@@ -58,7 +72,7 @@ from research_agent.tools import (
     unified_extract,
     create_post_image,
     youtube_transcript,
-    analyze_attachment,
+    omni_analyzer,
     # ── Support tools ────────────────────────────────────────────────────────
     think_tool,
     fetch_images_brave,
@@ -1931,7 +1945,7 @@ def load_dynamic_agents_by_workflow():
             build_skills_index,
             cronjob,
             search_conversation_history,
-            analyze_attachment,
+            omni_analyzer,
             search_memories,
             add_memory,
             replace_memory,
@@ -1971,7 +1985,10 @@ def load_dynamic_agents_by_workflow():
             "terminal": terminal,
             "ask_permission": ask_permission,
             "search_conversation_history": search_conversation_history,
-            "analyze_attachment": analyze_attachment,
+            "omni_analyzer": omni_analyzer,
+            # Backward-compat alias: older agent_tool_assignments rows still use
+            # tool_key="analyze_attachment"; keep them working after the rename.
+            "analyze_attachment": omni_analyzer,
             "search_memories": search_memories,
             "add_memory": add_memory,
             "replace_memory": replace_memory,
@@ -2416,6 +2433,38 @@ import re as _re
 # assistant-ui directive syntax:  :type[label]{name=id}
 _DIRECTIVE_RE = _re.compile(r":([\w-]+)\[([^\]]+)\](?:\{name=([^}]+)\})?")
 
+# :command[...] chips that change the chat's voice mode — handled by the
+# system, never sent to the agent (avoids text_to_speech confusion).
+_VOICE_CHIP_NAMES = {
+    "voice", "voice-tts", "voice-on", "voice-off",
+    "voice tts", "voice on", "voice off",
+}
+
+# Replaces voice commands in the agent's input so the model sees a system note
+# instead of a user instruction it might mistake for a text_to_speech request.
+_VOICE_CHANGED_NOTE = (
+    "[System] The user changed the voice-reply mode (/voice tts, /voice on or "
+    "/voice off). This is handled automatically by the system — you have NOTHING "
+    "to do. Do NOT call text_to_speech and do not treat this as a task; reply "
+    "briefly at most."
+)
+
+
+def _humanize_command_chips(text: str) -> str:
+    """Turn :command[/learn]{name=learn} markup back into /learn so the agent
+    always sees the command the user typed. Other directives (:skill, :tool)
+    are left untouched for the mention handler below."""
+    out, last = [], 0
+    for m in _DIRECTIVE_RE.finditer(text):
+        out.append(text[last : m.start()])
+        if m.group(1) == "command":
+            out.append("/" + m.group(2).lstrip("/"))
+        else:
+            out.append(m.group(0))
+        last = m.end()
+    out.append(text[last:])
+    return "".join(out)
+
 
 def _message_text(msg) -> str:
     """Extract plain text from a message whose content is str or content-blocks."""
@@ -2467,6 +2516,15 @@ def load_memories(state, config: RunnableConfig):
 
     (Automatic memory loading stays disabled; memories are fetched on-demand via tools.)
     """
+    configurable = config.get("configurable", {}) if config else {}
+    user_id = configurable.get("user_id")
+    workflow_id = configurable.get("workflow_id")
+    thread_id = configurable.get("thread_id")
+    
+    if user_id or workflow_id or thread_id:
+        from research_agent.tools.provider_engine import set_active_user_and_workflow
+        set_active_user_and_workflow(user_id=user_id, workflow_id=workflow_id, thread_id=thread_id)
+
     messages = state.get("messages", [])
     last_human = None
     for msg in reversed(messages):
@@ -2480,7 +2538,7 @@ def load_memories(state, config: RunnableConfig):
     if not text.strip():
         return state
 
-    # 1. Agent commands
+    # 1. Agent commands (plain "/learn ..." / "!learn ..." text)
     try:
         parsed_cmd = resolve_command(text)
     except Exception as e:
@@ -2490,12 +2548,50 @@ def load_memories(state, config: RunnableConfig):
         cmd, args = parsed_cmd
         if cmd.name == "learn":
             prompt = build_learn_prompt(args)
-            _set_message_text(last_human, prompt)
+            _set_message_text(last_human, f"{text}\n\n[System] {prompt}")
             print(f"[agent] /learn command -> injected learn prompt ({len(prompt)} chars)")
-        # session-kind commands are handled by platform adapters and never reach the graph
+        elif cmd.name == "voice":
+            # Voice mode is set client/platform-side (web /voice-* chips, Telegram
+            # !voice, etc.). The command text STAYS in the agent's context, and a
+            # system note is appended telling the model it has nothing to do (so it
+            # never mistakes it for a text_to_speech request).
+            _set_message_text(last_human, f"{text}\n\n{_VOICE_CHANGED_NOTE}")
+            print(f"[agent] voice command kept in context + note appended (args={args!r})")
+        # other session commands (new/status/help/model) stay unchanged
         return state
 
-    # 2. @-mention directives from the web composer
+    # 2b. :command[...] chips from the web composer. Commands are NEVER stripped:
+    #     the markup is humanized back to "/cmd" so the agent always sees what the
+    #     user typed. /learn gets the learn prompt appended; voice commands get
+    #     the "nothing to do" note; every other command reaches the agent as-is.
+    try:
+        chip_cmds = [
+            ((m.group(3) or m.group(2)).strip().lstrip("/").lower(), m)
+            for m in _DIRECTIVE_RE.finditer(text)
+            if m.group(1) == "command"
+        ]
+        if chip_cmds:
+            humanized = _humanize_command_chips(text).strip()
+            handled = False
+            for name, m in chip_cmds:
+                if name in ("learn",):
+                    prompt = build_learn_prompt(humanized)
+                    _set_message_text(last_human, f"{humanized}\n\n[System] {prompt}")
+                    print(f"[agent] :command[/{name}] kept in context + learn prompt appended")
+                    handled = True
+                elif name in _VOICE_CHIP_NAMES:
+                    if not handled:
+                        _set_message_text(last_human, f"{humanized}\n\n{_VOICE_CHANGED_NOTE}")
+                        print(f"[agent] :command[/{name}] kept in context + voice note appended")
+                        handled = True
+                # any other command chip: humanized and kept in the text
+            if not handled:
+                _set_message_text(last_human, humanized)
+                print(f"[agent] :command chips kept in context: {[c[0] for c in chip_cmds]}")
+    except Exception as e:
+        print(f"[agent] :command chip parse error: {e}")
+
+    # 2. @-mention directives (:skill[...], :tool[...]) from the web composer
     try:
         skills, tools = [], []
         for m in _DIRECTIVE_RE.finditer(text):
@@ -2558,6 +2654,12 @@ def finalize_response(state, config: RunnableConfig):
     if last_ai is None:
         return state
 
+    human_text = _message_text(last_human).lower() if last_human else ""
+    is_voice_cmd = any(cmd in human_text for cmd in ["/voice-tts", "/voice-on", "/voice tts", "/voice on", "voice-tts", "voice-on"])
+
+    if voice_mode in ("off", "none", "false") and not is_voice_cmd:
+        return state
+
     final_text = _message_text(last_ai)
     if not final_text.strip() or tts_engine.AUDIO_URL_MARKER in final_text:
         return state  # nothing to say, or the agent already spoke via the tool
@@ -2570,7 +2672,7 @@ def finalize_response(state, config: RunnableConfig):
                 was_voice_input = True
                 break
 
-    should_speak = (voice_mode in ("all", "tts")) or (voice_mode in ("on", "voice_only") and was_voice_input)
+    should_speak = (voice_mode in ("all", "tts", "on")) or was_voice_input or is_voice_cmd
     if not should_speak:
         return state
 
@@ -2579,6 +2681,7 @@ def finalize_response(state, config: RunnableConfig):
             final_text,
             platform=(configurable.get("platform") or "web"),
             user_id=configurable.get("user_id"),
+            purpose="mirror",
         )
     except Exception as e:
         print(f"[agent] finalize_response voice synthesis failed: {e}")
@@ -2889,7 +2992,7 @@ else:
             publish_to_wordpress,
             youtube_transcript,
             search_conversation_history,
-            analyze_attachment,
+            omni_analyzer,
             text_to_speech,
             terminal,
         ],
