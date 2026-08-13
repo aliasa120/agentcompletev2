@@ -50,7 +50,7 @@ except ImportError as ie:
     logger.warning(f"research_agent helpers not importable ({ie}); !commands and voice replies disabled")
     resolve_command = None
     cmd_help_lines = lambda: []  # noqa: E731
-    extract_audio_markers = lambda t: (None, False, t or "")  # noqa: E731
+    extract_audio_markers = lambda t: (None, False, None, t or "")  # noqa: E731
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or os.environ.get("SUPABASE_ANON_KEY", "").strip()
@@ -334,7 +334,7 @@ class SlackBotInstance:
                         now = time.time()
                         if now - last_edit_time > 2.0 and accumulated_text.strip() != last_edit_text.strip():
                             try:
-                                text_to_send = extract_audio_markers(accumulated_text)[2]
+                                text_to_send = extract_audio_markers(accumulated_text)[-1]
                                 if len(text_to_send) > 3000:
                                     text_to_send = text_to_send[:3000] + "\n\n... (truncated)"
                                 await self.web_client.chat_update(channel=channel_id, ts=msg_ts, text=text_to_send + " ▉")
@@ -364,29 +364,39 @@ class SlackBotInstance:
             return
 
         # 2. Final text from thread state (includes voice-mirror markers appended
-        #    after streaming); fall back to the streamed text
+        #    after streaming); fall back to the streamed text.
+        #    For long 3000-char synthesis, poll get_state every 3s (up to 120s) for marker.
         audio_url, is_voice, final_text = None, False, streamed_text
-        try:
-            state = await langgraph_client.threads.get_state(thread_id)
-            messages = (state.get("values", {}) or {}).get("messages", []) if isinstance(state, dict) else []
-            for msg in reversed(messages):
-                role = msg.get("type") or msg.get("role")
-                if role in ("ai", "assistant"):
-                    content = msg.get("content", "")
-                    if isinstance(content, list):
-                        content = "".join(
-                            (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else (b if isinstance(b, str) else ""))
-                            for b in content
-                        )
-                    if content.strip():
-                        audio_url, is_voice, cleaned = extract_audio_markers(content)
-                        if cleaned.strip():
-                            final_text = cleaned
-                        break
-        except Exception as e:
-            logger.warning(f"Final state fetch failed (using streamed text): {e}")
+        for _attempt in range(40):  # 40 * 3s = 120s max
+            try:
+                state = await langgraph_client.threads.get_state(thread_id)
+                messages = (state.get("values", {}) or {}).get("messages", []) if isinstance(state, dict) else []
+                for msg in reversed(messages):
+                    role = msg.get("type") or msg.get("role")
+                    if role in ("ai", "assistant"):
+                        content = msg.get("content", "")
+                        if isinstance(content, list):
+                            content = "".join(
+                                (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else (b if isinstance(b, str) else ""))
+                                for b in content
+                            )
+                        if content.strip():
+                            url_m, v_m, _provider, cleaned = extract_audio_markers(content)
+                            if cleaned.strip():
+                                final_text = cleaned
+                            if url_m:
+                                audio_url = url_m
+                                is_voice = v_m
+                                break
+                if audio_url:
+                    break
+            except Exception as e:
+                logger.warning(f"Final state fetch attempt failed: {e}")
+            if _attempt < 39:
+                await asyncio.sleep(3)
+
         if audio_url is None and streamed_text:
-            audio_url, is_voice, cleaned = extract_audio_markers(streamed_text)
+            audio_url, is_voice, _provider, cleaned = extract_audio_markers(streamed_text)
             if audio_url:
                 final_text = cleaned
 
@@ -918,7 +928,7 @@ class SlackBotInstance:
                             now = time.time()
                             if now - last_edit_time > 2.0 and accumulated_text.strip() != last_edit_text.strip():
                                 try:
-                                    text_to_send = extract_audio_markers(accumulated_text)[2]
+                                    text_to_send = extract_audio_markers(accumulated_text)[-1]
                                     if len(text_to_send) > 3000:
                                         text_to_send = text_to_send[:3000] + "\n\n... (truncated)"
                                     await self.web_client.chat_update(
@@ -974,7 +984,7 @@ class SlackBotInstance:
                                 now = time.time()
                                 if now - last_edit_time > 2.0 and accumulated_text.strip() != last_edit_text.strip():
                                     try:
-                                        text_to_send = extract_audio_markers(accumulated_text)[2]
+                                        text_to_send = extract_audio_markers(accumulated_text)[-1]
                                         if len(text_to_send) > 3000:
                                             text_to_send = text_to_send[:3000] + "\n\n... (truncated)"
                                         await self.web_client.chat_update(

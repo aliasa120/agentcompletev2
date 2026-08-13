@@ -42,7 +42,7 @@ try:
     from research_agent.tts import extract_audio_markers
 except ImportError as ie:
     logger.warning(f"research_agent helpers not importable ({ie}); audio attachments disabled")
-    extract_audio_markers = lambda t: (None, False, t or "")  # noqa: E731
+    extract_audio_markers = lambda t: (None, False, None, t or "")  # noqa: E731
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or os.environ.get("SUPABASE_ANON_KEY", "").strip()
@@ -338,7 +338,7 @@ class EmailGatewayInstance:
                             (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else (b if isinstance(b, str) else ""))
                             for b in content
                         )
-                    audio_url, _is_voice, response_text = extract_audio_markers(content or "")
+                    audio_url, _is_voice, _provider, response_text = extract_audio_markers(content or "")
                     break
         except Exception as e:
             logger.warning(f"Email final-state fetch failed: {e}")
