@@ -18,22 +18,15 @@ from research_agent import tts as tts_engine
 def text_to_speech(text: str, config: Optional[RunnableConfig] = None) -> str:
     """Convert text into a spoken audio message.
 
-    IMPORTANT: This tool is for creating SPECIFIC audio replies when you want to
-    generate audio content. It is SEPARATE from the system's automatic voice
-    mode (controlled by /voice tts command).
+    Respect the current voice mode (voice_mode in config):
+      - off: never create audio — answer in text only.
+      - voice_only (default): create audio ONLY when this turn came from a
+        VOICE message (voice_input=true). For plain text input, answer in text.
+      - all: audio is allowed for every reply.
 
-    Voice mode is controlled by the user via slash commands:
-      - /voice tts: system automatically speaks every reply
-      - /voice on: system speaks replies to voice messages
-      - /voice off: text only, no audio
-
-    Use this tool ONLY when:
-      1. The user explicitly asks for audio content
-      2. You need to create a specific audio message
-      3. Voice mode is OFF but you still need audio
-
-    Do NOT use this tool to create automatic voice replies - the system handles
-    that via the finalize_response node based on voice_mode.
+    Use this tool ONLY when the user explicitly asks for audio content AND the
+    current voice mode allows it. Automatic voice replies are handled by the
+    system's finalize_response node — do NOT call this tool for those.
 
     Pass a short, spoken-friendly version of your answer (no markdown, no code
     blocks, no links, no tables) as `text`.
@@ -58,15 +51,20 @@ def text_to_speech(text: str, config: Optional[RunnableConfig] = None) -> str:
     # This tool is for explicit audio content creation only
     voice_mode = str(configurable.get("voice_mode") or "voice_only").strip().lower()
     voice_input = bool(configurable.get("voice_input"))
-    
-    # Only block if voice mode is explicitly OFF
-    if voice_mode in ("off", "none"):
+
+    if voice_mode in ("off", "none", ""):
         return (
             "⏸ Voice replies are OFF in this chat (voice_mode=off). "
             "Do NOT create audio — answer the user in plain text only."
         )
-    # Allow this tool to work in all other modes - it's for explicit audio creation
-    # The automatic voice mode handling is done by the system, not this tool
+    if voice_mode in ("voice_only", "on") and not voice_input:
+        return (
+            "🎙 Voice replies are in voice-to-voice mode (voice_mode=voice_only): "
+            "audio is only generated when the user sends a VOICE message, and this "
+            "turn was a text message. Do NOT create audio — answer in plain text "
+            "only. The user can switch to /voice-tts (every reply gets audio) or "
+            "/voice-off (text only) to change this."
+        )
 
     spoken = tts_engine.prepare_tts_text(text, max_chars=1500)
     if not spoken:

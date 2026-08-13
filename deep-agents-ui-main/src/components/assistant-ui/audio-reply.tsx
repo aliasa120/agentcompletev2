@@ -3,25 +3,21 @@
 /**
  * AudioReplyList — renders an inline audio player for TTS replies.
  *
- * Three data sources (checked in priority order):
+ * Strictly per-message. Each assistant message owns its audio under its own
+ * messageId. No "__latest__" spillover — so if "how are you" (msg A) finishes
+ * TTS after "kya haal hai" (msg B) has already completed, A's player stays
+ * under A and B's player stays under B.
  *
- *  1. message.metadata.custom.audioReplies — injected by useExternalMessageConverter
- *     when the AUDIO_URL marker was present in the stream at conversion time.
- *     Works for short/fast TTS where the marker arrives before the stream ends.
- *
- *  2. audioRepliesMap[messageId] — keyed by the exact message ID from the server
- *     poll. Works when the stream ID and server ID happen to match.
- *
- *  3. audioRepliesMap["__latest__"] — the LangGraph stream assigns a different ID
- *     to the same AI message than the persisted state does (lc_run--... vs UUID).
- *     So the exact lookup by messageId fails. As a fallback, the last assistant
- *     message in the thread checks "__latest__" which always holds the most recent
- *     audio collected from the server poll.
+ * Data sources:
+ *  1. message.metadata.custom.audioReplies — converter-injected when the
+ *     AUDIO_URL marker was in the streamed content (tools + non-web mirror).
+ *  2. audioRepliesMap[messageId] — async web mirror via POST /api/tts plus
+ *     any late polled markers (exact messageId only).
  */
 
 import { useAuiState } from "@assistant-ui/react";
 import { useLangGraphRuntime } from "@/providers/LangGraphRuntimeProvider";
-import { Volume2Icon } from "lucide-react";
+import { Volume2Icon, Loader2 } from "lucide-react";
 import { useMemo, type FC } from "react";
 
 type AudioReply = { url: string; voice: boolean; provider?: string };
@@ -35,11 +31,19 @@ const PROVIDER_LABELS: Record<string, string> = {
 
 const EMPTY_AUDIOS: AudioReply[] = [];
 
-/** Renders the actual audio player cards. */
-const AudioPlayerCards: FC<{ audios: AudioReply[] }> = ({ audios }) => {
+const AudioPlayerCards: FC<{ audios: AudioReply[]; loading?: boolean }> = ({ audios, loading }) => {
+  if (loading && audios.length === 0) {
+    return (
+      <div className="mt-2 flex flex-col gap-2 px-2">
+        <div className="border-border/60 bg-muted/30 flex items-center gap-2 rounded-xl border p-3 text-xs text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin shrink-0" />
+          <span>Generating voice…</span>
+        </div>
+      </div>
+    );
+  }
   if (!audios || audios.length === 0) return null;
 
-  // De-duplicate by URL (prevent showing the same audio multiple times)
   const seen = new Set<string>();
   const unique = audios.filter(a => {
     if (seen.has(a.url)) return false;
@@ -71,61 +75,29 @@ const AudioPlayerCards: FC<{ audios: AudioReply[] }> = ({ audios }) => {
 };
 
 export const AudioReplyList: FC = () => {
-  // ── Source 1: converter-injected audio (fast-path, short responses) ──────────
   const converterAudios = useAuiState(
     (s) =>
       ((s.message as any)?.metadata?.custom?.audioReplies ?? EMPTY_AUDIOS) as AudioReply[],
   );
 
-  // ── Source 2 & 3: bypass map lookup ─────────────────────────────────────────
   const messageId = useAuiState((s) => (s.message as any)?.id as string | undefined);
-
-  // Check if this is the LAST assistant message in the thread.
-  // Used to decide whether to show __latest__ audio (which is thread-level, not
-  // message-level, because LangGraph stream IDs ≠ persisted state IDs).
-  const isLastAssistant = useAuiState((s) => {
-    const msgs: any[] = (s.thread as any)?.messages ?? [];
-    // Find the last message with role "assistant"
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      if (msgs[i]?.role === "assistant") {
-        return msgs[i]?.id === (s.message as any)?.id;
-      }
-    }
-    return false;
-  });
-
-  const { audioRepliesMap } = useLangGraphRuntime();
+  const { audioRepliesMap, ttsPendingSet } = useLangGraphRuntime();
 
   const bypassAudios = useMemo(() => {
     if (!messageId) return EMPTY_AUDIOS;
-    // Try exact message ID lookup first (works when IDs match)
-    const exact = audioRepliesMap.get(messageId);
-    if (exact && exact.length > 0) return exact;
-    // Fall back to __latest__ for the last assistant message in the thread.
-    // This handles the LangGraph ID mismatch: stream delivers lc_run--<x>
-    // but server state persists the same message as <UUID>.
-    if (isLastAssistant) {
-      const latest = audioRepliesMap.get("__latest__");
-      if (latest && latest.length > 0) return latest;
-    }
-    return EMPTY_AUDIOS;
-  }, [audioRepliesMap, messageId, isLastAssistant]);
+    return audioRepliesMap.get(messageId) ?? EMPTY_AUDIOS;
+  }, [audioRepliesMap, messageId]);
 
-  // Prefer converter audios (already stripped/cleaned); fall back to polled data.
+  const isPending = useMemo(() => {
+    if (!messageId) return false;
+    return ttsPendingSet.has(messageId);
+  }, [ttsPendingSet, messageId]);
+
   const audios = useMemo<AudioReply[]>(
     () => (converterAudios.length > 0 ? converterAudios : bypassAudios),
     [converterAudios, bypassAudios],
   );
 
-  if (process.env.NODE_ENV === "development") {
-    if (converterAudios.length > 0 || bypassAudios.length > 0 || audioRepliesMap.size > 0) {
-      console.log(
-        `[AudioReplyList] msgId=${messageId} isLast=${isLastAssistant} ` +
-        `converter=${converterAudios.length} bypass=${bypassAudios.length} ` +
-        `mapSize=${audioRepliesMap.size} final=${audios.length}`
-      );
-    }
-  }
-
-  return <AudioPlayerCards audios={audios} />;
+  if (audios.length === 0 && !isPending) return null;
+  return <AudioPlayerCards audios={audios} loading={isPending && audios.length === 0} />;
 };

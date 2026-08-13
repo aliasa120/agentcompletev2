@@ -2631,6 +2631,10 @@ def finalize_response(state, config: RunnableConfig):
     wants every reply spoken (``voice_mode=tts``), synthesize the final answer and
     append an AUDIO_URL marker that the platform adapter delivers as native audio.
     Skipped when the agent already called the text_to_speech tool this turn.
+
+    For web platform the synthesis is handled async by the frontend (per-message,
+    non-blocking) so the run can finish immediately and the next user turn is not
+    queued behind TTS.
     """
     configurable = config.get("configurable", {})
     voice_mode = str(configurable.get("voice_mode") or "voice_only").strip().lower()
@@ -2695,10 +2699,18 @@ def finalize_response(state, config: RunnableConfig):
     if not should_speak:
         return state
 
+    platform = str(configurable.get("platform") or "web").strip().lower()
+    # Web: non-blocking — frontend triggers POST /api/tts per message_id after
+    # streaming ends. This keeps the run short and lets the next turn start
+    # immediately; audio is anchored strictly to its message_id.
+    if platform == "web":
+        print(f"[agent] finalize_response: web async mode — skipping blocking TTS (mode={voice_mode}, should_speak={should_speak}); frontend will call /api/tts")
+        return state
+
     try:
         marker = tts_engine.synthesize_reply_audio(
             final_text,
-            platform=(configurable.get("platform") or "web"),
+            platform=platform,
             user_id=configurable.get("user_id"),
             purpose="mirror",
             max_chars=3000,
@@ -2713,7 +2725,7 @@ def finalize_response(state, config: RunnableConfig):
         last_ai.content = list(last_ai.content) + [{"type": "text", "text": marker}]
     else:
         last_ai.content = (last_ai.content or "") + marker
-    print(f"[agent] finalize_response: appended voice reply marker (mode={voice_mode})")
+    print(f"[agent] finalize_response: appended voice reply marker (mode={voice_mode}, platform={platform})")
     return state
 
 

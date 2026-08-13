@@ -106,6 +106,8 @@ interface LangGraphRuntimeContextValue {
    * when the message converter's cache didn't re-process the updated message.
    */
   audioRepliesMap: AudioRepliesMap;
+  /** Message IDs currently undergoing async TTS synthesis (web mirror). */
+  ttsPendingSet: Set<string>;
 }
 
 const LangGraphRuntimeContext = createContext<LangGraphRuntimeContextValue | undefined>(undefined);
@@ -163,7 +165,12 @@ export function LangGraphRuntimeProvider({
   const [voiceModeState, setVoiceModeState] = useState<VoiceMode>(() =>
     readVoiceMode(threadId ?? null),
   );
-  const voiceMode = threadId ? voiceModeState : (readVoiceMode(null) ?? voiceModeState);
+  // `voiceModeState` is the single source of truth. The old expression
+  // `threadId ? voiceModeState : (readVoiceMode(null) ?? voiceModeState)` was
+  // wrong: readVoiceMode(null) ALWAYS returns "voice_only" (never null), so a
+  // fresh chat was locked to "voice_only" and a mode set by /voice-tts BEFORE
+  // the thread existed (the first message) was clobbered back to voice_only.
+  const voiceMode = voiceModeState;
   useEffect(() => {
     // When a thread is created, migrate a voice mode chosen BEFORE the thread
     // existed (sessionStorage slot) onto the thread's localStorage key so it is
@@ -191,27 +198,34 @@ export function LangGraphRuntimeProvider({
   const voiceModeRef = useRef<VoiceMode>("voice_only");
   voiceModeRef.current = voiceMode;
 
-  // ── Post-run authoritative re-sync ────────────────────────────────────────────
-  // The client stream disconnects during long TTS synthesis (MiMo ~40-60 s,
-  // Edge/OpenAI ~5-15 s) BEFORE the LangGraph run finishes persisting the
-  // AUDIO_URL marker. A single 500 ms one-shot sync is therefore too early for
-  // long responses — it fetches state before the marker is written.
-  //
-  // Fix: poll every POLL_INTERVAL_MS for up to POLL_MAX_MS, stopping as soon as
-  // we find an AUDIO_URL marker in the messages (meaning synthesis is done).
-  // For short responses the first poll (≤ 2 s) succeeds immediately; for long
-  // ones we keep retrying until the marker appears.
+  // Always-current thread id for the async TTS trigger. triggerAsyncTts is
+  // captured by onFinish at submit time (when threadId is still null on the
+  // first message), so reading `threadId` from the closure bails out early
+  // with "no threadId" and the first /voice-tts reply never gets audio.
+  const threadIdRef = useRef<string | null>(threadId ?? null);
+  threadIdRef.current = threadId ?? null;
+
+  // ── Post-run authoritative re-sync + async web TTS ──────────────────────────
+  // Web does NOT block the run on TTS: finalize_response skips synthesis and
+  // returns immediately. After streaming ends we decide per-assistant-message
+  // whether it needs audio (voice_mode + voice_input) and synthesize in the
+  // background via POST /api/tts, anchoring each result strictly to its
+  // messageId so "how are you" audio never lands under "kya haal hai".
   const [syncedMessages, setSyncedMessages] = useState<any[] | null>(null);
 
   // Cancel handle for the active poll loop (cleared on unmount / new thread).
   const pollCancelRef = useRef<(() => void) | null>(null);
 
-  // ── Late-audio bypass: markers extracted directly from polled server messages ────
-  // useExternalMessageConverter caches converted messages by ID and does NOT
-  // re-process them when their content changes after the fact.  When the poll
-  // finds an updated message with AUDIO_URL: we park the audio entries here so
-  // AudioReplyList can render them without going through the converter.
+  // Audio entries keyed by messageId (or thread+message external key when IDs
+  // drift). No "__latest__" — every player is strictly per-message.
   const [audioRepliesMap, setAudioRepliesMap] = useState<AudioRepliesMap>(new Map());
+
+  // Prevent duplicate POST /api/tts for the same messageId in this session.
+  const ttsDoneRef = useRef<Set<string>>(new Set());
+  const ttsInflightRef = useRef<Set<string>>(new Set());
+  const [ttsPendingSet, setTtsPendingSet] = useState<Set<string>>(new Set());
+  // Per-human voice flag for the async path (exact pairing, durable across rapid messages)
+  const humanVoiceMapRef = useRef<Map<string, boolean>>(new Map());
 
   const hasAudioMarker = useCallback((msgs: any[]): boolean => {
     return msgs.some((m: any) => {
@@ -220,21 +234,157 @@ export function LangGraphRuntimeProvider({
     });
   }, []);
 
+  function getMessageText(raw: any): string {
+    if (typeof raw === "string") return raw;
+    if (Array.isArray(raw)) {
+      const parts: string[] = [];
+      for (const p of raw) {
+        if (!p) continue;
+        if (typeof p.text === "string") parts.push(p.text);
+        else if (typeof p.label === "string") parts.push(p.label);
+        else if (typeof p.content === "string") parts.push(p.content);
+        else if (p.type === "directive" && typeof p.id === "string") parts.push(p.id);
+      }
+      if (parts.length > 0) return parts.join("\n");
+      try { return JSON.stringify(raw); } catch { return ""; }
+    }
+    if (raw && typeof raw === "object") {
+      try { return JSON.stringify(raw); } catch { return String(raw); }
+    }
+    return "";
+  }
+
+  const audioRepliesMapRef = useRef(audioRepliesMap);
+  useEffect(() => { audioRepliesMapRef.current = audioRepliesMap; }, [audioRepliesMap]);
+
+  const triggerAsyncTts = useCallback(async (
+    targetMessageId: string,
+    rawContent: any,
+    /** Extra message IDs (e.g. turn-root IDs from intermediate tool-call AI messages)
+     *  that should also receive this audio entry so the player shows regardless of
+     *  how assistant-ui groups messages into a single AssistantMessage. */
+    extraIds?: string[],
+  ) => {
+    const currentThreadId = threadIdRef.current;
+    if (!currentThreadId) {
+      console.warn(`[tts] skip ${targetMessageId}: no threadId`);
+      return;
+    }
+    if (ttsDoneRef.current.has(targetMessageId) || ttsInflightRef.current.has(targetMessageId)) {
+      console.log(`[tts] skip ${targetMessageId}: already done/inflight`);
+      return;
+    }
+    const existing = audioRepliesMapRef.current.get(targetMessageId);
+    if (existing && existing.length > 0) { ttsDoneRef.current.add(targetMessageId); return; }
+
+    const text = getMessageText(rawContent).trim();
+    if (!text || text.includes("AUDIO_URL:")) {
+      console.log(`[tts] skip ${targetMessageId}: empty or has marker`);
+      ttsDoneRef.current.add(targetMessageId);
+      return;
+    }
+
+    console.log(`[tts] ▶ start ${targetMessageId} len=${text.length} mode=${voiceModeRef.current}`);
+    ttsInflightRef.current.add(targetMessageId);
+    setTtsPendingSet(prev => { const n = new Set(prev); n.add(targetMessageId); return n; });
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: text.slice(0, 3000),
+          messageId: targetMessageId,
+          threadId: currentThreadId,
+          platform: "web",
+          purpose: "mirror",
+          maxChars: 3000,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.url) {
+        console.error(`[tts] ❌ synthesis failed for ${targetMessageId}:`, data, `status=${res.status}`);
+        // allow retry next time
+        return;
+      }
+      console.log(`[tts] ✅ success ${targetMessageId} provider=${data.provider} url=${String(data.url).slice(0,60)}`);
+      const entry: AudioReplyEntry = { url: data.url, voice: false, provider: data.provider };
+      setAudioRepliesMap(prev => {
+        if (prev.get(targetMessageId)?.some(a => a.url === entry.url)) return prev;
+        const next = new Map(prev);
+        next.set(targetMessageId, [entry]);
+        // Also store under turn-root / intermediate AI message IDs so the
+        // audio player shows even when assistant-ui collapses the whole
+        // tool-call chain into a single AssistantMessage keyed by the first ID.
+        if (extraIds) {
+          for (const xId of extraIds) {
+            if (xId && xId !== targetMessageId && !next.get(xId)?.some(a => a.url === entry.url)) {
+              next.set(xId, [entry]);
+            }
+          }
+        }
+        return next;
+      });
+      ttsDoneRef.current.add(targetMessageId);
+      if (extraIds) extraIds.forEach(xId => { if (xId) ttsDoneRef.current.add(xId); });
+    } catch (e) {
+      console.error(`[tts] ❌ request error for ${targetMessageId}:`, e);
+    } finally {
+      ttsInflightRef.current.delete(targetMessageId);
+      setTtsPendingSet(prev => { const n = new Set(prev); n.delete(targetMessageId); return n; });
+    }
+  }, []);
+
+  function shouldTriggerTts(assistantIdx: number, allMessages: any[]): boolean {
+    if (voiceModeRef.current === "off") {
+      console.log(`[tts] skip: voiceMode off for idx ${assistantIdx}`);
+      return false;
+    }
+    // Find the most recent human before this assistant message
+    let lastHuman: any = null;
+    for (let i = assistantIdx - 1; i >= 0; i--) {
+      const m = allMessages[i];
+      const role = m?.role || m?.type;
+      if (role === "human" || role === "user") { lastHuman = m; break; }
+    }
+    const humanText = getMessageText(lastHuman?.content ?? "").toLowerCase();
+    const isVoiceCmd = humanText.includes("/voice-tts") || humanText.includes("/voice-on") || humanText.includes("voice-tts") || humanText.includes("voice-on");
+    if (voiceModeRef.current === "all") {
+      console.log(`[tts] eligible: mode=all idx=${assistantIdx} human="${humanText.slice(0,40)}"`);
+      return true;
+    }
+    if (isVoiceCmd) {
+      console.log(`[tts] eligible: voice cmd idx=${assistantIdx}`);
+      return true;
+    }
+    let wasVoiceInput = false;
+    if (lastHuman?.id && humanVoiceMapRef.current.has(lastHuman.id)) {
+      wasVoiceInput = humanVoiceMapRef.current.get(lastHuman.id) === true;
+    } else {
+      if ((lastHuman as any)?.voice_input) wasVoiceInput = true;
+      const c = lastHuman?.content;
+      if (Array.isArray(c)) {
+        for (const b of c) if (b?.type === "audio" || b?.type === "input_audio") { wasVoiceInput = true; break; }
+      }
+      if ((lastHuman as any)?.additional_kwargs?.metadata?.voice_input) wasVoiceInput = true;
+    }
+    console.log(`[tts] check idx=${assistantIdx} mode=${voiceModeRef.current} wasVoice=${wasVoiceInput} human="${humanText.slice(0,40)}"`);
+    return wasVoiceInput;
+  }
+
   /**
    * Poll the server thread state every POLL_INTERVAL_MS until:
    *   (a) An AUDIO_URL/FILE_URL marker is found in the messages, OR
    *   (b) The server run is no longer active (status ≠ running/pending), OR
    *   (c) POLL_MAX_MS elapses.
-   * On each poll that returns new messages, call setSyncedMessages so the
-   * converter re-runs and the audio card appears in the chat.
+   * For non-web or tool-path markers this still hydrates audioRepliesMap.
+   * For web mirror path there will be no marker — the async trigger handles it.
    */
   const syncFromServer = useCallback(async (opts?: { poll?: boolean }) => {
     if (!threadId || !client) return;
     const shouldPoll = opts?.poll ?? false;
-    const POLL_INTERVAL_MS = 3000;  // check every 3 s
-    const POLL_MAX_MS = 300_000;    // give up after 5 min for long 3000-char text synthesis
+    const POLL_INTERVAL_MS = 3000;
+    const POLL_MAX_MS = 60_000;
 
-    // Cancel any existing poll loop before starting a new one.
     pollCancelRef.current?.();
     let cancelled = false;
     pollCancelRef.current = () => { cancelled = true; };
@@ -255,94 +405,57 @@ export function LangGraphRuntimeProvider({
       if (cancelled) return;
       attempt++;
       try {
-        console.log(`[LangGraphRuntime] Poll attempt ${attempt} for thread ${threadId}...`);
         const msgs = await fetchOnce();
         if (cancelled) return;
 
-        console.log(`[LangGraphRuntime] Poll ${attempt}: ${msgs.length} msgs`);
-
         if (Array.isArray(msgs) && msgs.length > 0) {
           setSyncedMessages(msgs);
-          // If we already have the marker, stop polling.
           if (hasAudioMarker(msgs)) {
-            console.log(`[LangGraphRuntime] ✅ AUDIO_URL marker found after ${attempt} poll(s).`);
-            // ── Extract audio entries and push them to the bypass map ──────────
             setAudioRepliesMap(prev => {
               const next = new Map(prev);
               let changed = false;
-
-              // 1. Store per-message audio entries
               for (const m of msgs) {
                 if (!m?.id) continue;
                 const entries = extractAudioFromContent(m.content);
                 if (entries.length > 0) {
                   const existing = next.get(m.id);
-                  if (!existing || existing.length !== entries.length) {
+                  if (!existing || existing.length !== entries.length || existing[0]?.url !== entries[0]?.url) {
                     next.set(m.id, entries);
                     changed = true;
-                    console.log(`[LangGraphRuntime] ✅ Set audioRepliesMap[${m.id}] =`, entries);
+                    ttsDoneRef.current.add(m.id);
                   }
                 }
               }
-
-              // 2. Find the LAST assistant message in msgs and store ONLY ITS audio entries as "__latest__"
-              let latestAssistantAudio: AudioReplyEntry[] = [];
-              for (let i = msgs.length - 1; i >= 0; i--) {
-                const m = msgs[i];
-                const role = m?.role || m?.type;
-                if (role === "assistant" || role === "ai") {
-                  const entries = extractAudioFromContent(m.content);
-                  if (entries.length > 0) {
-                    latestAssistantAudio = entries;
-                    break;
-                  }
-                }
-              }
-
-              if (latestAssistantAudio.length > 0) {
-                const existingLatest = next.get("__latest__");
-                if (!existingLatest || existingLatest[0]?.url !== latestAssistantAudio[0]?.url) {
-                  next.set("__latest__", latestAssistantAudio);
-                  console.log(`[LangGraphRuntime] ✅ Set audioRepliesMap[__latest__] =`, latestAssistantAudio);
-                  changed = true;
-                }
-              }
-
               return changed ? next : prev;
             });
             return;
-          } else {
-            console.log(`[LangGraphRuntime] No AUDIO_URL marker yet on poll ${attempt}.`);
           }
         }
 
-        // Keep polling until deadline.
         if (shouldPoll && Date.now() < deadline && !cancelled) {
-          console.log(`[LangGraphRuntime] Scheduling next poll in ${POLL_INTERVAL_MS}ms...`);
           setTimeout(tick, POLL_INTERVAL_MS);
-        } else if (shouldPoll) {
-          console.log(`[LangGraphRuntime] Poll timeout reached after ${attempt} attempt(s).`);
         }
       } catch (err) {
-        console.warn(`[LangGraphRuntime] Post-run state sync attempt ${attempt} failed:`, err);
+        console.warn(`[LangGraphRuntime] sync attempt ${attempt} failed:`, err);
         if (shouldPoll && Date.now() < deadline && !cancelled) {
           setTimeout(tick, POLL_INTERVAL_MS);
         }
       }
     };
 
-    // First poll after a short initial delay so the server has time to checkpoint.
-    console.log(`[LangGraphRuntime] Starting poll loop for thread ${threadId} (poll=${shouldPoll})`);
-    setTimeout(tick, 1000);
+    setTimeout(tick, 600);
   }, [threadId, client, hasAudioMarker]);
 
   useEffect(() => {
     if (!threadId) {
-      // Cancel any active poll when switching threads.
       pollCancelRef.current?.();
       pollCancelRef.current = null;
       setSyncedMessages(null);
       setAudioRepliesMap(new Map());
+      ttsDoneRef.current.clear();
+      ttsInflightRef.current.clear();
+      setTtsPendingSet(new Set());
+      humanVoiceMapRef.current.clear();
     }
   }, [threadId]);
 
@@ -362,16 +475,13 @@ export function LangGraphRuntimeProvider({
     onFinish: (_state, run) => {
       onHistoryRevalidate?.();
       onStreamFinish?.();
-      // Stream finished cleanly — start polling so the AUDIO_URL marker (written
-      // by the TTS synthesis step that may outlast the stream) is captured.
       void syncFromServer({ poll: true });
+      setTimeout(() => { void processCompletedMessagesForTts(); }, 400);
     },
-    // When the stream disconnects mid-run (e.g. during the long silent MiMo TTS
-    // synthesis), the SDK calls onError instead of onFinish. Poll the server so
-    // the persisted AUDIO_URL/FILE_URL markers still reach the message converter.
     onError: (_err: any) => {
       onStreamFinish?.();
       void syncFromServer({ poll: true });
+      setTimeout(() => { void processCompletedMessagesForTts(); }, 400);
     },
     onCreated: (run: any) => {
       // Tag new threads with workflow_id / user_id metadata
@@ -389,19 +499,124 @@ export function LangGraphRuntimeProvider({
     },
   });
 
+  // Scan finished assistant messages and trigger async TTS for those that need it.
+  // NOTE: read the authoritative SERVER state via client.threads.getState() —
+  // `stream.messages` is cleared to [] after the run finishes, so the old scan
+  // saw msgs=0 and never fired the async TTS.
+  const processCompletedMessagesForTts = useCallback(async () => {
+    const currentThreadId = threadIdRef.current;
+    if (!currentThreadId || !client) {
+      console.warn(`[tts] processCompletedMessagesForTts: no threadId/client`);
+      return;
+    }
+
+    const scan = (msgs: any[]): void => {
+      for (let i = 0; i < msgs.length; i++) {
+        const m = msgs[i];
+        const role = m?.role || m?.type;
+        if (!(role === "assistant" || role === "ai")) continue;
+        const id = m?.id;
+        if (!id) {
+          console.log(`[tts] skip idx ${i}: no id`);
+          continue;
+        }
+        // Skip intermediate AI steps. An AI message that issued tool calls only
+        // carries the pre-tool "thinking" preamble; the real answer arrives in a
+        // later AI message with no tool_calls. Synthesize ONLY that final answer.
+        const toolCalls = m?.tool_calls;
+        if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+          console.log(`[tts] skip ${id}: has ${toolCalls.length} tool call(s) — intermediate step`);
+          ttsDoneRef.current.add(id);
+          continue;
+        }
+        const rawContent = m?.content;
+        const contentStr = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent ?? "");
+        console.log(`[tts] candidate idx=${i} id=${id} hasUrl=${contentStr.includes("AUDIO_URL:")} preview=${contentStr.slice(0,80)}`);
+        if (contentStr.includes("AUDIO_URL:")) { ttsDoneRef.current.add(id); continue; }
+        if (ttsDoneRef.current.has(id) || ttsInflightRef.current.has(id)) {
+          console.log(`[tts] skip ${id}: already done/inflight`);
+          continue;
+        }
+        if (audioRepliesMapRef.current.has(id)) { ttsDoneRef.current.add(id); continue; }
+        let eligible = false;
+        try { eligible = shouldTriggerTts(i, msgs); } catch (e) { console.warn(`[tts] shouldTrigger error`, e); eligible = false; }
+        console.log(`[tts] eligible=${eligible} for ${id}`);
+        if (!eligible) { ttsDoneRef.current.add(id); continue; }
+        // Hard guard: if text is directive-only (e.g. ":command[/voice-tts]"), don't synthesize empty.
+        const txt = getMessageText(rawContent).trim();
+        if (!txt || txt === ":command[/voice-tts]" || txt.startsWith(":command")) {
+          console.log(`[tts] skip ${id}: directive-only text="${txt.slice(0,60)}"`);
+          ttsDoneRef.current.add(id);
+          continue;
+        }
+
+        // ── Collect intermediate AI message IDs from this tool-call turn ──────
+        // assistant-ui may group the entire tool-call chain (intermediate AI +
+        // tool results + final AI) into ONE AssistantMessage keyed by the FIRST
+        // AI message's id. We store the audio under all those IDs so the player
+        // appears regardless of which id `s.message.id` returns in AudioReplyList.
+        const turnRootIds: string[] = [];
+        for (let j = i - 1; j >= 0; j--) {
+          const prev = msgs[j];
+          const prevRole = prev?.role || prev?.type;
+          // Don't cross human-message boundaries (different conversation turns)
+          if (prevRole === "human" || prevRole === "user") break;
+          // Skip tool-result messages — they sit between AI steps
+          if (prevRole === "tool") continue;
+          if (prevRole === "assistant" || prevRole === "ai") {
+            const prevToolCalls = prev?.tool_calls;
+            if (Array.isArray(prevToolCalls) && prevToolCalls.length > 0 && prev?.id) {
+              turnRootIds.push(prev.id);
+              // Keep walking back to find even earlier AI steps in a multi-round chain
+              continue;
+            }
+          }
+          break;
+        }
+        if (turnRootIds.length > 0) {
+          console.log(`[tts] turn-root ids for ${id}:`, turnRootIds);
+        }
+
+        void triggerAsyncTts(id, rawContent, turnRootIds.length > 0 ? turnRootIds : undefined);
+      }
+    };
+
+    // The run has finished, but the checkpoint can take a beat to be readable;
+    // retry briefly so the final assistant message is present when we scan.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const state: any = await client.threads.getState(currentThreadId);
+        const msgs: any[] = state?.values?.messages ?? [];
+        console.log(`[tts] processCompletedMessagesForTts attempt=${attempt} msgs=${msgs.length}`);
+        const hasAssistant = msgs.some(
+          (m: any) => (m?.role || m?.type) === "assistant" || (m?.role || m?.type) === "ai",
+        );
+        if (hasAssistant) {
+          scan(msgs);
+          return;
+        }
+      } catch (e) {
+        console.warn(`[tts] getState attempt ${attempt} failed:`, e);
+      }
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 1200));
+    }
+    console.warn(`[tts] processCompletedMessagesForTts: no assistant message found after retries`);
+  }, [triggerAsyncTts, client]);
+
   // Belt & suspenders: whenever loading flips true → false through ANY path
-  // (onFinish, onError, abort, disconnect), kick off a polling sync so markers
-  // the stream never delivered still render in the chat window.
+  // (onFinish, onError, abort, disconnect), kick off polling AND async TTS.
   const prevLoadingRef = useRef(stream.isLoading);
   useEffect(() => {
     const was = prevLoadingRef.current;
     const now = stream.isLoading;
     prevLoadingRef.current = now;
     if (was && !now) {
-      // Poll the server until AUDIO_URL marker appears or run finishes.
+      console.log(`[tts] stream finished (isLoading false->true transition), triggering TTS scan`);
       void syncFromServer({ poll: true });
+      // Delay slightly so stream.messages has settled to final values
+      setTimeout(() => { void processCompletedMessagesForTts(); }, 400);
     }
-  }, [stream.isLoading, syncFromServer]);
+  }, [stream.isLoading, syncFromServer, processCompletedMessagesForTts]);
 
   // ── Human-in-the-loop interrupt resume (terminal command approval) ──────────
   const resumeInterrupt = useCallback(
@@ -843,14 +1058,19 @@ export function LangGraphRuntimeProvider({
         status: { type: "complete" },
       }));
 
+      const isVoiceInput = parts.some((p: any) => p.type === "audio" || p.type === "input_audio");
+      const newHumanId = uuidv4();
+      humanVoiceMapRef.current.set(newHumanId, isVoiceInput);
+
       const newMessage = {
-        id: uuidv4(),
+        id: newHumanId,
         type: "human" as const,
         content,
         additional_kwargs: {
           metadata: {
             ...(quote ? { quote } : {}),
             ...(attachmentsMeta ? { attachments: attachmentsMeta } : {}),
+            ...(isVoiceInput ? { voice_input: true } : {}),
           }
         }
       };
@@ -900,7 +1120,7 @@ export function LangGraphRuntimeProvider({
               ...(assistantConfig?.configurable ?? {}),
               platform: "web",
               voice_mode: voiceModeRef.current,
-              voice_input: parts.some((p: any) => p.type === "audio" || p.type === "input_audio"),
+              voice_input: isVoiceInput,
               workflow_id: workflowId,
               user_id: userId || undefined,
             },
@@ -1155,7 +1375,8 @@ export function LangGraphRuntimeProvider({
     threadId: threadId ?? null,
     workflowId: workflowId ?? null,
     audioRepliesMap,
-  }), [stream.isLoading, stream.isThreadLoading, submitRef, interrupts, resumeInterrupt, voiceMode, setVoiceMode, newThread, threadId, workflowId, audioRepliesMap]);
+    ttsPendingSet,
+  }), [stream.isLoading, stream.isThreadLoading, submitRef, interrupts, resumeInterrupt, voiceMode, setVoiceMode, newThread, threadId, workflowId, audioRepliesMap, ttsPendingSet]);
 
   return (
     <LangGraphRuntimeContext.Provider value={contextValue}>
