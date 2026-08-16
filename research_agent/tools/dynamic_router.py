@@ -11,6 +11,7 @@ import os
 import tempfile
 import json
 import logging
+import re
 from typing import List, Dict, Any, Optional
 from langchain_core.tools import tool, BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
@@ -431,6 +432,11 @@ def get_allowed_routing_tools(agent_id: str) -> Dict[str, set[str]]:
 MCP_MANIFESTS: Dict[str, str] = {
     "googledocs": "Use this to read, create, format, and insert content into Google Docs documents.",
     "gmail": "Use this to compose, send, receive, search, and manage emails.",
+    "googlesheets": "Use this to create spreadsheets, add/edit worksheets, update rows, and manage Google Sheets data.",
+    "googletasks": "Use this to create task lists, add tasks, update task status, and manage Google Tasks.",
+    "microsoftexcel": "Use this to create workbooks, manage worksheets, add rows, find rows, and update spreadsheet data in Microsoft Excel.",
+    "excel": "Use this to create workbooks, manage worksheets, add rows, find rows, and update spreadsheet data in Microsoft Excel.",
+    "googleforms": "Use this to interact with Google Forms, retrieve form info, and make API requests.",
     "wordpress": "Use this to retrieve categories, create, publish, and manage blog posts on WordPress.",
     "hubspot": "Use this to search, create, update, and manage CRM contacts, companies, and deals.",
     "github": "Use this to manage repositories, create issues, view pull requests, and review code.",
@@ -550,9 +556,14 @@ def build_tools_index(agent_id: str) -> str:
                 count = info["count"]
                 
                 # Retrieve manifest
-                manifest = MCP_MANIFESTS.get(slug.lower().replace("_", ""))
+                clean_slug = re.sub(r'[^a-zA-Z0-9]', '', slug.lower())
+                clean_label = re.sub(r'[^a-zA-Z0-9]', '', label.lower())
+                manifest = MCP_MANIFESTS.get(clean_slug) or MCP_MANIFESTS.get(clean_label)
                 if not manifest:
-                    manifest = MCP_MANIFESTS.get(label.lower().replace(" ", ""))
+                    for k, v in MCP_MANIFESTS.items():
+                        if k in clean_slug or k in clean_label:
+                            manifest = v
+                            break
                 if not manifest:
                     manifest = f"Access tools for {label} integration."
 
