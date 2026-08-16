@@ -59,11 +59,18 @@ def get_thread_output_dir(thread_id_or_config: Any = None) -> str:
     return thread_dir
 
 
-def get_thread_filesystem_backend(runtime: Any = None) -> FilesystemBackend:
-    """Factory function for create_deep_agent backend parameter.
-
-    Resolves the thread_id from the tool runtime context and returns a
-    FilesystemBackend rooted at that thread's physical directory with virtual_mode=True.
+class ThreadFilesystemBackend(FilesystemBackend):
+    """FilesystemBackend that is both an initialized Backend instance (required by deepagents 0.7+)
+    and a callable factory for thread-scoped filesystem backends.
     """
-    thread_dir = get_thread_output_dir(runtime)
-    return FilesystemBackend(root_dir=thread_dir, virtual_mode=True)
+    def __init__(self, root_dir: str = OUTPUT_ROOT, virtual_mode: bool = True):
+        super().__init__(root_dir=root_dir, virtual_mode=virtual_mode)
+
+    def __call__(self, runtime: Any = None) -> FilesystemBackend:
+        thread_dir = get_thread_output_dir(runtime)
+        return FilesystemBackend(root_dir=thread_dir, virtual_mode=True)
+
+
+# Export initialized instance that satisfies deepagents 0.7+ backend checks
+thread_filesystem_backend = ThreadFilesystemBackend(root_dir=OUTPUT_ROOT, virtual_mode=True)
+get_thread_filesystem_backend = thread_filesystem_backend

@@ -22,7 +22,7 @@ from langchain_core.messages import SystemMessage
 from langchain_core.tools import tool, StructuredTool
 from langchain_core.runnables import RunnableConfig
 from deepagents import create_deep_agent
-from research_agent.fs_backend import get_thread_filesystem_backend
+from research_agent.fs_backend import thread_filesystem_backend
 
 from research_agent.chat_model import ResilientChatModel
 from research_agent.tools.mcp_loader import load_mcp_tools_for_agent
@@ -606,7 +606,7 @@ def load_dynamic_agents_by_workflow() -> dict:
                 subagents=subagents,
                 system_prompt=main_prompt,
                 name=wf["name"].lower().replace(" ", "-"),
-                backend=get_thread_filesystem_backend,
+                backend=thread_filesystem_backend,
             )
             workflows_compiled[str(wf_id)] = compiled_agent
             workflows_compiled[wf["name"]] = compiled_agent
