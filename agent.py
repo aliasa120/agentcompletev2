@@ -29,7 +29,7 @@ if hasattr(sys.stderr, "reconfigure"):
 from langchain.agents import AgentState
 from langgraph.graph import StateGraph, START, END
 from deepagents import create_deep_agent
-from research_agent.fs_backend import get_thread_filesystem_backend
+from research_agent.fs_backend import thread_filesystem_backend
 
 from research_agent.chat_model import ResilientChatModel
 from research_agent.workflow_compiler import (
@@ -226,7 +226,7 @@ else:
         subagents=[research_subagent, content_subagent],
         system_prompt=INSTRUCTIONS,
         name="research-agent",
-        backend=get_thread_filesystem_backend,
+        backend=thread_filesystem_backend,
     )
 
     builder.add_node("static_fallback", fallback_agent)
