@@ -80,15 +80,9 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "gateway",
-    label: "OpenRouter Setup",
-    description: "API key, custom models setup",
+    label: "Providers",
+    description: "Omni Analyzer & custom models setup",
     icon: <Route className="h-4 w-4" />,
-  },
-  {
-    id: "omni-settings",
-    label: "Omni Analyzer",
-    description: "Multimodal preflight & analyzer",
-    icon: <Brain className="h-4 w-4" />,
   },
   {
     id: "agents",

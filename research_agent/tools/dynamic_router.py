@@ -19,24 +19,21 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 logger = logging.getLogger("dynamic_router")
 
 # Import all core tools to build the Master Registry
-from research_agent.tools import (
-    unified_search,
-    unified_extract,
-    create_post_image,
-    youtube_transcript,
-    think_tool,
-    fetch_images_brave,
-    view_candidate_images,
-    analyze_images_gemini,
-    save_posts_to_supabase,
-    get_design_guide,
-    read_skill,
-    list_skills,
-    manage_skill,
-    get_wordpress_categories,
-    publish_to_wordpress,
-    omni_analyzer,
-)
+from research_agent.tools.unified_search import unified_search
+from research_agent.tools.unified_extract import unified_extract
+from research_agent.tools.unified_image import create_post_image
+from research_agent.tools.youtube_transcript import youtube_transcript
+from research_agent.tools.think import think_tool
+from research_agent.tools.fetch_images_brave import fetch_images_brave
+from research_agent.tools.view_candidate_images import view_candidate_images
+from research_agent.tools.analyze_images_gemini import analyze_images_gemini
+from research_agent.tools.save_to_supabase import save_posts_to_supabase
+from research_agent.tools.get_design_guide import get_design_guide
+from research_agent.tools.read_skill import read_skill
+from research_agent.tools.list_skills import list_skills
+from research_agent.tools.manage_skill import manage_skill
+from research_agent.tools.wordpress_publisher import get_wordpress_categories, publish_to_wordpress
+from research_agent.tools.analyze_attachment import omni_analyzer
 from research_agent.memory.builtin_provider import (
     add_memory,
     replace_memory,

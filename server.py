@@ -21,6 +21,7 @@ def main():
     # UTF-8 stdout for the CLI's unicode log output (avoids cp1252 errors on Windows)
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
+    env["BG_JOB_ISOLATED_LOOPS"] = "true"
 
     # IMPORTANT: use "sys.executable -m langgraph_cli", NOT the bare "langgraph"
     # command. Without an activated venv, "langgraph" resolves to the globally
@@ -32,6 +33,7 @@ def main():
         # Allow up to 10 runs in parallel (dev server default is 1!)
         # Enables parallel chats from multiple windows/tabs.
         "--n-jobs-per-worker", "10",
+        "--allow-blocking",
     ]
 
     subprocess.run(cmd, check=True, env=env)
