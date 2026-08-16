@@ -30,6 +30,8 @@ def sanitize_thread_id(thread_id: Any) -> str:
     return safe or "default"
 
 
+from pathlib import Path
+
 def get_thread_output_dir(thread_id_or_config: Any = None) -> str:
     """Get or create the absolute physical directory path for a thread.
 
@@ -40,31 +42,68 @@ def get_thread_output_dir(thread_id_or_config: Any = None) -> str:
     Returns:
         Absolute path to the thread's workspace directory.
     """
-    thread_id = "default"
+    thread_id = None
 
     if isinstance(thread_id_or_config, str):
         thread_id = thread_id_or_config
     elif isinstance(thread_id_or_config, dict):
         # RunnableConfig dict
         configurable = thread_id_or_config.get("configurable") or {}
-        thread_id = configurable.get("thread_id") or "default"
+        thread_id = configurable.get("thread_id")
     elif hasattr(thread_id_or_config, "config") and thread_id_or_config.config:
         # ToolRuntime or object with .config attribute
         configurable = thread_id_or_config.config.get("configurable") or {}
-        thread_id = configurable.get("thread_id") or "default"
+        thread_id = configurable.get("thread_id")
 
-    safe_id = sanitize_thread_id(thread_id)
+    # If not provided, inspect current RunnableConfig from LangGraph context
+    if not thread_id:
+        try:
+            from langchain_core.runnables.config import var_child_runnable_config
+            cfg = var_child_runnable_config.get(None)
+            if cfg:
+                thread_id = (cfg.get("configurable") or {}).get("thread_id")
+        except Exception:
+            pass
+
+    safe_id = sanitize_thread_id(thread_id or "default")
     thread_dir = os.path.abspath(os.path.join(THREADS_ROOT, safe_id))
     os.makedirs(thread_dir, exist_ok=True)
     return thread_dir
 
 
 class ThreadFilesystemBackend(FilesystemBackend):
-    """FilesystemBackend that is both an initialized Backend instance (required by deepagents 0.7+)
-    and a callable factory for thread-scoped filesystem backends.
+    """FilesystemBackend that dynamically routes file operations (read, write, edit, ls)
+    to the active thread's workspace folder (output/threads/{thread_id}/).
     """
     def __init__(self, root_dir: str = OUTPUT_ROOT, virtual_mode: bool = True):
         super().__init__(root_dir=root_dir, virtual_mode=virtual_mode)
+
+    @property
+    def cwd(self) -> Path:
+        target_dir = get_thread_output_dir()
+        return Path(target_dir)
+
+    @cwd.setter
+    def cwd(self, value: Any) -> None:
+        self._cwd = value
+
+    def _resolve_path(self, key: str) -> Path:
+        target_dir = Path(get_thread_output_dir())
+        if self.virtual_mode:
+            vpath = key if key.startswith("/") else "/" + key
+            if ".." in vpath or vpath.startswith("~"):
+                raise ValueError("Path traversal not allowed")
+            if vpath.startswith("/tmp/"):
+                tmp_dir = target_dir / "tmp"
+                tmp_dir.mkdir(parents=True, exist_ok=True)
+                return (tmp_dir / vpath[5:]).resolve()
+            full = (target_dir / vpath.lstrip("/")).resolve()
+            return full
+
+        path = Path(key)
+        if path.is_absolute():
+            return path
+        return (target_dir / path).resolve()
 
     def __call__(self, runtime: Any = None) -> FilesystemBackend:
         thread_dir = get_thread_output_dir(runtime)
