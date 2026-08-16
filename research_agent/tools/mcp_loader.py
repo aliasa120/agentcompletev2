@@ -435,7 +435,8 @@ class ZapierActionTool(BaseTool):
     description: str
     args_schema: Type[BaseModel] = ZapierActionInput
     
-    server_config: Dict[str, Any] = Field(exclude=True)
+    server_url: str = Field(default="")
+    headers: Dict[str, str] = Field(default_factory=dict)
     underlying_tool: str
     selected_api: str
     action_key: str
@@ -443,32 +444,73 @@ class ZapierActionTool(BaseTool):
     def _run(self, *args, **kwargs):
         raise NotImplementedError("Use async run (_arun)")
 
-    async def _arun(self, instructions: str, params: Optional[Dict[str, Any]] = None, output: Optional[str] = None, **kwargs):
+    async def _arun(self, instructions: str = "", params: Optional[Dict[str, Any]] = None, output: Optional[str] = None, **kwargs):
         try:
-            from langchain_mcp_adapters.client import MultiServerMCPClient
-            client = MultiServerMCPClient(self.server_config)
-            async with client.session("manual_server") as session:
-                result = await session.call_tool(
-                    self.underlying_tool,
-                    {
+            import httpx
+            # Ensure zapier secret header is attached
+            if "Authorization" not in self.headers and self.server_url.startswith("https://mcp.zapier.com/"):
+                from research_agent.tools.provider_engine import get_user_api_key
+                sec = get_user_api_key("zapier_mcp_secret")
+                if sec:
+                    self.headers["Authorization"] = f"Bearer {sec}"
+            
+            post_headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+                **self.headers
+            }
+            
+            call_instructions = instructions or kwargs.get("instructions", "")
+            if not call_instructions and kwargs:
+                call_instructions = json.dumps(kwargs)
+
+            call_params = params or {}
+            for k, v in kwargs.items():
+                if k not in ("selected_api", "action", "instructions", "output", "params"):
+                    call_params[k] = v
+
+            post_body = {
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+                "params": {
+                    "name": self.underlying_tool,
+                    "arguments": {
                         "selected_api": self.selected_api,
                         "action": self.action_key,
-                        "instructions": instructions,
-                        "params": params or {},
-                        "output": output or "status or result info"
+                        "instructions": call_instructions,
+                        **call_params
                     }
-                )
-                if hasattr(result, "content"):
-                    text_parts = []
-                    for c in result.content:
-                        if hasattr(c, "text"):
-                            text_parts.append(c.text)
-                        elif isinstance(c, dict) and "text" in c:
-                            text_parts.append(c["text"])
-                        else:
-                            text_parts.append(str(c))
-                    return sanitize_credentials("\n".join(text_parts))
-                return sanitize_credentials(str(result))
+                },
+                "id": 1
+            }
+
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                res = await client.post(self.server_url, headers=post_headers, json=post_body)
+                raw_text = res.text
+                data = None
+                try:
+                    data = res.json()
+                except Exception:
+                    for line in raw_text.splitlines():
+                        if line.startswith("data:"):
+                            try:
+                                data = json.loads(line[5:].strip())
+                                break
+                            except Exception:
+                                pass
+                if not data:
+                    return sanitize_credentials(raw_text)
+                if "error" in data:
+                    return sanitize_credentials(f"Error executing Zapier action: {data['error']}")
+                result = data.get("result", {})
+                content = result.get("content", [])
+                text_parts = []
+                for c in content:
+                    if isinstance(c, dict):
+                        text_parts.append(c.get("text", json.dumps(c)))
+                    else:
+                        text_parts.append(str(c))
+                return sanitize_credentials("\n".join(text_parts) if text_parts else json.dumps(result))
         except Exception as e:
             return sanitize_credentials(f"Error executing Zapier action: {e}")
 
@@ -530,6 +572,28 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
     from research_agent.tools.dynamic_router import TOOL_OBJECTS
     if tool_key in TOOL_OBJECTS:
         return [TOOL_OBJECTS[tool_key]]
+
+    # Intercept Zapier action wrapper tools (e.g. google_forms_make_api_get_request, gmail_send_email)
+    if metadata and isinstance(metadata, dict) and metadata.get("underlying_tool"):
+        base_url = mcp_url.split("#")[0]
+        headers = {}
+        if base_url.startswith("https://mcp.zapier.com/"):
+            from research_agent.tools.provider_engine import get_user_api_key
+            zapier_secret = get_user_api_key("zapier_mcp_secret")
+            if zapier_secret:
+                headers["Authorization"] = f"Bearer {zapier_secret}"
+
+        wrapper_tool = ZapierActionTool(
+            name=tool_key,
+            description=f"Zapier tool to '{metadata.get('tool_name', tool_key)}' ({metadata.get('app', 'Zapier')}). Provide detailed instructions or parameters.",
+            server_url=base_url,
+            headers=headers,
+            underlying_tool=metadata.get("underlying_tool"),
+            selected_api=metadata.get("selected_api") or "",
+            action_key=metadata.get("action") or "_zap_raw_request"
+        )
+        logger.info(f"Dynamically created wrapper Zapier tool: {tool_key}")
+        return [wrap_tool_with_redaction(wrapper_tool)]
 
     try:
         from langchain_mcp_adapters.client import MultiServerMCPClient
