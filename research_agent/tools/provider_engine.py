@@ -653,7 +653,7 @@ async def load_mcp_tool_by_key(tool_key: str, user_id: Optional[str] = None) -> 
             if match:
                 if conn.get("connection_type") == "manual":
                     from research_agent.tools.mcp_loader import load_manual_mcp_tool
-                    return await load_manual_mcp_tool(conn.get("mcp_url"), tool_key)
+                    return await load_manual_mcp_tool(conn.get("mcp_url"), tool_key, metadata=t if isinstance(t, dict) else None)
                 else:
                     # Resolve Composio API key: explicit user_id → ContextVar → env fallback
                     composio_api_key = _get_user_composio_api_key(user_id)
