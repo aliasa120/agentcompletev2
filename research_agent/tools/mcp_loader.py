@@ -478,6 +478,7 @@ class ZapierActionTool(BaseTool):
                         "selected_api": self.selected_api,
                         "action": self.action_key,
                         "instructions": call_instructions,
+                        "params": call_params,
                         **call_params
                     }
                 },
