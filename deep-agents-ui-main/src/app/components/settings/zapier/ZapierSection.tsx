@@ -78,8 +78,18 @@ export function ZapierSection({
       }
     };
 
-    const handleToolsChanged = () => { if (onReloadAgent) onReloadAgent(); };
-    const handleCloseRequested = () => {};
+    const handleToolsChanged = async () => {
+      try {
+        await fetch("/api/mcp/manual?sync=true");
+      } catch (e) {
+        console.warn("[Zapier MCP] Sync error after tools changed:", e);
+      }
+      if (onRefresh) onRefresh();
+      if (onReloadAgent) onReloadAgent();
+    };
+    const handleCloseRequested = () => {
+      if (onRefresh) onRefresh();
+    };
 
     el.addEventListener("mcp-server-url", handleServerUrl);
     el.addEventListener("tools-changed", handleToolsChanged);

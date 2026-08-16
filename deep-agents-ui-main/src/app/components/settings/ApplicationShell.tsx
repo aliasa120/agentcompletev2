@@ -73,8 +73,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Models",
     items: [
       { title: "AI Providers", id: "providers", icon: Cpu },
-      { title: "OpenRouter Setup", id: "gateway", icon: Route },
-      { title: "Omni Analyzer", id: "omni-settings", icon: Brain },
+      { title: "Providers", id: "gateway", icon: Route },
       { title: "Main Agents", id: "agents", icon: Bot },
       { title: "Subagents", id: "subagents", icon: Users },
       { title: "Skills Library", id: "skills", icon: BookOpen },

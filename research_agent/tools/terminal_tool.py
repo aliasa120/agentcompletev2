@@ -29,6 +29,8 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sys
+import shutil
 import subprocess
 import time
 import uuid
@@ -37,7 +39,45 @@ from typing import Optional
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
+from research_agent.fs_backend import get_thread_output_dir, sanitize_thread_id
+
 logger = logging.getLogger("research_agent.terminal")
+
+
+def _find_bash() -> Optional[str]:
+    """Find a POSIX bash executable for cross-platform execution (Linux, macOS, Windows).
+    
+    On Linux/macOS/Docker: returns /bin/bash or /bin/sh.
+    On Windows: discovers Git Bash (bash.exe) so complex shell syntax, pipes,
+    and heredocs run identically without platform errors.
+    """
+    if sys.platform != "win32":
+        return (
+            shutil.which("bash")
+            or ("/usr/bin/bash" if os.path.isfile("/usr/bin/bash") else None)
+            or ("/bin/bash" if os.path.isfile("/bin/bash") else None)
+            or os.environ.get("SHELL")
+            or "/bin/sh"
+        )
+
+    custom = os.environ.get("GIT_BASH_PATH") or os.environ.get("HERMES_GIT_BASH_PATH")
+    if custom and os.path.isfile(custom):
+        return custom
+
+    local_appdata = os.environ.get("LOCALAPPDATA", "")
+    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+    program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+
+    candidates = [
+        os.path.join(program_files, "Git", "bin", "bash.exe"),
+        os.path.join(program_files_x86, "Git", "bin", "bash.exe"),
+        os.path.join(local_appdata, "Programs", "Git", "bin", "bash.exe") if local_appdata else "",
+        shutil.which("bash"),
+    ]
+    for c in candidates:
+        if c and os.path.isfile(c):
+            return c
+    return None
 
 MAX_OUTPUT_CHARS = 6000
 DEFAULT_TIMEOUT = 120
@@ -123,12 +163,12 @@ _BENIGN_RE = re.compile(
 )
 
 
-def upload_file_to_supabase(file_path: str, user_id: Optional[str] = None) -> Optional[str]:
+def upload_file_to_supabase(file_path: str, thread_id: Optional[str] = None) -> Optional[str]:
     """Upload a file to Supabase Storage and return the public URL.
     
     This makes files created by the terminal tool visible to users.
-    Files are stored under ``terminal/YYYY-MM-DD/`` so a daily cleanup cron can
-    delete entire day-folders older than 30 days.
+    Files are stored under ``terminal/YYYY-MM-DD/{thread_id}/`` so a daily cleanup cron can
+    manage older files while keeping thread outputs organized.
     """
     try:
         import datetime
@@ -148,7 +188,8 @@ def upload_file_to_supabase(file_path: str, user_id: Optional[str] = None) -> Op
         today = datetime.date.today().isoformat()
         filename = os.path.basename(file_path)
         unique_id = str(uuid.uuid4())[:8]
-        storage_path = f"terminal/{today}/{unique_id}_{filename}"
+        safe_tid = sanitize_thread_id(thread_id) if thread_id else "general"
+        storage_path = f"terminal/{today}/{safe_tid}/{unique_id}_{filename}"
         
         with open(file_path, "rb") as f:
             file_content = f.read()
@@ -220,13 +261,23 @@ def detect_dangerous(command: str) -> Optional[str]:
     return "unrecognized command (not on the safe-list)"
 
 
-def _run_command(command: str, workdir: Optional[str], timeout: int) -> str:
-    cwd = workdir if workdir else os.getcwd()
+def _run_command(
+    command: str,
+    workdir: Optional[str],
+    timeout: int,
+    config: Optional[RunnableConfig] = None,
+) -> str:
+    thread_id = None
+    if config and isinstance(config, dict):
+        configurable = config.get("configurable") or {}
+        thread_id = configurable.get("thread_id")
+
     if workdir:
         workdir = os.path.expanduser(workdir)
-        if not os.path.isdir(workdir):
-            return f"❌ workdir does not exist: {workdir}"
+        os.makedirs(workdir, exist_ok=True)
         cwd = workdir
+    else:
+        cwd = get_thread_output_dir(config)
 
     cmd = (command or "").strip()
 
@@ -252,7 +303,7 @@ def _run_command(command: str, workdir: Optional[str], timeout: int) -> str:
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
                 with open(target_path, "w", encoding="utf-8") as f:
                     f.write(file_content)
-                public_url = upload_file_to_supabase(target_path)
+                public_url = upload_file_to_supabase(target_path, thread_id=thread_id)
                 url_msg = f"\n{FILE_URL_MARKER}{public_url}" if public_url else ""
                 heredoc_notes.append(
                     f"✅ Written heredoc file to {target_path} ({len(file_content)} bytes){url_msg}"
@@ -276,6 +327,18 @@ def _run_command(command: str, workdir: Optional[str], timeout: int) -> str:
         except Exception:
             return
 
+    # ── Normalize /tmp/... references for Windows compatibility ───────────────
+    # If the command has `cd /tmp/...` or `/tmp/...`, normalize to local thread cwd
+    if sys.platform == "win32" and "/tmp" in run_command:
+        local_tmp = os.path.join(cwd, "tmp").replace("\\", "/")
+        os.makedirs(local_tmp, exist_ok=True)
+        def _fix_cd_tmp(m):
+            subpath = (m.group(1) or "").lstrip("/\\")
+            target = f"{local_tmp}/{subpath}" if subpath else local_tmp
+            os.makedirs(target, exist_ok=True)
+            return f'cd "{target}"'
+        run_command = re.sub(r'\bcd\s+["\']?/tmp(/[^\s&|;]*)?["\']?', _fix_cd_tmp, run_command)
+
     # Snapshot existing files to detect newly created output files
     before_files = set()
     try:
@@ -285,16 +348,41 @@ def _run_command(command: str, workdir: Optional[str], timeout: int) -> str:
         pass
 
     timeout = max(1, min(int(timeout), MAX_TIMEOUT))
+    
+    # Prepare environment with project root in PYTHONPATH and local temp folder
+    env = os.environ.copy()
+    workspace_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    cur_py_path = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = workspace_root + (os.pathsep + cur_py_path if cur_py_path else "")
+    local_tmp_env = os.path.join(cwd, "tmp")
+    os.makedirs(local_tmp_env, exist_ok=True)
+    env["TMP"] = local_tmp_env
+    env["TEMP"] = local_tmp_env
+    env["TMPDIR"] = local_tmp_env
+
+    bash_path = _find_bash()
     try:
-        proc = subprocess.run(
-            run_command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=cwd,
-            errors="replace",
-        )
+        if bash_path:
+            proc = subprocess.run(
+                [bash_path, "-c", run_command],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                cwd=cwd,
+                env=env,
+                errors="replace",
+            )
+        else:
+            proc = subprocess.run(
+                run_command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                cwd=cwd,
+                env=env,
+                errors="replace",
+            )
     except subprocess.TimeoutExpired:
         return f"⏱️ Command timed out after {timeout}s and was killed."
     except Exception as e:
@@ -326,7 +414,7 @@ def _run_command(command: str, workdir: Optional[str], timeout: int) -> str:
                         continue
                 except OSError:
                     continue
-                url = upload_file_to_supabase(full_p)
+                url = upload_file_to_supabase(full_p, thread_id=thread_id)
                 if url:
                     uploaded_files.append((full_p, url))
     except Exception as e:
@@ -351,11 +439,12 @@ def _run_command(command: str, workdir: Optional[str], timeout: int) -> str:
     return result_text
 
 
-@tool(parse_docstring=True)
+@tool
 def terminal(
     command: str,
     workdir: Optional[str] = None,
     timeout: int = DEFAULT_TIMEOUT,
+    config: RunnableConfig = None,
 ) -> str:
     """Execute an OS shell command with full system access and return its output.
 
@@ -371,6 +460,9 @@ def terminal(
     installing packages, inspecting files/processes, git operations, reading
     server logs (the logs/ directory), installing packages, etc.
     Commands run as the server's OS user (cmd.exe on Windows, sh on Linux).
+
+    By default, commands execute inside the current conversation thread's isolated workspace
+    directory (output/threads/<thread_id>/) matching write_file / read_file.
 
     Examples of what you can do:
     - Create a PDF with charts: write a Python script that uses reportlab /
@@ -393,8 +485,7 @@ def terminal(
     Args:
         command: The full shell command line to execute.
         workdir: Optional working directory (absolute path). Defaults to the
-                 server process directory. You can use this to specify where
-                 to create files (e.g., the user's home directory).
+                 current conversation thread's output directory (output/threads/<thread_id>/).
         timeout: Max seconds to wait (default 120, max 600).
 
     Returns:
@@ -419,4 +510,4 @@ def terminal(
     # _run_command (it knows the cwd and can diff before/after file sets).
     risk = detect_dangerous(command)
     logger.info(f"[terminal] executing (risk={risk or 'none'}): {command}")
-    return _run_command(command, workdir, timeout)
+    return _run_command(command, workdir, timeout, config)

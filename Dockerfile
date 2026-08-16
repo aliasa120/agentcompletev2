@@ -2,10 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install curl and build dependencies
+# Install curl, ffmpeg, poppler-utils (PDF tools) and build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    ffmpeg \
+    poppler-utils \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
@@ -32,9 +34,11 @@ RUN mkdir -p output/candidate_images
 # Expose the exact port that the Next.js UI expects (2024)
 EXPOSE 2024
 
-# Set required environment variables for LangGraph
+# Set required environment variables for LangGraph and unrestricted runtime pip/uv installs
 ENV LANGGRAPH_HOST=0.0.0.0
 ENV LANGGRAPH_PORT=2024
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+ENV UV_SYSTEM_PYTHON=1
 
 # For self-hosting LangGraph, we use the integrated open-source CLI server
 # because your Next.js UI strictly expects the LangGraph REST API endpoints.

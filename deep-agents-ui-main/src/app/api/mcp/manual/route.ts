@@ -208,6 +208,28 @@ async function fetchMcpStreamableHttpTools(mcpUrl: string, secret?: string): Pro
   }));
 }
 
+function parseMcpPayload(rawText: string): any {
+  if (!rawText) return null;
+  const trimmed = rawText.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {}
+  }
+  let sseJson = "";
+  for (const line of rawText.split("\n")) {
+    if (line.startsWith("data:")) {
+      sseJson += line.slice(5).trim();
+    }
+  }
+  if (sseJson) {
+    try {
+      return JSON.parse(sseJson);
+    } catch {}
+  }
+  return null;
+}
+
 // Helper to fetch user's enabled actions from a connected Zapier server
 async function fetchZapierEnabledActions(mcpUrl: string, secret?: string): Promise<{ tool_key: string; tool_name: string; underlying_tool: string; selected_api: string; action: string; app: string }[]> {
   const headers: Record<string, string> = {
@@ -247,38 +269,55 @@ async function fetchZapierEnabledActions(mcpUrl: string, secret?: string): Promi
     signal: AbortSignal.timeout(5000)
   });
 
-  // 3. Get list of apps
-  const appsRes = await fetch(mcpUrl, {
+  // 3. Get list of apps using inspect_zapier_actions (modern Zapier tool)
+  let inspectToolName = "inspect_zapier_actions";
+  let appsRes = await fetch(mcpUrl, {
     method: "POST",
     headers,
     body: JSON.stringify({
       jsonrpc: "2.0",
       method: "tools/call",
       params: {
-        name: "list_enabled_zapier_actions",
+        name: inspectToolName,
         arguments: {}
       },
       id: 3
     }),
     signal: AbortSignal.timeout(8000)
   });
-  if (!appsRes.ok) throw new Error("Failed to call list_enabled_zapier_actions");
 
-  const appsText = await appsRes.text();
-  let appsDataJson = "";
-  for (const line of appsText.split("\n")) {
-    if (line.startsWith("data:")) {
-      appsDataJson += line.slice(5).trim();
-    }
+  if (!appsRes.ok) {
+    inspectToolName = "list_enabled_zapier_actions";
+    appsRes = await fetch(mcpUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: inspectToolName,
+          arguments: {}
+        },
+        id: 3
+      }),
+      signal: AbortSignal.timeout(8000)
+    });
   }
-  if (!appsDataJson) return [];
 
-  const appsParsed = JSON.parse(appsDataJson);
-  const textContent = appsParsed.result?.content?.[0]?.text;
+  if (!appsRes.ok) throw new Error("Failed to call inspect_zapier_actions");
+
+  const appsParsed = parseMcpPayload(await appsRes.text());
+  const textContent = appsParsed?.result?.content?.[0]?.text;
   if (!textContent) return [];
 
-  const appsData = JSON.parse(textContent);
-  const apps = appsData.apps || [];
+  let appsData: any = {};
+  try {
+    appsData = JSON.parse(textContent);
+  } catch {
+    return [];
+  }
+
+  const apps = appsData.apps || (Array.isArray(appsData) ? appsData : []);
   const actionTools: { tool_key: string; tool_name: string; underlying_tool: string; selected_api: string; action: string; app: string }[] = [];
 
   let idCounter = 4;
@@ -292,7 +331,7 @@ async function fetchZapierEnabledActions(mcpUrl: string, secret?: string): Promi
           jsonrpc: "2.0",
           method: "tools/call",
           params: {
-            name: "list_enabled_zapier_actions",
+            name: inspectToolName,
             arguments: {
               selected_api: app.selected_api
             }
@@ -303,17 +342,8 @@ async function fetchZapierEnabledActions(mcpUrl: string, secret?: string): Promi
       });
       if (!actionsRes.ok) continue;
 
-      const actionsText = await actionsRes.text();
-      let actionsDataJson = "";
-      for (const line of actionsText.split("\n")) {
-        if (line.startsWith("data:")) {
-          actionsDataJson += line.slice(5).trim();
-        }
-      }
-      if (!actionsDataJson) continue;
-
-      const actionsParsed = JSON.parse(actionsDataJson);
-      const actionsTextContent = actionsParsed.result?.content?.[0]?.text;
+      const actionsParsed = parseMcpPayload(await actionsRes.text());
+      const actionsTextContent = actionsParsed?.result?.content?.[0]?.text;
       if (!actionsTextContent) continue;
 
       const actionsArray = JSON.parse(actionsTextContent);
@@ -321,11 +351,11 @@ async function fetchZapierEnabledActions(mcpUrl: string, secret?: string): Promi
       const actions = appObj?.actions || [];
 
       for (const act of actions) {
-        if (act.tool_name) {
+        if (act.tool_name || act.key) {
           actionTools.push({
-            tool_key: act.tool_name,
+            tool_key: act.tool_name || act.key,
             tool_name: `Zapier: ${app.app} - ${act.name}`,
-            underlying_tool: act.tool,
+            underlying_tool: act.tool || (act.action_type === "read" || act.action_type === "search" ? "execute_zapier_read_action" : "execute_zapier_write_action"),
             selected_api: app.selected_api,
             action: act.key,
             app: app.app
@@ -807,19 +837,21 @@ export async function GET(req: Request) {
             }
           }
 
-          // 3. Clean up deleted apps
-          const activeMcpUrls = [
-            baseMcpUrl,
-            ...Object.keys(appsActions).map(appName => `${baseServerUrl}#${appName}`)
-          ];
-          const { data: allUserConns } = await supabase
-            .from("mcp_connections")
-            .select("id, mcp_url")
-            .eq("connection_type", "manual");
-          
-          for (const conn of (allUserConns || [])) {
-            if (conn.mcp_url.startsWith(baseServerUrl) && !activeMcpUrls.includes(conn.mcp_url)) {
-              await supabase.from("mcp_connections").delete().eq("id", conn.id);
+          // 3. Clean up deleted apps only when active apps are found
+          if (enabledActions && enabledActions.length > 0) {
+            const activeMcpUrls = [
+              baseMcpUrl,
+              ...Object.keys(appsActions).map(appName => `${baseServerUrl}#${appName}`)
+            ];
+            const { data: allUserConns } = await supabase
+              .from("mcp_connections")
+              .select("id, mcp_url")
+              .eq("connection_type", "manual");
+            
+            for (const conn of (allUserConns || [])) {
+              if (conn.mcp_url.startsWith(baseServerUrl) && !activeMcpUrls.includes(conn.mcp_url)) {
+                await supabase.from("mcp_connections").delete().eq("id", conn.id);
+              }
             }
           }
         } catch (syncErr) {

@@ -905,8 +905,14 @@ async def load_manual_mcp_tool(mcp_url: str, tool_key: str, metadata: Dict[str, 
         from langchain_mcp_adapters.tools import _list_all_tools
 
         # Step 1: use a temporary session ONLY to list available tool definitions
-        async with client.session("manual_server") as session:
-            raw_tools = await _list_all_tools(session)
+        try:
+            async def _get_tools():
+                async with client.session("manual_server") as session:
+                    return await _list_all_tools(session)
+            raw_tools = await asyncio.wait_for(_get_tools(), timeout=5.0)
+        except Exception as conn_err:
+            logger.warning(f"Failed to connect to manual MCP server within 5s: {conn_err}")
+            return []
 
         # Step 2: build tool objects bound to the connection config for all tools
         converted = [
@@ -1122,19 +1128,16 @@ def load_mcp_tools_for_agent(agent_id: str) -> List[BaseTool]:
             except Exception as e:
                 logger.error(f"Failed to fetch user Composio API key from agent_settings: {e}")
 
-            try:
-                user_resp = client.auth.admin.get_user_by_id(user_id)
-                if user_resp and hasattr(user_resp, "data") and user_resp.data:
-                    # In newer supabase python versions, it may return a dict or response object
-                    user_email = getattr(user_resp.data, "email", "") or user_resp.data.get("email", "")
-                elif user_resp and hasattr(user_resp, "user") and user_resp.user:
-                    user_email = getattr(user_resp.user, "email", "")
-            except Exception as e:
-                logger.debug(f"Failed to fetch user email via auth.admin API: {e}")
+            if not composio_api_key:
+                try:
+                    email_setting = client.table("agent_settings").select("value").eq("user_id", user_id).eq("key", "user_email").maybe_single().execute()
+                    if email_setting.data:
+                        user_email = email_setting.data.get("value", "")
+                except Exception:
+                    pass
 
         if not composio_api_key:
-            is_tayyab = (str(user_email).strip().lower() == "tayyab@gmail.com")
-            composio_api_key = os.environ.get("COMPOSIO_API_KEY", "") if is_tayyab else ""
+            composio_api_key = os.environ.get("COMPOSIO_API_KEY", "")
             
         if composio_api_key:
             try:

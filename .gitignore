@@ -49,6 +49,7 @@ test_9router_caps.mjs
 
 # External reference code & local data
 hermes-agent-main/
+deepseek-harness-master/
 honcho-main/
 OpenSpace-main/
 honchodocs.md
@@ -56,7 +57,14 @@ data/
 scratch/
 output/
 tmp/
+report/
 *.png
 *.pdf
+*.ps1
+foo.txt
+gen_graphs*.py
+test_*.txt
+test_*.py
 agent_load.log
 .freebuff/
+
