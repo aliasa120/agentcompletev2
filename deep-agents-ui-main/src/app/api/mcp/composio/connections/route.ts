@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { triggerAgentReload } from "@/lib/agent-reloader";
 
 const COMPOSIO_API_KEY = process.env.COMPOSIO_API_KEY ?? "";
 const COMPOSIO_BASE = "https://backend.composio.dev/api/v3";
@@ -248,6 +249,11 @@ export async function POST(req: Request) {
           { onConflict: "user_id,composio_conn_id" }
         );
 
+        try {
+          triggerAgentReload();
+        } catch (reloadErr) {
+          console.warn("[mcp/composio/connections] Failed to trigger agent reload on connect:", reloadErr);
+        }
         return NextResponse.json({ success: true, instant: true });
       }
     }
@@ -489,6 +495,11 @@ export async function DELETE(req: Request) {
       }
     }
 
+    try {
+      triggerAgentReload();
+    } catch (reloadErr) {
+      console.warn("[mcp/composio/connections] Failed to trigger agent reload on disconnect:", reloadErr);
+    }
     return NextResponse.json({ success: true });
   } catch (e: unknown) {
     return NextResponse.json(
