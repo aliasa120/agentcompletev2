@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { testStdioMcp, testSseMcp, testHttpMcp, resolveNpmPackage, mapCommonEnvVariables } from "@/lib/mcp-tester";
+import { triggerAgentReload } from "@/lib/agent-reloader";
 
 function getSupabaseClient(cookieStore: any) {
   return createServerClient(
@@ -1091,6 +1092,11 @@ export async function POST(req: Request) {
         .select()
         .single();
       if (error) throw error;
+      try {
+        triggerAgentReload();
+      } catch (reloadErr) {
+        console.warn("[mcp/manual] Failed to trigger agent reload on update:", reloadErr);
+      }
       return NextResponse.json({ connection: data });
     } else {
       // Insert new record
@@ -1108,6 +1114,11 @@ export async function POST(req: Request) {
         .select()
         .single();
       if (error) throw error;
+      try {
+        triggerAgentReload();
+      } catch (reloadErr) {
+        console.warn("[mcp/manual] Failed to trigger agent reload on create:", reloadErr);
+      }
       return NextResponse.json({ connection: data });
     }
   } catch (e: unknown) {
@@ -1179,6 +1190,11 @@ export async function DELETE(req: Request) {
       }
     }
 
+    try {
+      triggerAgentReload();
+    } catch (reloadErr) {
+      console.warn("[mcp/manual] Failed to trigger agent reload on delete:", reloadErr);
+    }
     return NextResponse.json({ success: true });
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown" }, { status: 500 });

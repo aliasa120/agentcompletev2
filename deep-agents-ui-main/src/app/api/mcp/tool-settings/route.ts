@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { triggerAgentReload } from "@/lib/agent-reloader";
 
 function getSupabaseClient(cookieStore: any) {
   return createServerClient(
@@ -102,6 +103,12 @@ export async function POST(req: Request) {
 
     if (upsertErr) throw upsertErr;
 
+    try {
+      triggerAgentReload();
+    } catch (reloadErr) {
+      console.warn("[mcp/tool-settings] Failed to trigger agent reload on seed:", reloadErr);
+    }
+
     return NextResponse.json({ seeded: rows.length });
   } catch (e: unknown) {
     return NextResponse.json(
@@ -139,6 +146,13 @@ export async function PATCH(req: Request) {
       .single();
 
     if (error) throw error;
+
+    try {
+      triggerAgentReload();
+    } catch (reloadErr) {
+      console.warn("[mcp/tool-settings] Failed to trigger agent reload on patch:", reloadErr);
+    }
+
     return NextResponse.json({ setting: data });
   } catch (e: unknown) {
     return NextResponse.json(
@@ -173,6 +187,13 @@ export async function PUT(req: Request) {
       .eq("connection_id", connection_id);
 
     if (error) throw error;
+
+    try {
+      triggerAgentReload();
+    } catch (reloadErr) {
+      console.warn("[mcp/tool-settings] Failed to trigger agent reload on bulk update:", reloadErr);
+    }
+
     return NextResponse.json({ success: true });
   } catch (e: unknown) {
     return NextResponse.json(

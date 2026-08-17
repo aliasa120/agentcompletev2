@@ -44,4 +44,4 @@ ENV UV_SYSTEM_PYTHON=1
 # because your Next.js UI strictly expects the LangGraph REST API endpoints.
 # Also run the feeder HTTP server on port 8080 so the frontend can trigger it.
 # We also automatically run setup_db.py to create and seed the database on startup.
-CMD sh -c "python setup_db.py && python feeder_server.py & langgraph dev --host 0.0.0.0 --port 2024 --n-jobs-per-worker 10 --no-reload --allow-blocking"
+CMD sh -c "python setup_db.py && python feeder_server.py & langgraph dev --host 0.0.0.0 --port 2024 --n-jobs-per-worker 10 --allow-blocking"

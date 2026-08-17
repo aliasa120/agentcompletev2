@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { triggerAgentReload } from "@/lib/agent-reloader";
 
 function getSupabaseClient(cookieStore: any) {
   return createServerClient(
@@ -265,6 +266,11 @@ async function handleLocalConnect(
     return NextResponse.json({ success: false, error: insertError.message });
   }
 
+  try {
+    triggerAgentReload();
+  } catch (reloadErr) {
+    console.warn("[mcp/smithery/connect] Failed to trigger agent reload on connect:", reloadErr);
+  }
   return NextResponse.json({ success: true, connectionId: conn.id, connection: conn });
 }
 
@@ -583,6 +589,11 @@ async function handleRemoteConnect(
     return NextResponse.json({ success: false, error: insertError.message });
   }
 
+  try {
+    triggerAgentReload();
+  } catch (reloadErr) {
+    console.warn("[mcp/smithery/connect] Failed to trigger agent reload on connect:", reloadErr);
+  }
   return NextResponse.json({
     success: true,
     connectionId: conn.id,
@@ -666,6 +677,11 @@ export async function GET(req: Request) {
                 updated_at: new Date().toISOString()
               })
               .eq("id", conn.id);
+            try {
+              triggerAgentReload();
+            } catch (reloadErr) {
+              console.warn("[mcp/smithery/connect] Failed to trigger agent reload on activation:", reloadErr);
+            }
             break;
           }
         }
