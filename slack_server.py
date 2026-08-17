@@ -315,7 +315,8 @@ class SlackBotInstance:
                 assistant_id=RESOLVED_ASSISTANT_ID,
                 command={"resume": resume_payload},
                 config=config,
-                stream_mode="messages"
+                stream_mode="messages",
+                stream_subgraphs=True,
             ):
                 if isinstance(chunk, dict):
                     event_type = chunk.get("event")
@@ -363,37 +364,34 @@ class SlackBotInstance:
             await self._send_approval_prompt(channel_id, thread_id, pending)
             return
 
-        # 2. Final text from thread state (includes voice-mirror markers appended
-        #    after streaming); fall back to the streamed text.
-        #    For long 3000-char synthesis, poll get_state every 3s (up to 120s) for marker.
+        # 2. Final text from thread state
         audio_url, is_voice, final_text = None, False, streamed_text
-        for _attempt in range(40):  # 40 * 3s = 120s max
-            try:
-                state = await langgraph_client.threads.get_state(thread_id)
-                messages = (state.get("values", {}) or {}).get("messages", []) if isinstance(state, dict) else []
-                for msg in reversed(messages):
-                    role = msg.get("type") or msg.get("role")
-                    if role in ("ai", "assistant"):
-                        content = msg.get("content", "")
-                        if isinstance(content, list):
-                            content = "".join(
-                                (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else (b if isinstance(b, str) else ""))
-                                for b in content
-                            )
-                        if content.strip():
-                            url_m, v_m, _provider, cleaned = extract_audio_markers(content)
-                            if cleaned.strip():
-                                final_text = cleaned
-                            if url_m:
-                                audio_url = url_m
-                                is_voice = v_m
-                                break
-                if audio_url:
+        try:
+            state = await langgraph_client.threads.get_state(thread_id)
+            messages = (state.get("values", {}) or {}).get("messages", []) if isinstance(state, dict) else []
+            latest_ai_msg = None
+            for msg in reversed(messages):
+                role = msg.get("type") or msg.get("role")
+                if role in ("ai", "assistant"):
+                    latest_ai_msg = msg
                     break
-            except Exception as e:
-                logger.warning(f"Final state fetch attempt failed: {e}")
-            if _attempt < 39:
-                await asyncio.sleep(3)
+
+            if latest_ai_msg:
+                content = latest_ai_msg.get("content", "")
+                if isinstance(content, list):
+                    content = "".join(
+                        (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else (b if isinstance(b, str) else ""))
+                        for b in content
+                    )
+                if content.strip():
+                    url_m, v_m, _provider, cleaned = extract_audio_markers(content)
+                    if cleaned.strip():
+                        final_text = cleaned
+                    if url_m:
+                        audio_url = url_m
+                        is_voice = v_m
+        except Exception as e:
+            logger.warning(f"Final state fetch attempt failed: {e}")
 
         if audio_url is None and streamed_text:
             audio_url, is_voice, _provider, cleaned = extract_audio_markers(streamed_text)
@@ -905,7 +903,8 @@ class SlackBotInstance:
                     assistant_id=RESOLVED_ASSISTANT_ID,
                     input=input_data,
                     config=config,
-                    stream_mode="messages"
+                    stream_mode="messages",
+                    stream_subgraphs=True,
                 ):
                     if isinstance(chunk, dict):
                         event_type = chunk.get("event")
@@ -961,7 +960,8 @@ class SlackBotInstance:
                         assistant_id=RESOLVED_ASSISTANT_ID,
                         input=input_data,
                         config=config,
-                        stream_mode="messages"
+                        stream_mode="messages",
+                        stream_subgraphs=True,
                     ):
                         if isinstance(chunk, dict):
                             event_type = chunk.get("event")
