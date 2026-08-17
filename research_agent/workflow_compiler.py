@@ -252,7 +252,7 @@ def load_dynamic_agents_by_workflow() -> dict:
     try:
         from supabase import create_client, ClientOptions
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
         if not url or not key:
             print("[workflow_compiler] Supabase URL/Key missing. Using static fallback.", flush=True)
             return {}
@@ -868,7 +868,7 @@ def save_chat_history(state, config: RunnableConfig):
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
         if url and key:
             client = create_client(url, key)
             try:
