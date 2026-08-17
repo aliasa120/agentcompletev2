@@ -552,7 +552,7 @@ def _fetch_ordered_providers_from_supabase() -> list[dict]:
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
         if url and key:
             client = create_client(url, key)
             resp = client.table("tool_provider_configs").select("*").execute()
@@ -783,7 +783,7 @@ async def load_mcp_tool_by_key(tool_key: str, user_id: Optional[str] = None) -> 
                             ]
                             if backfill:
                                 sb_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-                                sb_key = os.environ.get("SUPABASE_ANON_KEY", "")
+                                sb_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
                                 if sb_url and sb_key:
                                     from supabase import create_client as _sc
                                     db = _sc(sb_url, sb_key)
