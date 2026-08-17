@@ -454,7 +454,7 @@ def build_tools_index(agent_id: str) -> str:
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
         if not url or not key:
             return ""
         client = create_client(url, key)
@@ -608,7 +608,7 @@ def list_tools(
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
         client = None
         if url and key:
             client = create_client(url, key)
@@ -633,13 +633,13 @@ def list_tools(
             # Retrieve active MCP connections from bootstrap
             active_conns = bootstrap.get("mcp_connections") or []
 
-            # Find the one matching mcp_name
+            # Find the one matching mcp_name (fuzzy/normalized match)
             target_conn = None
-            mcp_name_clean = mcp_name.lower().replace("_", "").replace(" ", "").strip()
+            mcp_name_clean = re.sub(r'[^a-zA-Z0-9]', '', mcp_name.lower())
             for conn in active_conns:
-                slug = (conn.get("toolkit_slug") or "").lower().replace("_", "").replace(" ", "").strip()
-                label = (conn.get("label") or "").lower().replace("_", "").replace(" ", "").strip()
-                if mcp_name_clean == slug or mcp_name_clean == label:
+                slug = re.sub(r'[^a-zA-Z0-9]', '', (conn.get("toolkit_slug") or "").lower())
+                label = re.sub(r'[^a-zA-Z0-9]', '', (conn.get("label") or "").lower())
+                if (mcp_name_clean and (mcp_name_clean == slug or mcp_name_clean == label or mcp_name_clean in slug or mcp_name_clean in label or (slug and slug in mcp_name_clean) or (label and label in mcp_name_clean))):
                     target_conn = conn
                     break
 
@@ -668,17 +668,17 @@ def list_tools(
 
             return json.dumps(results, indent=2)
 
-        # 2. Otherwise run lexical keyword matching on normal-indexed tools
+        # 2. Otherwise run lexical keyword matching on all assigned tools (normal & super)
         if not query:
             return json.dumps({
                 "message": "Please provide either a 'query' for search, or an 'mcp_name' to list MCP tools."
             }, indent=2)
 
-        # Resolve allowed normal-indexed tools
+        # Resolve allowed tools (both normal and super indexed)
         allowed_tools = None
         if agent_id:
             allowed = get_allowed_routing_tools(agent_id)
-            allowed_tools = allowed.get("normal", set())
+            allowed_tools = allowed.get("normal", set()).union(allowed.get("super", set()))
         else:
             allowed_tools = set(TOOL_OBJECTS.keys())
 
@@ -698,7 +698,6 @@ def list_tools(
             except Exception as e:
                 logger.warning(f"Error fetching MCP tools for lexical search: {e}")
 
-        import re
         lexical_scores = {}
         query_words = [w.lower() for w in re.split(r'\W+', query) if len(w) >= 2]
 
@@ -1139,7 +1138,7 @@ def get_tool_bindings(agent_id: str, tool_name: str) -> Dict[str, Any]:
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        key = os.environ.get("SUPABASE_ANON_KEY", "")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
         if not url or not key:
             return {}
         client = create_client(url, key)
