@@ -242,7 +242,74 @@ def format_markdown_tables(text: str) -> str:
     return "\n".join(processed_lines)
 
 
+def extract_generated_files(text: str) -> list[tuple[str, str]]:
+    """Extract generated file URLs and names from text. Returns list of (filename, url)."""
+    import re
+    files = []
+    seen = set()
+    
+    for m in re.finditer(r'FILE_URL:\s*(https?://[^\s<>"]+)', text):
+        url = m.group(1).rstrip(").,;")
+        if url not in seen:
+            seen.add(url)
+            fname = url.split("/")[-1]
+            if "_" in fname and len(fname.split("_")[0]) <= 8:
+                fname = "_".join(fname.split("_")[1:])
+            files.append((fname, url))
+
+    for m in re.finditer(r'\[([^\]]+\.(?:pdf|png|jpg|jpeg|gif|webp|svg|docx|xlsx|pptx|csv|json|py|txt|zip|tar|gz))\]\((https?://[^\s\)]+)\)', text, re.IGNORECASE):
+        fname = m.group(1)
+        url = m.group(2)
+        if url not in seen:
+            seen.add(url)
+            files.append((fname, url))
+
+    for m in re.finditer(r'(https?://[^\s<>"]+/(?:uploads|terminal)/[^\s<>"]+\.(?:pdf|png|jpg|jpeg|gif|webp|svg|docx|xlsx|pptx|csv|json|py|txt|zip))', text, re.IGNORECASE):
+        url = m.group(1).rstrip(").,;")
+        if url not in seen:
+            seen.add(url)
+            fname = url.split("/")[-1]
+            if "_" in fname and len(fname.split("_")[0]) <= 8:
+                fname = "_".join(fname.split("_")[1:])
+            files.append((fname, url))
+
+    return files
+
+
+def split_message_chunks(text: str, max_length: int = 3900) -> list[str]:
+    """Split text into chunks that fit within Telegram's max message length limit."""
+    if not text or len(text) <= max_length:
+        return [text] if text else []
+    
+    chunks = []
+    current_chunk = []
+    current_length = 0
+    
+    for line in text.split("\n"):
+        line_len = len(line) + 1
+        if current_length + line_len > max_length:
+            if current_chunk:
+                chunks.append("\n".join(current_chunk))
+                current_chunk = []
+                current_length = 0
+            if len(line) > max_length:
+                for i in range(0, len(line), max_length):
+                    chunks.append(line[i:i + max_length])
+            else:
+                current_chunk.append(line)
+                current_length = line_len
+        else:
+            current_chunk.append(line)
+            current_length += line_len
+            
+    if current_chunk:
+        chunks.append("\n".join(current_chunk))
+    return chunks
+
+
 def convert_markdown_to_html(text: str) -> str:
+    if not text:
+        return ""
     import html
     import re
     
@@ -251,27 +318,47 @@ def convert_markdown_to_html(text: str) -> str:
     def save_code_block(match):
         code_blocks.append(match.group(1))
         return f"PLACEHOLDERCODEBLOCK{len(code_blocks)-1}"
-    
-    # Protect block code
     text = re.sub(r'```(.*?)```', save_code_block, text, flags=re.DOTALL)
     
-    # Protect inline code (`...`)
+    # 2. Protect inline code (`...`)
     inline_codes = []
     def save_inline_code(match):
         inline_codes.append(match.group(1))
         return f"PLACEHOLDERINLINECODE{len(inline_codes)-1}"
     text = re.sub(r'`(.*?)`', save_inline_code, text)
+
+    # 3. Protect markdown links [text](url)
+    links = []
+    def save_link(match):
+        link_text = match.group(1)
+        link_url = match.group(2)
+        links.append((link_text, link_url))
+        return f"PLACEHOLDERLINK{len(links)-1}"
+    text = re.sub(r'\[(.*?)\]\((https?://[^\s\)]+)\)', save_link, text)
+
+    # 4. Protect raw URLs
+    raw_urls = []
+    def save_raw_url(match):
+        raw_urls.append(match.group(0))
+        return f"PLACEHOLDERRAWURL{len(raw_urls)-1}"
+    text = re.sub(r'https?://[^\s<>"]+', save_raw_url, text)
+
+    # 5. Protect filenames with underscores (e.g. some_file_name.pdf)
+    filenames = []
+    def save_filename(match):
+        filenames.append(match.group(0))
+        return f"PLACEHOLDERFILENAME{len(filenames)-1}"
+    text = re.sub(r'\b[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+\.[A-Za-z0-9]+\b', save_filename, text)
     
-    # 2. Escape HTML special characters for the rest of the text
+    # 6. Escape HTML special characters for the rest of the text
     text = html.escape(text)
     
-    # 3. Format blockquotes & callouts line-by-line
+    # 7. Format blockquotes & callouts line-by-line
     lines = text.split("\n")
     formatted_lines = []
     in_quote = False
     quote_content = []
     
-    # Callout patterns
     callout_map = {
         "[!info]": "<b>ℹ️ Info:</b>",
         "[!note]": "<b>📝 Note:</b>",
@@ -283,11 +370,10 @@ def convert_markdown_to_html(text: str) -> str:
     
     for line in lines:
         stripped = line.strip()
-        if stripped.startswith("&gt;"):  # Escaped ">" is "&gt;"
+        if stripped.startswith("&gt;"):
             if not in_quote:
                 in_quote = True
             quote_line = stripped[4:].strip()
-            # Check for callout tag
             for tag, replacement in callout_map.items():
                 escaped_tag = html.escape(tag)
                 if quote_line.startswith(escaped_tag):
@@ -299,28 +385,41 @@ def convert_markdown_to_html(text: str) -> str:
                 formatted_lines.append(f"<blockquote>" + "\n".join(quote_content) + "</blockquote>")
                 quote_content = []
                 in_quote = False
-            formatted_lines.append(line)
+            header_match = re.match(r'^(#{1,6})\s+(.+)$', line)
+            if header_match:
+                formatted_lines.append(f"<b>{header_match.group(2).strip()}</b>")
+            else:
+                formatted_lines.append(line)
             
     if in_quote:
         formatted_lines.append(f"<blockquote>" + "\n".join(quote_content) + "</blockquote>")
         
     text = "\n".join(formatted_lines)
     
-    # 4. Format other markdown elements:
-    # Bold
-    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-    text = re.sub(r'__(.*?)__', r'<b>\1</b>', text)
-    # Italics
-    text = re.sub(r'(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)', r'<i>\1</i>', text)
-    text = re.sub(r'(?<!_)_(?!_)(.*?)(?<!_)_(?!_)', r'<i>\1</i>', text)
-    # Links
-    def replace_link(match):
-        link_text = match.group(1)
-        link_url = html.unescape(match.group(2))
-        return f'<a href="{link_url}">{link_text}</a>'
-    text = re.sub(r'\[(.*?)\]\((.*?)\)', replace_link, text)
+    # 8. Bold (**text** or __text__)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r'__(.+?)__', r'<b>\1</b>', text)
+
+    # 9. Italics (*text* or _text_)
+    text = re.sub(r'(?<!\w)\*([^\*\n]+?)\*(?!\w)', r'<i>\1</i>', text)
+    text = re.sub(r'(?<!\w)_([^_\n]+?)_(?!\w)', r'<i>\1</i>', text)
+
+    # 10. Restore filenames
+    for i, fname in enumerate(filenames):
+        text = text.replace(f"PLACEHOLDERFILENAME{i}", html.escape(fname))
+
+    # 11. Restore raw URLs
+    for i, u in enumerate(raw_urls):
+        escaped_u = html.escape(u)
+        text = text.replace(f"PLACEHOLDERRAWURL{i}", f'<a href="{escaped_u}">{escaped_u}</a>')
+
+    # 12. Restore markdown links
+    for i, (link_text, link_url) in enumerate(links):
+        escaped_text = html.escape(link_text)
+        escaped_url = html.escape(link_url)
+        text = text.replace(f"PLACEHOLDERLINK{i}", f'<a href="{escaped_url}">{escaped_text}</a>')
     
-    # 5. Restore Protected Code Blocks with HTML wrapping & escape
+    # 13. Restore Protected Code Blocks & Inline Code
     for i, code_content in enumerate(code_blocks):
         escaped_code = html.escape(code_content)
         text = text.replace(f"PLACEHOLDERCODEBLOCK{i}", f"<pre>{escaped_code}</pre>")
@@ -801,7 +900,8 @@ class TelegramBotInstance:
                 assistant_id=RESOLVED_ASSISTANT_ID,
                 command={"resume": resume_payload},
                 config=config,
-                stream_mode="messages"
+                stream_mode="messages",
+                stream_subgraphs=True,
             ):
                 if isinstance(chunk, dict):
                     event_type = chunk.get("event")
@@ -838,8 +938,8 @@ class TelegramBotInstance:
         await self._finish_run(bot, chat_id, thread_id, accumulated_text, status_message_id)
 
     async def _finish_run(self, bot, chat_id: int, thread_id: str, streamed_text: str, status_message_id: int | None):
-        """Tail of every run: pause for approval if interrupted, else deliver final
-        text (markers stripped) plus any voice/audio reply."""
+        """Tail of every run: pause for approval if interrupted, deliver final
+        formatted text (with auto-chunking), send generated documents/files, plus voice reply."""
         # 1. Pending human approval? (terminal tool interrupt)
         pending = await self._pending_interrupt(thread_id)
         if pending:
@@ -855,64 +955,115 @@ class TelegramBotInstance:
             await self._send_approval_prompt(bot, chat_id, thread_id, pending)
             return
 
-        # 2. Final text from thread state (includes voice-mirror AUDIO_URL markers
-        #    appended after streaming); fall back to the streamed text.
-        #    For long 3000-char synthesis, poll get_state every 3s (up to 120s) for marker.
+        # 2. Final text and files from thread state (latest turn only)
         audio_url, is_voice, final_text = None, False, streamed_text
-        for _attempt in range(40):  # 40 * 3s = 120s max
+        state = None
+        voice_mode = await self.get_voice_mode(chat_id)
+        is_voice_expected = (voice_mode in ("all", "tts", "on"))
+
+        max_attempts = 3 if is_voice_expected else 1
+        for _attempt in range(max_attempts):
             try:
                 state = await langgraph_client.threads.get_state(thread_id)
                 messages = (state.get("values", {}) or {}).get("messages", []) if isinstance(state, dict) else []
+                latest_ai_msg = None
                 for msg in reversed(messages):
                     role = msg.get("type") or msg.get("role")
                     if role in ("ai", "assistant"):
-                        content = msg.get("content", "")
-                        if isinstance(content, list):
-                            content = "".join(
-                                (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else (b if isinstance(b, str) else ""))
-                                for b in content
-                            )
-                        if content.strip():
-                            url_m, v_m, _provider, cleaned = extract_audio_markers(content)
-                            if cleaned.strip():
-                                final_text = cleaned
-                            if url_m:
-                                audio_url = url_m
-                                is_voice = v_m
-                                break
-                if audio_url:
+                        latest_ai_msg = msg
+                        break
+
+                if latest_ai_msg:
+                    content = latest_ai_msg.get("content", "")
+                    if isinstance(content, list):
+                        content = "".join(
+                            (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else (b if isinstance(b, str) else ""))
+                            for b in content
+                        )
+                    if content.strip():
+                        url_m, v_m, _provider, cleaned = extract_audio_markers(content)
+                        if cleaned.strip():
+                            final_text = cleaned
+                        if url_m:
+                            audio_url = url_m
+                            is_voice = v_m
+
+                if audio_url or not is_voice_expected:
                     break
             except Exception as e:
                 logger.warning(f"Final state fetch attempt failed: {e}")
-            if _attempt < 39:
-                await asyncio.sleep(3)
+            if _attempt < max_attempts - 1:
+                await asyncio.sleep(1.0)
 
         if audio_url is None and streamed_text:
             audio_url, is_voice, _provider, cleaned = extract_audio_markers(streamed_text)
             if audio_url:
                 final_text = cleaned
 
-        # 3. Edit the placeholder with the final cleaned text
+        # 3. Extract generated files (.pdf, images, docs, data sheets) from current turn
+        all_thread_text = final_text
+        try:
+            if isinstance(state, dict):
+                msgs = (state.get("values", {}) or {}).get("messages", [])
+                turn_chunks = []
+                for m in reversed(msgs):
+                    role = m.get("type") or m.get("role")
+                    c = m.get("content", "")
+                    if isinstance(c, list):
+                        turn_chunks.append(" ".join((b.get("text", "") if isinstance(b, dict) else str(b)) for b in c))
+                    elif isinstance(c, str):
+                        turn_chunks.append(c)
+                    if role in ("user", "human"):
+                        break
+                all_thread_text = " ".join(reversed(turn_chunks))
+        except Exception:
+            all_thread_text = final_text
+
+        generated_files = extract_generated_files(all_thread_text or final_text)
+
+        # 4. Edit status placeholder with formatted final response & send extra chunks if long
         if status_message_id is not None:
             if final_text.strip():
                 formatted_response = format_agent_response(final_text)
+                chunks = split_message_chunks(formatted_response, max_length=3900)
+                first_chunk = chunks[0] if chunks else formatted_response
+
                 try:
                     await bot.edit_message_text(
-                        text=formatted_response,
+                        text=first_chunk,
                         chat_id=chat_id,
                         message_id=status_message_id,
                         parse_mode="HTML"
                     )
                 except Exception as e:
-                    logger.warning(f"Telegram HTML send failed: {e}. Retrying without format.")
+                    logger.warning(f"Telegram HTML send failed: {e}. Retrying with plain text chunks.")
+                    plain_chunks = split_message_chunks(final_text, max_length=3900)
+                    chunks = plain_chunks
                     try:
                         await bot.edit_message_text(
-                            text=final_text[:4000],
+                            text=chunks[0] if chunks else final_text[:3900],
                             chat_id=chat_id,
                             message_id=status_message_id
                         )
+                    except Exception as e2:
+                        logger.error(f"Plain message edit failed: {e2}")
+
+                # Send overflow message chunks if response exceeds Telegram single message limit
+                for extra_chunk in chunks[1:]:
+                    try:
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text=extra_chunk,
+                            parse_mode="HTML"
+                        )
                     except Exception:
-                        pass
+                        try:
+                            await bot.send_message(
+                                chat_id=chat_id,
+                                text=extra_chunk
+                            )
+                        except Exception as send_err:
+                            logger.error(f"Failed to send extra message chunk: {send_err}")
             else:
                 try:
                     await bot.edit_message_text(
@@ -923,7 +1074,20 @@ class TelegramBotInstance:
                 except Exception:
                     pass
 
-        # 4. Deliver the audio reply (native voice bubble first, fallback to audio file)
+        # 5. Deliver generated file attachments (PDFs, images, data sheets)
+        for fname, file_url in generated_files:
+            try:
+                lower_fname = fname.lower()
+                if lower_fname.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+                    logger.info(f"Delivering generated photo {fname} to Telegram chat {chat_id}")
+                    await bot.send_photo(chat_id=chat_id, photo=file_url, caption=f"🖼️ {fname}")
+                else:
+                    logger.info(f"Delivering generated document {fname} to Telegram chat {chat_id}")
+                    await bot.send_document(chat_id=chat_id, document=file_url, filename=fname, caption=f"📄 {fname}")
+            except Exception as file_err:
+                logger.warning(f"Failed to deliver generated file {fname} directly via Telegram: {file_err}")
+
+        # 6. Deliver the audio reply (native voice bubble first, fallback to audio file)
         if audio_url:
             try:
                 await bot.send_voice(chat_id=chat_id, voice=audio_url)
@@ -1130,7 +1294,8 @@ class TelegramBotInstance:
                     assistant_id=RESOLVED_ASSISTANT_ID,
                     input=input_data,
                     config=config,
-                    stream_mode="messages"
+                    stream_mode="messages",
+                    stream_subgraphs=True,
                 ):
                     if isinstance(chunk, dict):
                         event_type = chunk.get("event")
@@ -1190,7 +1355,8 @@ class TelegramBotInstance:
                         assistant_id=RESOLVED_ASSISTANT_ID,
                         input=input_data,
                         config=config,
-                        stream_mode="messages"
+                        stream_mode="messages",
+                        stream_subgraphs=True,
                     ):
                         if isinstance(chunk, dict):
                             event_type = chunk.get("event")

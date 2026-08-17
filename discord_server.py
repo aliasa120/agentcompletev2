@@ -466,7 +466,8 @@ class DiscordBotInstance:
                 assistant_id=RESOLVED_ASSISTANT_ID,
                 input=input_data,
                 config=config,
-                stream_mode="messages"
+                stream_mode="messages",
+                stream_subgraphs=True,
             ):
                 if isinstance(chunk, dict):
                     event_type = chunk.get("event")
@@ -543,7 +544,8 @@ class DiscordBotInstance:
                 assistant_id=RESOLVED_ASSISTANT_ID,
                 command={"resume": resume_payload},
                 config=config,
-                stream_mode="messages"
+                stream_mode="messages",
+                stream_subgraphs=True,
             ):
                 if isinstance(chunk, dict):
                     event_type = chunk.get("event")
@@ -597,20 +599,24 @@ class DiscordBotInstance:
         try:
             state = await langgraph_client.threads.get_state(thread_id)
             messages = (state.get("values", {}) or {}).get("messages", []) if isinstance(state, dict) else []
+            latest_ai_msg = None
             for msg in reversed(messages):
                 role = msg.get("type") or msg.get("role")
                 if role in ("ai", "assistant"):
-                    content = msg.get("content", "")
-                    if isinstance(content, list):
-                        content = "".join(
-                            (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else (b if isinstance(b, str) else ""))
-                            for b in content
-                        )
-                    if content.strip():
-                        audio_url, is_voice, _provider, cleaned = extract_audio_markers(content)
-                        if cleaned.strip():
-                            final_text = cleaned
-                        break
+                    latest_ai_msg = msg
+                    break
+
+            if latest_ai_msg:
+                content = latest_ai_msg.get("content", "")
+                if isinstance(content, list):
+                    content = "".join(
+                        (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else (b if isinstance(b, str) else ""))
+                        for b in content
+                    )
+                if content.strip():
+                    audio_url, is_voice, _provider, cleaned = extract_audio_markers(content)
+                    if cleaned.strip():
+                        final_text = cleaned
         except Exception as e:
             logger.warning(f"Final state fetch failed (using streamed text): {e}")
         if audio_url is None and streamed_text:

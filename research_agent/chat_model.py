@@ -79,7 +79,7 @@ class ResilientChatModel(ChatOpenAI):
     is_omni_call: bool = False
 
     def _inject_memory_to_messages(self, messages: list) -> list:
-        """Inject USER.md + MEMORY.md + Honcho context into the LAST HumanMessage."""
+        """Inject USER.md + MEMORY.md + Honcho context into the LAST HumanMessage without dropping multimodal blocks or user text."""
         try:
             from research_agent.tools.provider_engine import get_active_user_id, get_active_workflow_id, get_active_thread_id
             user_id = get_active_user_id() or getattr(self, "user_id", None)
@@ -94,9 +94,17 @@ class ResilientChatModel(ChatOpenAI):
                 role = getattr(m, "type", None) or (m.get("role") if isinstance(m, dict) else None)
                 if role in ("human", "user"):
                     last_human_idx = idx
-                    content = m.content if hasattr(m, "content") else m.get("content", "")
+                    content = m.content if hasattr(m, "content") else (m.get("content", "") if isinstance(m, dict) else "")
                     if isinstance(content, str):
                         user_msg = content[:500]
+                    elif isinstance(content, list):
+                        text_parts = []
+                        for b in content:
+                            if isinstance(b, str):
+                                text_parts.append(b)
+                            elif isinstance(b, dict) and b.get("type") == "text":
+                                text_parts.append(b.get("text", ""))
+                        user_msg = " ".join(text_parts)[:500]
 
             if last_human_idx < 0:
                 return messages
@@ -132,13 +140,41 @@ class ResilientChatModel(ChatOpenAI):
             target = new_messages[last_human_idx]
 
             if hasattr(target, "content"):
-                orig = target.content if isinstance(target.content, str) else ""
-                if "<memory-context>" not in orig:
-                    new_messages[last_human_idx] = HumanMessage(content=f"{orig}\n\n{context_block}")
+                orig = target.content
+                if isinstance(orig, str):
+                    if "<memory-context>" not in orig:
+                        new_content = f"{orig}\n\n{context_block}"
+                        if hasattr(target, "model_copy"):
+                            new_messages[last_human_idx] = target.model_copy(update={"content": new_content})
+                        elif hasattr(target, "copy"):
+                            new_messages[last_human_idx] = target.copy(update={"content": new_content})
+                        else:
+                            new_messages[last_human_idx] = HumanMessage(content=new_content, additional_kwargs=getattr(target, "additional_kwargs", {}))
+                elif isinstance(orig, list):
+                    has_mem = any(
+                        ("<memory-context>" in (b if isinstance(b, str) else b.get("text", "")))
+                        for b in orig if isinstance(b, (str, dict))
+                    )
+                    if not has_mem:
+                        new_blocks = list(orig) + [{"type": "text", "text": f"\n\n{context_block}"}]
+                        if hasattr(target, "model_copy"):
+                            new_messages[last_human_idx] = target.model_copy(update={"content": new_blocks})
+                        elif hasattr(target, "copy"):
+                            new_messages[last_human_idx] = target.copy(update={"content": new_blocks})
+                        else:
+                            new_messages[last_human_idx] = HumanMessage(content=new_blocks, additional_kwargs=getattr(target, "additional_kwargs", {}))
             elif isinstance(target, dict):
-                orig = target.get("content", "") or ""
-                if "<memory-context>" not in orig:
-                    new_messages[last_human_idx] = dict(target, content=f"{orig}\n\n{context_block}")
+                orig = target.get("content", "")
+                if isinstance(orig, str):
+                    if "<memory-context>" not in orig:
+                        new_messages[last_human_idx] = dict(target, content=f"{orig}\n\n{context_block}")
+                elif isinstance(orig, list):
+                    has_mem = any(
+                        ("<memory-context>" in (b if isinstance(b, str) else b.get("text", "")))
+                        for b in orig if isinstance(b, (str, dict))
+                    )
+                    if not has_mem:
+                        new_messages[last_human_idx] = dict(target, content=list(orig) + [{"type": "text", "text": f"\n\n{context_block}"}])
             return new_messages
         except Exception as e:
             import traceback
@@ -520,10 +556,26 @@ class ResilientChatModel(ChatOpenAI):
                             new_content.append(make_system_note(block, url, omni_model, analysis))
                     else:
                         new_content.append(block)
-                else:
-                    new_content.append(block)
+            has_media = any(isinstance(b, dict) and b.get("type") in ("image_url", "input_audio", "audio", "video", "document") for b in new_content)
+            if not has_media and new_content:
+                text_chunks = []
+                for b in new_content:
+                    if isinstance(b, str):
+                        text_chunks.append(b)
+                    elif isinstance(b, dict) and b.get("type") == "text":
+                        t_val = b.get("text", "")
+                        if t_val:
+                            text_chunks.append(t_val)
+                final_content = "\n\n".join(text_chunks) if text_chunks else ""
+            else:
+                final_content = new_content
 
-            new_msg = msg.copy(update={"content": new_content}) if hasattr(msg, "copy") else msg
+            if hasattr(msg, "model_copy"):
+                new_msg = msg.model_copy(update={"content": final_content})
+            elif hasattr(msg, "copy"):
+                new_msg = msg.copy(update={"content": final_content})
+            else:
+                new_msg = msg
             cleaned_messages.append(new_msg)
         return cleaned_messages
 
@@ -640,10 +692,26 @@ class ResilientChatModel(ChatOpenAI):
                             new_content.append(make_system_note(block, url, omni_model, analysis))
                     else:
                         new_content.append(block)
-                else:
-                    new_content.append(block)
+            has_media = any(isinstance(b, dict) and b.get("type") in ("image_url", "input_audio", "audio", "video", "document") for b in new_content)
+            if not has_media and new_content:
+                text_chunks = []
+                for b in new_content:
+                    if isinstance(b, str):
+                        text_chunks.append(b)
+                    elif isinstance(b, dict) and b.get("type") == "text":
+                        t_val = b.get("text", "")
+                        if t_val:
+                            text_chunks.append(t_val)
+                final_content = "\n\n".join(text_chunks) if text_chunks else ""
+            else:
+                final_content = new_content
 
-            new_msg = msg.copy(update={"content": new_content}) if hasattr(msg, "copy") else msg
+            if hasattr(msg, "model_copy"):
+                new_msg = msg.model_copy(update={"content": final_content})
+            elif hasattr(msg, "copy"):
+                new_msg = msg.copy(update={"content": final_content})
+            else:
+                new_msg = msg
             cleaned_messages.append(new_msg)
         return cleaned_messages
 
