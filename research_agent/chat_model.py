@@ -77,6 +77,7 @@ class ResilientChatModel(ChatOpenAI):
     agent_type: str = "main_agent"
     agent_config_id: str = ""  # UUID from agent_configs table; when set, dynamic reload reads per-workflow settings
     is_omni_call: bool = False
+    max_tokens: Optional[int] = 4096
 
     def _inject_memory_to_messages(self, messages: list) -> list:
         """Inject USER.md + MEMORY.md + Honcho context into the LAST HumanMessage without dropping multimodal blocks or user text."""
@@ -387,7 +388,7 @@ class ResilientChatModel(ChatOpenAI):
             )
 
             url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-            key = os.environ.get("SUPABASE_ANON_KEY", "")
+            key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
             if not url or not key:
                 raise RuntimeError("SUPABASE_URL/SUPABASE_ANON_KEY not set")
 

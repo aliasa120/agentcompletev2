@@ -21,7 +21,7 @@ _BLOG_POST_FILE    = Path("blog_post.md")
 
 
 def _supabase_headers(content_type: str = "application/json") -> dict[str, str]:
-    key = os.environ.get("SUPABASE_ANON_KEY", "")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_ANON_KEY", "")
     return {
         "apikey": key,
         "Authorization": f"Bearer {key}",

@@ -172,9 +172,9 @@ ALTER TABLE agent_tool_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mcp_connections        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE skills_library         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE design_assets          ENABLE ROW LEVEL SECURITY;
-ALTER TABLE telegram_chat_bindings  DISABLE ROW LEVEL SECURITY;
-ALTER TABLE telegram_bots           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE agent_scheduled_tasks   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE telegram_chat_bindings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE telegram_bots          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_scheduled_tasks  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_settings          ENABLE ROW LEVEL SECURITY;
 
 -- ── RLS Policies ──
@@ -206,8 +206,13 @@ DROP POLICY IF EXISTS user_telegram_bots_policy ON telegram_bots;
 CREATE POLICY user_telegram_bots_policy ON telegram_bots
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS user_telegram_chat_bindings_policy ON telegram_chat_bindings;
+CREATE POLICY user_telegram_chat_bindings_policy ON telegram_chat_bindings
+  FOR ALL TO authenticated 
+  USING (EXISTS (SELECT 1 FROM workflows WHERE workflows.id = telegram_chat_bindings.workflow_id AND workflows.user_id = auth.uid()))
+  WITH CHECK (EXISTS (SELECT 1 FROM workflows WHERE workflows.id = telegram_chat_bindings.workflow_id AND workflows.user_id = auth.uid()));
+
 DROP POLICY IF EXISTS user_settings_policy ON user_settings;
-CREATE POLICY user_settings_policy ON user_settings;
 CREATE POLICY user_settings_policy ON user_settings
   FOR ALL TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
@@ -263,6 +268,7 @@ CREATE OR REPLACE FUNCTION public.manage_scheduled_tasks_admin(
 RETURNS JSON
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_result JSON;
