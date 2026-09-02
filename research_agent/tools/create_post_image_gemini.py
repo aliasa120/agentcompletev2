@@ -96,26 +96,39 @@ def _make_image_filename(editing_prompt: str) -> str:
 
 
 def _upload_target_to_supabase(pil_img: Image.Image, slug: str) -> str | None:
-    """Upload target image to Supabase Storage so KIE AI can access it.
+    """Upload target image to unified storage (R2-first) so KIE AI can access it.
 
     News website URLs are often blocked by hotlink protection.
-    Supabase provides a guaranteed-accessible public URL for KIE AI.
+    Unified storage provides a guaranteed-accessible public URL for KIE AI.
     Returns public URL or None if upload fails.
     """
-    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    api_key = os.environ.get("SUPABASE_ANON_KEY", "")
-    if not supabase_url or not api_key:
-        print("[create_post_image] ⚠️ SUPABASE_URL/KEY not set — KIE AI will use original URL (may fail)")
-        return None
+    from research_agent import storage_service
 
     buf = io.BytesIO()
     pil_img.save(buf, format="JPEG", quality=92)
     img_bytes = buf.getvalue()
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"kie-targets/{slug}-{timestamp}.jpg"
-    upload_url = f"{supabase_url}/storage/v1/object/post-images/{filename}"
+    filename = f"{slug}-{timestamp}.jpg"
 
+    r2_url = storage_service.upload_file(
+        data=img_bytes,
+        filename=filename,
+        mime_type="image/jpeg",
+        category="kie-targets",
+    )
+    if r2_url:
+        print(f"[create_post_image] ✅ Target uploaded to unified storage: {r2_url}")
+        return r2_url
+
+    # Fallback to direct supabase if storage_service returns None
+    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    api_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
+    if not supabase_url or not api_key:
+        print("[create_post_image] ⚠️ Storage not configured — KIE AI will use original URL (may fail)")
+        return None
+
+    upload_url = f"{supabase_url}/storage/v1/object/post-images/kie-targets/{filename}"
     headers = {
         "apikey": api_key,
         "Authorization": f"Bearer {api_key}",
@@ -125,15 +138,12 @@ def _upload_target_to_supabase(pil_img: Image.Image, slug: str) -> str | None:
     try:
         resp = requests.post(upload_url, headers=headers, data=img_bytes, timeout=(10, 30))
         if resp.ok:
-            public_url = f"{supabase_url}/storage/v1/object/public/post-images/{filename}"
+            public_url = f"{supabase_url}/storage/v1/object/public/post-images/kie-targets/{filename}"
             print(f"[create_post_image] ✅ Target uploaded to Supabase: {public_url}")
             return public_url
-        else:
-            print(f"[create_post_image] ⚠️ Supabase upload failed ({resp.status_code}) — will use original URL")
-            return None
     except Exception as e:
-        print(f"[create_post_image] ⚠️ Supabase upload error: {e} — will use original URL")
-        return None
+        print(f"[create_post_image] ⚠️ Supabase upload error: {e}")
+    return None
 
 
 # ── KIE AI Image-to-Image ─────────────────────────────────────────────────────
@@ -324,18 +334,26 @@ def create_post_image_gemini(
     # Call KIE AI
     result_img = _kie_image_edit(kie_target_url, editing_prompt)
 
-    if result_img is not None:
-        result_img.save(str(output_path), "JPEG", quality=92)
-        _LATEST_IMAGE_FILE.write_text(str(output_path), encoding="utf-8")
-        return output_path.resolve().as_posix()
+    final_img = result_img if result_img is not None else source_img
+    save_path = output_path if result_img is not None else output_path.with_name(f"{output_path.stem}-fallback.jpg")
 
-    # Fallback: save raw target image
-    print("[create_post_image] ⚠️ KIE AI edit failed — using raw image fallback.")
-    base_name = output_path.stem
-    fallback_path = output_path.with_name(f"{base_name}-fallback.jpg")
     try:
-        source_img.save(str(fallback_path), "JPEG", quality=92)
-        _LATEST_IMAGE_FILE.write_text(str(fallback_path), encoding="utf-8")
-        return fallback_path.resolve().as_posix()
+        final_img.save(str(save_path), "JPEG", quality=92)
+        _LATEST_IMAGE_FILE.write_text(str(save_path), encoding="utf-8")
+        
+        # Dual storage: upload final image to R2
+        from research_agent import storage_service
+        buf = io.BytesIO()
+        final_img.save(buf, format="JPEG", quality=92)
+        r2_url = storage_service.upload_file(
+            data=buf.getvalue(),
+            filename=save_path.name,
+            mime_type="image/jpeg",
+            category="images",
+        )
+        if r2_url:
+            print(f"[create_post_image] ✅ Output image uploaded to R2: {r2_url}")
+        
+        return save_path.resolve().as_posix()
     except Exception as e:
-        return f"❌ Failed to save fallback image: {e}"
+        return f"❌ Failed to save image: {e}"

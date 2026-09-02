@@ -150,7 +150,7 @@ export function SmitheryMarketplace({ onRefresh, onReloadAgent }: SmitheryMarket
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-violet-700 dark:text-violet-300">
-              Smithery AI · 3,000+ MCP Servers
+              Smithery AI · {totalCount > 0 ? `${totalCount.toLocaleString()}+` : "10,000+"} MCP Servers
             </p>
             <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">
               Browse the free Smithery registry and connect to any server securely via your Smithery account
@@ -173,7 +173,7 @@ export function SmitheryMarketplace({ onRefresh, onReloadAgent }: SmitheryMarket
             <Input
               value={query}
               onChange={(e) => handleSearch(e.target.value)}
-              placeholder="Search 3,000+ MCP servers (GitHub, Slack, Notion…)"
+              placeholder="Search 10,000+ MCP servers (GitHub, Slack, Notion…)"
               className="pl-9 h-10"
             />
           </div>

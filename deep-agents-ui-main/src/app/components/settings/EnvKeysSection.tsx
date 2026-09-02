@@ -13,10 +13,11 @@
  */
 
 import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   KeyRound, Eye, EyeOff, CheckCircle2, Loader2, AlertCircle,
   ExternalLink, Cpu, Search, Database, Globe, Bot, Zap,
-  ChevronDown, ChevronRight, RefreshCw, Shield,
+  ChevronDown, ChevronRight, RefreshCw, Shield, HardDrive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,14 +55,24 @@ interface KeyGroup {
 const KEY_GROUPS: KeyGroup[] = [
   {
     id: "ai-providers",
-    label: "AI Providers",
-    description: "LLM keys for agents, subagents, feeder, omni analyzer",
+    label: "AI / LLM Providers",
+    description: "API keys for OpenRouter, Gemini, Grok, Vercel AI Gateway, Together, Cerebras, Groq, DeepSeek, Mistral, Fireworks, and Ollama",
     icon: <Cpu className="h-4 w-4" />,
     iconClass: "text-violet-500",
     defaultExpanded: true,
     fields: [
-      { key: "openrouter_client_api_key", label: "OpenRouter API Key",  placeholder: "sk-or-v1-...",   helpUrl: "https://openrouter.ai/keys",                    testable: true,  testKey: "openrouter" },
-      { key: "gemini_client_api_key",     label: "Gemini API Key",      placeholder: "AIzaSy...",       helpUrl: "https://aistudio.google.com/app/apikey",        testable: true,  testKey: "gemini" },
+      { key: "openrouter_client_api_key", label: "OpenRouter API Key",  placeholder: "sk-or-v1-...",              helpUrl: "https://openrouter.ai/keys",                    testable: true,  testKey: "openrouter" },
+      { key: "ai_gateway_api_key",        label: "Vercel AI Gateway Key", placeholder: "vck_... or API Key",        helpUrl: "https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai-gateway%2Fapi-keys&title=AI+Gateway+API+Keys", testable: true,  testKey: "vercel" },
+      { key: "gemini_client_api_key",     label: "Gemini Direct API Key", placeholder: "AIzaSy...",               helpUrl: "https://aistudio.google.com/app/apikey",        testable: true,  testKey: "gemini" },
+      { key: "grok_client_api_key",       label: "xAI (Grok) API Key",   placeholder: "xai-...",                   helpUrl: "https://console.x.ai/",                         testable: true,  testKey: "grok" },
+      { key: "together_client_api_key",   label: "Together AI API Key", placeholder: "tgp_...",                   helpUrl: "https://api.together.xyz/settings/api-keys",    testable: true,  testKey: "together" },
+      { key: "cerebras_client_api_key",   label: "Cerebras API Key",    placeholder: "csk-...",                   helpUrl: "https://cloud.cerebras.ai/",                    testable: true,  testKey: "cerebras" },
+      { key: "groq_client_api_key",       label: "Groq API Key",        placeholder: "gsk_...",                   helpUrl: "https://console.groq.com/keys",                 testable: true,  testKey: "groq" },
+      { key: "deepseek_client_api_key",   label: "DeepSeek API Key",    placeholder: "sk-...",                    helpUrl: "https://platform.deepseek.com/api_keys",        testable: true,  testKey: "deepseek" },
+      { key: "mistral_client_api_key",    label: "Mistral AI API Key",  placeholder: "...",                       helpUrl: "https://console.mistral.ai/api-keys/",          testable: true,  testKey: "mistral" },
+      { key: "fireworks_client_api_key",  label: "Fireworks AI API Key",placeholder: "fw_...",                    helpUrl: "https://fireworks.ai/account/api-keys",         testable: true,  testKey: "fireworks" },
+      { key: "ollama_base_url",           label: "Ollama Base URL",     placeholder: "http://localhost:11434/v1", helpUrl: "https://ollama.com/", type: "url",             testable: true,  testKey: "ollama" },
+      { key: "ollama_client_api_key",     label: "Ollama API Key",      placeholder: "optional for local",       helpUrl: undefined, type: "password",                     testable: false },
     ],
   },
   {
@@ -95,16 +106,37 @@ const KEY_GROUPS: KeyGroup[] = [
     ],
   },
   {
-    id: "wordpress",
-    label: "WordPress Publisher",
-    description: "Credentials for automatic article publishing to WordPress",
-    icon: <Globe className="h-4 w-4" />,
-    iconClass: "text-sky-500",
-    defaultExpanded: false,
+    id: "storage-r2",
+    label: "File Storage (Cloudflare R2)",
+    description: "Unified portable file storage. Attachments, generated media, and files you explicitly upload go to your R2 bucket and follow you across deployments. Falls back to Supabase Storage when not configured.",
+    icon: <HardDrive className="h-4 w-4" />,
+    iconClass: "text-orange-500",
+    defaultExpanded: true,
     fields: [
-      { key: "wp_site_url",     label: "WP Site URL",     placeholder: "https://yoursite.com", type: "url",  testable: false },
-      { key: "wp_username",     label: "WP Username",     placeholder: "admin",                type: "text", testable: false },
-      { key: "wp_app_password", label: "WP App Password", placeholder: "xxxx xxxx xxxx xxxx",               testable: false },
+      { key: "r2_account_id",        label: "R2 Account ID",        placeholder: "Cloudflare dashboard → R2 → Account ID", helpUrl: "https://dash.cloudflare.com/?to=/:account/r2", type: "text", testable: false },
+      { key: "r2_access_key_id",     label: "R2 Access Key ID",     placeholder: "R2 API token → Access Key ID",           helpUrl: "https://developers.cloudflare.com/r2/api/tokens/", testable: false },
+      { key: "r2_secret_access_key", label: "R2 Secret Access Key", placeholder: "R2 API token → Secret Access Key",       helpUrl: "https://developers.cloudflare.com/r2/api/tokens/", testable: false },
+      { key: "r2_bucket_name",       label: "R2 Bucket Name",       placeholder: "my-agent-files",                         helpUrl: "https://developers.cloudflare.com/r2/buckets/", type: "text", testable: false },
+      { key: "r2_public_base_url",   label: "R2 Public Base URL",   placeholder: "https://pub-xxx.r2.dev or custom domain", helpUrl: "https://developers.cloudflare.com/r2/buckets/public-buckets/", type: "url", testable: false },
+      {
+        key: "storage_retention_days", label: "File Retention Period", placeholder: "30", testable: false,
+        options: [
+          { value: "3",  label: "3 days" },
+          { value: "7",  label: "7 days" },
+          { value: "14", label: "14 days" },
+          { value: "30", label: "30 days (default)" },
+          { value: "60", label: "60 days" },
+          { value: "90", label: "90 days" },
+          { value: "0",  label: "Keep forever" },
+        ],
+      },
+      {
+        key: "storage_auto_upload_files", label: "Auto-upload every agent file", placeholder: "false", testable: false,
+        options: [
+          { value: "false", label: "Off — keep agent files in the workspace (default)" },
+          { value: "true",  label: "On — mirror every created file to storage" },
+        ],
+      },
     ],
   },
   {
@@ -121,29 +153,9 @@ const KEY_GROUPS: KeyGroup[] = [
       { key: "langsmith_api_key",  label: "LangSmith API Key",  placeholder: "lsv2_pt_...", helpUrl: "https://smith.langchain.com/",     testable: false, type: "text" },
     ],
   },
-
-  {
-    id: "social",
-    label: "Social Media",
-    description: "Facebook, Instagram, and Twitter/X credentials for auto-publishing",
-    icon: <Zap className="h-4 w-4" />,
-    iconClass: "text-pink-500",
-    defaultExpanded: false,
-    fields: [
-      { key: "social_fb_token",         label: "Facebook Page Token",  placeholder: "EAAZA...",                            testable: false },
-      { key: "social_fb_page_id",       label: "Facebook Page ID",     placeholder: "1002976...",    type: "text",         testable: false },
-      { key: "social_ig_account_id",    label: "Instagram Account ID", placeholder: "17841...",      type: "text",         testable: false },
-      { key: "social_twitter_api_key",  label: "Twitter API Key",      placeholder: "new1_be...",    type: "text",         testable: false },
-      { key: "social_twitter_username", label: "Twitter Username",     placeholder: "@username",     type: "text",         testable: false },
-      { key: "social_twitter_email",    label: "Twitter Email",        placeholder: "you@email.com", type: "text",         testable: false },
-      { key: "social_twitter_password", label: "Twitter Password",     placeholder: "...",                                 testable: false },
-      { key: "social_twitter_totp",     label: "Twitter TOTP Secret",  placeholder: "6EVMDLB...",                          testable: false },
-      { key: "social_twitter_proxy",    label: "Twitter Proxy URL",    placeholder: "http://user:pass@host:port", type: "text", testable: false },
-    ],
-  },
 ];
 
-const ALL_KEYS = KEY_GROUPS.flatMap(g => g.fields.map(f => f.key));
+
 
 // ── KeyRow ─────────────────────────────────────────────────────────────────────
 
@@ -345,10 +357,13 @@ function KeyGroupCard({
 
 // ── Main EnvKeysSection ────────────────────────────────────────────────────────
 
-export function EnvKeysSection() {
+export function EnvKeysSection({ hiddenGroupIds = [] }: { hiddenGroupIds?: string[] }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [bulkSaveState, setBulkSaveState] = useState<SaveState>("idle");
+
+  const visibleGroups = KEY_GROUPS.filter(g => !hiddenGroupIds.includes(g.id));
+  const visibleKeys = visibleGroups.flatMap(g => g.fields.map(f => f.key));
 
   const loadKeys = useCallback(async () => {
     setLoading(true);
@@ -408,7 +423,7 @@ export function EnvKeysSection() {
     }
   };
 
-  const totalFilled = ALL_KEYS.filter(k => values[k]?.trim()).length;
+  const totalFilled = visibleKeys.filter(k => values[k]?.trim()).length;
 
   if (loading) {
     return (
@@ -435,12 +450,12 @@ export function EnvKeysSection() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className={cn("text-xs font-bold px-2.5 py-1.5 rounded-full",
-            totalFilled >= ALL_KEYS.length * 0.7
+            totalFilled >= visibleKeys.length * 0.7
               ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400"
               : totalFilled > 0
               ? "bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400"
               : "bg-muted text-muted-foreground")}>
-            {totalFilled}/{ALL_KEYS.length} configured
+            {totalFilled}/{visibleKeys.length} configured
           </span>
           <Button variant="outline" size="sm" onClick={loadKeys} className="h-8 px-3 text-xs gap-1.5">
             <RefreshCw className="h-3 w-3" />Refresh
@@ -461,7 +476,7 @@ export function EnvKeysSection() {
 
       {/* Groups */}
       <div className="space-y-3">
-        {KEY_GROUPS.map(group => (
+        {visibleGroups.map(group => (
           <KeyGroupCard
             key={group.id}
             group={group}
@@ -470,6 +485,24 @@ export function EnvKeysSection() {
             onTestKey={handleTestKey}
           />
         ))}
+      </div>
+
+      {/* Posts Plugin Integration Callout */}
+      <div className="rounded-xl border border-border bg-card p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-primary/10 text-primary">
+            <Globe className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-foreground">WordPress & Social Media Channels</p>
+            <p className="text-xs text-muted-foreground">WordPress, Facebook, Instagram, and Twitter/X keys are managed inside the Posts Plugin.</p>
+          </div>
+        </div>
+        <Link href="/agent-settings?tab=plugins-posts">
+          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold shrink-0 gap-1.5">
+            Configure in Posts Plugin →
+          </Button>
+        </Link>
       </div>
 
       {/* Save all footer */}

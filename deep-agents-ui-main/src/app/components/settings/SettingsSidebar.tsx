@@ -3,11 +3,12 @@
 import React from "react";
 import {
   Wrench, Cpu, Bot, Users, LayoutList, BookOpen, Image as ImageIcon,
-  ChevronRight, Database, Settings, Menu, Brain, Route, AlarmClock, LayoutGrid, Shield, Palette
+  ChevronRight, Database, Settings, Menu, Brain, Route, AlarmClock, LayoutGrid, Shield, Palette, SlidersHorizontal
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type SettingsSection =
+  | "user-preferences"
   | "appearance"
   | "env-keys"
   | "workflows"
@@ -17,6 +18,7 @@ export type SettingsSection =
   | "tools-smithery"
   | "tools-zapier"
   | "providers"
+  | "fallback-system"
   | "gateway"
   | "agents"
   | "subagents"
@@ -30,7 +32,9 @@ export type SettingsSection =
   | "scheduled-tasks"
   | "omni-settings"
   | "additional-features"
-  | "additional-features-voice";
+  | "additional-features-voice"
+  | "plugins"
+  | `plugins-${string}`;
 
 interface NavItem {
   id: SettingsSection;
@@ -42,10 +46,10 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   {
-    id: "appearance",
-    label: "Appearance",
-    description: "Theme, accent color, font size",
-    icon: <Palette className="h-4 w-4" />,
+    id: "user-preferences",
+    label: "User Preferences",
+    description: "Theme, accent color, history & data",
+    icon: <SlidersHorizontal className="h-4 w-4" />,
   },
   {
     id: "env-keys",
@@ -75,13 +79,13 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: "providers",
     label: "AI Providers",
-    description: "Models, search, extract, image",
+    description: "LLM Gateways, custom models & testing",
     icon: <Cpu className="h-4 w-4" />,
   },
   {
-    id: "gateway",
-    label: "Providers",
-    description: "Omni Analyzer & custom models setup",
+    id: "fallback-system",
+    label: "Fallback System",
+    description: "Tool priority & cascading fallbacks",
     icon: <Route className="h-4 w-4" />,
   },
   {
@@ -109,24 +113,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: <ImageIcon className="h-4 w-4" />,
   },
   {
-    id: "queue",
-    label: "Queue & Schedule",
-    description: "Auto-trigger, batch size",
-    icon: <LayoutList className="h-4 w-4" />,
-  },
-  {
-    id: "configuration",
-    label: "API Configuration",
-    description: "LangGraph URL, keys, assistant",
-    icon: <Settings className="h-4 w-4" />,
-  },
-  {
-    id: "feeder",
-    label: "Feeder Dashboard",
-    description: "Run feeder, manage queue",
-    icon: <Database className="h-4 w-4" />,
-  },
-  {
     id: "memories",
     label: "Memories",
     description: "Manage semantic facts & graph",
@@ -139,10 +125,10 @@ const NAV_ITEMS: NavItem[] = [
     icon: <Bot className="h-4 w-4" />,
   },
   {
-    id: "additional-features",
-    label: "Additional Features",
-    description: "Manage content, posts, and publishing",
-    icon: <LayoutGrid className="h-4 w-4" />,
+    id: "additional-features-voice",
+    label: "Voice & TTS",
+    description: "Real-time ElevenLabs voice, agent speech & TTS settings",
+    icon: <Bot className="h-4 w-4" />,
   },
 ];
 

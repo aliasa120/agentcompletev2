@@ -3,6 +3,9 @@ import { AttachmentAdapter, PendingAttachment, CompleteAttachment } from "@assis
 export class LangGraphAttachmentAdapter implements AttachmentAdapter {
   accept = "*";
   private urls = new Map<string, { url: string; mimeType: string }>();
+  /** Current conversation thread — kept in sync by LangGraphRuntimeProvider so
+   *  R2 uploads are stored thread-wise ({category}/{date}/{threadId}/…). */
+  threadId: string | null = null;
 
   async *add({ file }: { file: File }) {
     const id = crypto.randomUUID();
@@ -37,6 +40,16 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
     let mimeType = file.type;
     if (!mimeType || mimeType === "application/octet-stream") {
       if (ext === "pdf") mimeType = "application/pdf";
+      else if (ext === "pptx") mimeType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+      else if (ext === "ppt") mimeType = "application/vnd.ms-powerpoint";
+      else if (ext === "docx") mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      else if (ext === "doc") mimeType = "application/msword";
+      else if (ext === "xlsx") mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      else if (ext === "xls") mimeType = "application/vnd.ms-excel";
+      else if (ext === "csv") mimeType = "text/csv";
+      else if (ext === "txt") mimeType = "text/plain";
+      else if (ext === "html" || ext === "htm") mimeType = "text/html";
+      else if (ext === "epub") mimeType = "application/epub+zip";
       else if (["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "amr", "wma", "aiff", "caf"].includes(ext)) {
         mimeType = `audio/${ext === "mp3" ? "mpeg" : ext === "m4a" ? "x-m4a" : ext}`;
       } else if (["mp4", "webm", "mov", "avi", "mkv", "flv", "wmv", "3gp", "mpeg", "mpg"].includes(ext)) {
@@ -74,11 +87,12 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
 
     const dataUrl = `data:${mimeType};base64,${base64Data}`;
 
-    // Upload to local workspace so Python agent tools (like ls, glob) can see the file
-    // Skip this for media files (images, audio, video) or files larger than 2MB to prevent HTTP 413 Payload Too Large errors
+    // Copy into the agent's thread workspace so its filesystem tools (ls, glob,
+    // read_file, terminal) can see the file. Media and large files are skipped —
+    // those are consumed through the storage URL below.
     const isMedia = mimeType.startsWith("image/") || mimeType.startsWith("audio/") || mimeType.startsWith("video/");
     const isLarge = file.size > 2 * 1024 * 1024;
-    
+
     if (!isMedia && !isLarge) {
       try {
         await fetch("/api/upload-workspace", {
@@ -89,47 +103,108 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
           body: JSON.stringify({
             filename: file.name,
             base64: base64Data,
+            threadId: this.threadId ?? undefined,
           }),
         });
       } catch (err) {
-        console.warn("Failed to write uploaded file to local workspace:", err);
+        console.warn("Failed to write uploaded file to agent workspace:", err);
       }
     }
 
-    // Upload to Supabase Storage Bucket ('uploads')
+    // Upload to unified storage: R2 presigned direct upload first, Supabase fallback
     let fileUrl = dataUrl;
-    try {
-      const { supabase } = await import("@/lib/supabase");
-      const fileExt = file.name.split(".").pop();
-      const uniqueFilename = `${crypto.randomUUID()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from("uploads")
-        .upload(uniqueFilename, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
+    let uploaded = false;
 
-      if (uploadError) {
-        console.warn("Supabase Storage upload error:", uploadError);
-        throw new Error(uploadError.message);
-      } else {
-        const { data: { publicUrl } } = supabase.storage
-          .from("uploads")
-          .getPublicUrl(uniqueFilename);
-        fileUrl = publicUrl;
-        console.log("Successfully uploaded to Supabase Storage:", fileUrl);
+    // ── 1) Cloudflare R2 (portable storage) via presigned PUT or server upload ──
+    try {
+      const signResp = await fetch("/api/r2-sign-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: mimeType,
+          size: file.size,
+          threadId: this.threadId ?? undefined,
+        }),
+      });
+      if (signResp.ok) {
+        const signData = await signResp.json();
+        if (signData.enabled && signData.uploadUrl) {
+          try {
+            const putResp = await fetch(signData.uploadUrl, {
+              method: "PUT",
+              headers: { "Content-Type": mimeType },
+              body: file,
+            });
+            if (putResp.ok) {
+              fileUrl = signData.publicUrl;
+              uploaded = true;
+              console.log("Successfully uploaded to Cloudflare R2 via presigned PUT:", fileUrl);
+            }
+          } catch (putErr) {
+            console.warn("Direct R2 presigned PUT failed (likely CORS), attempting server-side R2 upload:", putErr);
+          }
+        }
+      }
+
+      // If direct PUT failed or was not possible, try server-side R2 upload route
+      if (!uploaded) {
+        const formData = new FormData();
+        formData.append("file", file);
+        if (this.threadId) formData.append("threadId", this.threadId);
+        const srvResp = await fetch("/api/r2-upload", {
+          method: "POST",
+          body: formData,
+        });
+        if (srvResp.ok) {
+          const srvData = await srvResp.json();
+          if (srvData.enabled && srvData.publicUrl) {
+            fileUrl = srvData.publicUrl;
+            uploaded = true;
+            console.log("Successfully uploaded to Cloudflare R2 via server route:", fileUrl);
+          }
+        }
       }
     } catch (err: any) {
-      console.warn("Failed to upload file to Supabase Storage:", err);
-      if (isMedia || isLarge) {
-        yield {
-          id,
-          type,
-          name: file.name,
-          file,
-          status: { type: "incomplete" as const, reason: "error" as const, error: err },
-        };
-        return;
+      console.warn("R2 upload attempts failed, falling back to Supabase Storage:", err);
+    }
+
+    // ── 2) Supabase Storage Bucket ('uploads') — fallback ──
+
+    if (!uploaded) {
+      try {
+        const { supabase } = await import("@/lib/supabase");
+        const fileExt = file.name.split(".").pop();
+        const uniqueFilename = `${crypto.randomUUID()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from("uploads")
+          .upload(uniqueFilename, file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+
+        if (uploadError) {
+          console.warn("Supabase Storage upload error:", uploadError);
+          throw new Error(uploadError.message);
+        } else {
+          const { data: { publicUrl } } = supabase.storage
+            .from("uploads")
+            .getPublicUrl(uniqueFilename);
+          fileUrl = publicUrl;
+          console.log("Successfully uploaded to Supabase Storage:", fileUrl);
+        }
+      } catch (err: any) {
+        console.warn("Failed to upload file to Supabase Storage:", err);
+        if (isMedia || isLarge) {
+          yield {
+            id,
+            type,
+            name: file.name,
+            file,
+            status: { type: "incomplete" as const, reason: "error" as const, error: err },
+          };
+          return;
+        }
       }
     }
 
@@ -159,28 +234,34 @@ export class LangGraphAttachmentAdapter implements AttachmentAdapter {
     if (mimeType.startsWith("image/")) {
       content.push({
         type: "image_url",
-        image_url: { url: fileUrl }
+        image_url: { url: fileUrl },
+        filename: file.name,
+        mediaType: mimeType,
+        mimeType: mimeType,
       });
     } else if (mimeType.startsWith("audio/")) {
       content.push({
         type: "audio",
         audio: fileUrl,
         filename: file.name,
-        mimeType
+        mediaType: mimeType,
+        mimeType: mimeType,
       });
     } else if (mimeType.startsWith("video/")) {
       content.push({
         type: "video",
         video: fileUrl,
         filename: file.name,
-        mimeType
+        mediaType: mimeType,
+        mimeType: mimeType,
       });
     } else {
       content.push({
         type: "file",
         filename: file.name,
+        mediaType: mimeType,
         mimeType: mimeType,
-        data: fileUrl
+        data: fileUrl,
       });
     }
 

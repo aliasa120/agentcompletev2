@@ -204,6 +204,28 @@ export function LangGraphRuntimeProvider({
   // with "no threadId" and the first /voice-tts reply never gets audio.
   const threadIdRef = useRef<string | null>(threadId ?? null);
   threadIdRef.current = threadId ?? null;
+  // Keep the attachment adapter's thread context in sync so R2 uploads land
+  // in thread-wise folders (null only for a brand-new chat's first attachment).
+  attachmentAdapter.threadId = threadId ?? null;
+
+  // In-memory cache of threadId -> messages array for instant 0ms switching
+  const threadMessagesCacheRef = useRef<Map<string, any[]>>(new Map());
+
+  // Track the threadId actively streaming to strictly prevent cross-thread message leakage
+  const streamingThreadIdRef = useRef<string | null>(null);
+
+  // Sync threadMessagesCacheRef with preloaded messages from the threads list query
+  useEffect(() => {
+    const list = (threads?.data?.flat() ?? []) as any[];
+    for (const t of list) {
+      if (t?.id && Array.isArray(t?.messages) && t.messages.length > 0) {
+        const existing = threadMessagesCacheRef.current.get(t.id);
+        if (!existing || existing.length <= t.messages.length) {
+          threadMessagesCacheRef.current.set(t.id, t.messages);
+        }
+      }
+    }
+  }, [threads?.data]);
 
   // ── Post-run authoritative re-sync + async web TTS ──────────────────────────
   // Web does NOT block the run on TTS: finalize_response skips synthesis and
@@ -211,7 +233,11 @@ export function LangGraphRuntimeProvider({
   // whether it needs audio (voice_mode + voice_input) and synthesize in the
   // background via POST /api/tts, anchoring each result strictly to its
   // messageId so "how are you" audio never lands under "kya haal hai".
-  const [syncedMessages, setSyncedMessages] = useState<any[] | null>(null);
+  const [syncedThreadData, setSyncedThreadData] = useState<{
+    threadId: string | null;
+    messages: any[];
+  }>({ threadId: null, messages: [] });
+  const [persistedInterrupts, setPersistedInterrupts] = useState<any[]>([]);
 
   // Cancel handle for the active poll loop (cleared on unmount / new thread).
   const pollCancelRef = useRef<(() => void) | null>(null);
@@ -372,15 +398,76 @@ export function LangGraphRuntimeProvider({
   }
 
   /**
-   * Poll the server thread state every POLL_INTERVAL_MS until:
-   *   (a) An AUDIO_URL/FILE_URL marker is found in the messages, OR
-   *   (b) The server run is no longer active (status ≠ running/pending), OR
-   *   (c) POLL_MAX_MS elapses.
-   * For non-web or tool-path markers this still hydrates audioRepliesMap.
-   * For web mirror path there will be no marker — the async trigger handles it.
+   * Fetch thread messages and interrupts with dual-tier fallback:
+   * 1. Try client.threads.getState(threadId) for active checkpoints/tasks.
+   * 2. If messages are empty (idle/completed checkpoints in dev server), fall back
+   *    to client.threads.get(threadId) which contains the authoritative values.messages.
    */
-  const syncFromServer = useCallback(async (opts?: { poll?: boolean }) => {
-    if (!threadId || !client) return;
+  const fetchThreadMessagesAndInterrupts = useCallback(
+    async (targetThreadId: string): Promise<{ msgs: any[]; interrupts: any[] }> => {
+      if (!client || !targetThreadId) return { msgs: [], interrupts: [] };
+      let stateMsgs: any[] = [];
+      let threadMsgs: any[] = [];
+      let interrupts: any[] = [];
+
+      try {
+        const state: any = await client.threads.getState(targetThreadId);
+        if (state?.values?.messages && Array.isArray(state.values.messages) && state.values.messages.length > 0) {
+          stateMsgs = state.values.messages;
+        }
+        if (Array.isArray(state?.interrupts) && state.interrupts.length > 0) {
+          interrupts.push(...state.interrupts);
+        }
+        if (Array.isArray(state?.tasks)) {
+          for (const task of state.tasks) {
+            if (Array.isArray(task?.interrupts) && task.interrupts.length > 0) {
+              interrupts.push(...task.interrupts);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[LangGraphRuntime] getState failed for ${targetThreadId}:`, err);
+      }
+
+      try {
+        const threadData: any = await client.threads.get(targetThreadId);
+        if (threadData?.values?.messages && Array.isArray(threadData.values.messages) && threadData.values.messages.length > 0) {
+          threadMsgs = threadData.values.messages;
+        }
+        if (Array.isArray(threadData?.interrupts) && threadData.interrupts.length > 0) {
+          interrupts.push(...threadData.interrupts);
+        }
+      } catch (err) {
+        console.warn(`[LangGraphRuntime] threads.get failed for ${targetThreadId}:`, err);
+      }
+
+      // Pick whichever source has more messages (stateMsgs for active runs, threadMsgs for completed/idle threads)
+      let msgs = stateMsgs.length >= threadMsgs.length ? stateMsgs : threadMsgs;
+
+      // Fallback: If both returned empty, check the memory cache
+      if (msgs.length === 0) {
+        const cached = threadMessagesCacheRef.current.get(targetThreadId);
+        if (cached && cached.length > 0) {
+          msgs = cached;
+        }
+      }
+
+      // Update cache
+      if (msgs.length > 0) {
+        threadMessagesCacheRef.current.set(targetThreadId, msgs);
+      }
+
+      return { msgs, interrupts };
+    },
+    [client],
+  );
+
+  /**
+   * Poll or fetch the server thread state.
+   */
+  const syncFromServer = useCallback(async (opts?: { poll?: boolean; targetThreadId?: string }) => {
+    const currentTargetId = opts?.targetThreadId ?? threadIdRef.current;
+    if (!currentTargetId || !client) return;
     const shouldPoll = opts?.poll ?? false;
     const POLL_INTERVAL_MS = 3000;
     const POLL_MAX_MS = 60_000;
@@ -389,75 +476,82 @@ export function LangGraphRuntimeProvider({
     let cancelled = false;
     pollCancelRef.current = () => { cancelled = true; };
 
-    const fetchOnce = async (): Promise<any[]> => {
-      try {
-        const state: any = await client.threads.getState(threadId);
-        return state?.values?.messages ?? [];
-      } catch {
-        return [];
-      }
-    };
-
     const deadline = Date.now() + POLL_MAX_MS;
     let attempt = 0;
 
     const tick = async () => {
-      if (cancelled) return;
+      if (cancelled || currentTargetId !== threadIdRef.current) return;
       attempt++;
       try {
-        const msgs = await fetchOnce();
-        if (cancelled) return;
+        const { msgs, interrupts } = await fetchThreadMessagesAndInterrupts(currentTargetId);
+        if (cancelled || currentTargetId !== threadIdRef.current) return;
 
-        if (Array.isArray(msgs) && msgs.length > 0) {
-          setSyncedMessages(msgs);
-          if (hasAudioMarker(msgs)) {
-            setAudioRepliesMap(prev => {
-              const next = new Map(prev);
-              let changed = false;
-              for (const m of msgs) {
-                if (!m?.id) continue;
-                const entries = extractAudioFromContent(m.content);
-                if (entries.length > 0) {
-                  const existing = next.get(m.id);
-                  if (!existing || existing.length !== entries.length || existing[0]?.url !== entries[0]?.url) {
-                    next.set(m.id, entries);
-                    changed = true;
-                    ttsDoneRef.current.add(m.id);
-                  }
-                }
-              }
-              return changed ? next : prev;
-            });
-            return;
-          }
+        if (Array.isArray(interrupts) && interrupts.length > 0) {
+          setPersistedInterrupts(interrupts);
+        } else {
+          setPersistedInterrupts([]);
         }
 
-        if (shouldPoll && Date.now() < deadline && !cancelled) {
+        // Commit synced messages strictly for the target thread ID
+        setSyncedThreadData({ threadId: currentTargetId, messages: msgs });
+
+        if (Array.isArray(msgs) && msgs.length > 0 && hasAudioMarker(msgs)) {
+          setAudioRepliesMap(prev => {
+            const next = new Map(prev);
+            let changed = false;
+            for (const m of msgs) {
+              if (!m?.id) continue;
+              const entries = extractAudioFromContent(m.content);
+              if (entries.length > 0) {
+                const existing = next.get(m.id);
+                if (!existing || existing.length !== entries.length || existing[0]?.url !== entries[0]?.url) {
+                  next.set(m.id, entries);
+                  changed = true;
+                  ttsDoneRef.current.add(m.id);
+                }
+              }
+            }
+            return changed ? next : prev;
+          });
+          return;
+        }
+
+        if (shouldPoll && Date.now() < deadline && !cancelled && currentTargetId === threadIdRef.current) {
           setTimeout(tick, POLL_INTERVAL_MS);
         }
       } catch (err) {
         console.warn(`[LangGraphRuntime] sync attempt ${attempt} failed:`, err);
-        if (shouldPoll && Date.now() < deadline && !cancelled) {
+        if (shouldPoll && Date.now() < deadline && !cancelled && currentTargetId === threadIdRef.current) {
           setTimeout(tick, POLL_INTERVAL_MS);
         }
       }
     };
 
-    setTimeout(tick, 600);
-  }, [threadId, client, hasAudioMarker]);
+    // Execute immediately without artificial setTimeout delay
+    void tick();
+  }, [client, fetchThreadMessagesAndInterrupts, hasAudioMarker]);
 
   useEffect(() => {
-    if (!threadId) {
-      pollCancelRef.current?.();
-      pollCancelRef.current = null;
-      setSyncedMessages(null);
-      setAudioRepliesMap(new Map());
-      ttsDoneRef.current.clear();
-      ttsInflightRef.current.clear();
-      setTtsPendingSet(new Set());
-      humanVoiceMapRef.current.clear();
+    pollCancelRef.current?.();
+    pollCancelRef.current = null;
+    setPersistedInterrupts([]);
+    setAudioRepliesMap(new Map());
+    ttsDoneRef.current.clear();
+    ttsInflightRef.current.clear();
+    setTtsPendingSet(new Set());
+    humanVoiceMapRef.current.clear();
+    setResumedInterrupts(false);
+    setActedInterruptIds(new Set());
+
+    if (threadId) {
+      // INSTANT HYDRATION: If we have preloaded/cached messages for this thread, use them immediately!
+      const cachedMsgs = threadMessagesCacheRef.current.get(threadId) || [];
+      setSyncedThreadData({ threadId, messages: cachedMsgs });
+      void syncFromServer({ poll: false, targetThreadId: threadId });
+    } else {
+      setSyncedThreadData({ threadId: null, messages: [] });
     }
-  }, [threadId]);
+  }, [threadId, syncFromServer]);
 
   // Cleanup on unmount.
   useEffect(() => () => { pollCancelRef.current?.(); }, []);
@@ -473,17 +567,22 @@ export function LangGraphRuntimeProvider({
     // fetchStateHistory loads full message history when switching threads
     fetchStateHistory: true,
     onFinish: (_state, run) => {
+      streamingThreadIdRef.current = null;
       onHistoryRevalidate?.();
       onStreamFinish?.();
       void syncFromServer({ poll: true });
       setTimeout(() => { void processCompletedMessagesForTts(); }, 400);
     },
     onError: (_err: any) => {
+      streamingThreadIdRef.current = null;
       onStreamFinish?.();
       void syncFromServer({ poll: true });
       setTimeout(() => { void processCompletedMessagesForTts(); }, 400);
     },
     onCreated: (run: any) => {
+      if (run?.thread_id) {
+        streamingThreadIdRef.current = run.thread_id;
+      }
       // Tag new threads with workflow_id / user_id metadata
       if (run?.thread_id && workflowId && client) {
         client.threads.update(run.thread_id, {
@@ -585,8 +684,17 @@ export function LangGraphRuntimeProvider({
     // retry briefly so the final assistant message is present when we scan.
     for (let attempt = 0; attempt < 4; attempt++) {
       try {
-        const state: any = await client.threads.getState(currentThreadId);
-        const msgs: any[] = state?.values?.messages ?? [];
+        let msgs: any[] = [];
+        try {
+          const state: any = await client.threads.getState(currentThreadId);
+          msgs = state?.values?.messages ?? [];
+        } catch (e) {}
+        if (msgs.length === 0) {
+          try {
+            const threadData: any = await client.threads.get(currentThreadId);
+            msgs = threadData?.values?.messages ?? [];
+          } catch (e) {}
+        }
         console.log(`[tts] processCompletedMessagesForTts attempt=${attempt} msgs=${msgs.length}`);
         const hasAssistant = msgs.some(
           (m: any) => (m?.role || m?.type) === "assistant" || (m?.role || m?.type) === "ai",
@@ -596,7 +704,7 @@ export function LangGraphRuntimeProvider({
           return;
         }
       } catch (e) {
-        console.warn(`[tts] getState attempt ${attempt} failed:`, e);
+        console.warn(`[tts] getState/get attempt ${attempt} failed:`, e);
       }
       if (attempt < 3) await new Promise((r) => setTimeout(r, 1200));
     }
@@ -618,17 +726,82 @@ export function LangGraphRuntimeProvider({
     }
   }, [stream.isLoading, syncFromServer, processCompletedMessagesForTts]);
 
-  // ── Human-in-the-loop interrupt resume (terminal command approval) ──────────
+  const [resumedInterrupts, setResumedInterrupts] = useState<boolean>(false);
+  const [actedInterruptIds, setActedInterruptIds] = useState<Set<string>>(new Set());
+
+  const getInterruptKey = (intr: any): string => {
+    if (!intr) return "";
+    const id = intr.id ?? intr.interrupt_id;
+    if (id) return String(id);
+    const val = intr.value ?? intr;
+    const req = val?.action_requests?.[0] ?? val?.action_request ?? val;
+    return `${req?.name || "tool"}-${JSON.stringify(req?.args || {})}`;
+  };
+
+  // ── Active Interrupts (Live Stream or Restored from Server Checkpoint) ─────
+  const streamInterrupts: any[] | undefined = (stream as any).interrupts;
+  const streamInterrupt: any = (stream as any).interrupt;
+  const activeInterrupts: any[] = useMemo(() => {
+    // If a resume was just submitted or stream is currently running/loading, hide old interrupts immediately
+    if (resumedInterrupts || stream.isLoading) {
+      return [];
+    }
+    const raw: any[] = [];
+    if (Array.isArray(streamInterrupts) && streamInterrupts.length > 0) {
+      raw.push(...streamInterrupts.filter((i) => i != null));
+    } else if (streamInterrupt) {
+      raw.push(streamInterrupt);
+    } else if (Array.isArray(persistedInterrupts)) {
+      raw.push(...persistedInterrupts.filter((i) => i != null));
+    }
+
+    return raw.filter((intr) => {
+      const key = getInterruptKey(intr);
+      return key ? !actedInterruptIds.has(key) : true;
+    });
+  }, [streamInterrupts, streamInterrupt, persistedInterrupts, resumedInterrupts, actedInterruptIds, stream.isLoading]);
+
+  // Reset resumedInterrupts flag when loading finishes so future interrupts can display
+  useEffect(() => {
+    if (!stream.isLoading) {
+      setResumedInterrupts(false);
+    }
+  }, [stream.isLoading]);
+
+  // When live interrupts arrive, immediately sync thread state
+  useEffect(() => {
+    if (activeInterrupts.length > 0) {
+      void syncFromServer({ poll: false });
+    }
+  }, [activeInterrupts.length, syncFromServer]);
+
   const resumeInterrupt = useCallback(
     (payload: any, interruptId?: string) => {
-      const pending: any[] = (stream as any).interrupts ?? [];
-      // Multiple pending interrupts at one checkpoint need an id-keyed resume map
+      const pending: any[] = (stream as any).interrupts ?? persistedInterrupts;
+      const isDecisionPayload = payload && typeof payload === "object" && (Array.isArray(payload.decisions) || "decisions" in payload);
       const resume =
-        interruptId && pending.length > 1 ? { [interruptId]: payload } : payload;
+        !isDecisionPayload && interruptId && pending.length > 1 ? { [interruptId]: payload } : payload;
+
+
+      // Mark all current active interrupts as acted upon permanently so they never reappear
+      setActedInterruptIds((prev) => {
+        const next = new Set(prev);
+        for (const intr of pending) {
+          const key = getInterruptKey(intr);
+          if (key) next.add(key);
+        }
+        if (interruptId) next.add(interruptId);
+        return next;
+      });
+
+      // Optimistically clear interrupts and mark resumed so UI hides the card instantly
+      setResumedInterrupts(true);
+      setPersistedInterrupts([]);
+
       return stream.submit(null, {
         command: { resume },
         streamSubgraphs: true,
-        streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"],
+        streamMode: ["values", "messages-tuple", "updates", "tasks", "custom"],
         metadata: {
           workflow_id: workflowId,
           user_id: userId || undefined,
@@ -646,7 +819,7 @@ export function LangGraphRuntimeProvider({
         },
       });
     },
-    [stream, workflowId, userId, assistantConfig],
+    [stream, activeInterrupts, workflowId, userId, assistantConfig],
   );
 
   const newThread = useCallback(() => {
@@ -656,11 +829,13 @@ export function LangGraphRuntimeProvider({
   // ── Expose stream.submit via ref for programmatic sends ───────────────────────
   useEffect(() => {
     submitRef.current = (input: any, options?: any) => {
+      streamingThreadIdRef.current = threadId ?? null;
       return stream.submit(input, {
         streamSubgraphs: true,
         streamMode: ["values", "messages", "updates", "custom"],
         ...options,
         onError: (_err: any, _run: any) => {
+          streamingThreadIdRef.current = null;
           onStreamError?.();
           onHistoryRevalidate?.();
         },
@@ -683,13 +858,14 @@ export function LangGraphRuntimeProvider({
         },
       });
     };
-  }, [submitRef, stream.submit, workflowId, userId, assistantConfig, onStreamError, onHistoryRevalidate]);
+  }, [submitRef, stream.submit, workflowId, userId, assistantConfig, onStreamError, onHistoryRevalidate, threadId]);
 
   // ── Watch for stream errors ────────────────────────────────────────────────────
   const prevErrorRef = useRef<unknown>(undefined);
   useEffect(() => {
     if (stream.error && stream.error !== prevErrorRef.current) {
       prevErrorRef.current = stream.error;
+      streamingThreadIdRef.current = null;
       onStreamError?.();
       onHistoryRevalidate?.();
       // Run may have completed server-side even though the stream errored
@@ -722,12 +898,13 @@ export function LangGraphRuntimeProvider({
         if (activeRun) {
           console.log(`[LangGraphRuntime] Found active run ${activeRun.run_id}, rejoining...`);
           isRejoining = true;
+          streamingThreadIdRef.current = threadId;
           if (pollInterval) {
             clearInterval(pollInterval);
             pollInterval = null;
           }
           await stream.joinStream(activeRun.run_id, undefined, {
-            streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"],
+            streamMode: ["values", "messages-tuple", "updates", "tasks", "custom"],
           });
         }
       } catch (err) {
@@ -745,6 +922,49 @@ export function LangGraphRuntimeProvider({
       if (pollInterval) clearInterval(pollInterval);
     };
   }, [threadId, client, stream.isLoading, stream.isThreadLoading]);
+
+  // ── Authoritative Thread Message Resolution ──────────────────────────────────
+  // Uses syncedThreadData as the single source of truth when idle, and stream.messages
+  // ONLY when actively streaming a run FOR THIS SPECIFIC THREAD.
+  // This completely prevents cross-thread message accumulation and blank flashes.
+  const mergedStreamMessages = useMemo(() => {
+    const isCurrentThreadSynced = syncedThreadData.threadId === (threadId ?? null);
+    const syncedMsgs = isCurrentThreadSynced && Array.isArray(syncedThreadData.messages)
+      ? syncedThreadData.messages.filter(Boolean)
+      : [];
+
+    // If actively streaming a run specifically for the current thread, display live stream messages
+    const isStreamingCurrentThread = stream.isLoading && (
+      streamingThreadIdRef.current === (threadId ?? null) ||
+      (!streamingThreadIdRef.current && !threadId)
+    );
+
+    if (isStreamingCurrentThread) {
+      const streamMsgs = Array.isArray(stream.messages) ? stream.messages.filter(Boolean) : [];
+      if (streamMsgs.length > 0) {
+        if (threadId) {
+          threadMessagesCacheRef.current.set(threadId, streamMsgs);
+        }
+        return streamMsgs;
+      }
+      return syncedMsgs;
+    }
+
+    // When idle, syncedThreadData is the single authoritative source of truth for this thread
+    if (isCurrentThreadSynced && syncedMsgs.length > 0) {
+      return syncedMsgs;
+    }
+
+    // Fallback: Check in-memory cache if syncedThreadData is still settling
+    if (threadId) {
+      const cached = threadMessagesCacheRef.current.get(threadId);
+      if (Array.isArray(cached) && cached.length > 0) {
+        return cached;
+      }
+    }
+
+    return syncedMsgs;
+  }, [stream.isLoading, stream.messages, syncedThreadData, threadId]);
 
   // ── Convert stream.messages → assistant-ui format ─────────────────────────────
   const threadMessages = useExternalMessageConverter({
@@ -948,42 +1168,7 @@ export function LangGraphRuntimeProvider({
         };
       }
     },
-    messages: (() => {
-      const base = Array.isArray(stream.messages)
-        ? stream.messages.filter(Boolean).map((m: any) => ({
-            ...m,
-            // Ensure content is never null — null ?? "" returns null, so use || fallback
-            content: m.content != null ? m.content : "",
-          }))
-        : [];
-      if (!syncedMessages || syncedMessages.length === 0) return base;
-      // Merge authoritative server messages by id, preferring the server copy
-      // when it carries markers the streamed copy lacks.
-      const byId = new Map<string, any>();
-      for (const m of base) if (m?.id) byId.set(m.id, m);
-      let changed = false;
-      for (const sm of syncedMessages) {
-        if (!sm?.id) continue;
-        const local = byId.get(sm.id);
-        const hasMarker = (v: any) => {
-          const c = typeof v === "string" ? v : JSON.stringify(v ?? "");
-          return c.includes("AUDIO_URL:") || c.includes("FILE_URL:");
-        };
-        if (!local) {
-          byId.set(sm.id, sm);
-          changed = true;
-        } else if (hasMarker(sm.content) && !hasMarker(local.content)) {
-          byId.set(sm.id, sm);
-          changed = true;
-        }
-      }
-      if (!changed) return base;
-      const merged = base.map((m: any) => (m?.id && byId.has(m.id) ? byId.get(m.id) : m));
-      for (const sm of syncedMessages) {
-        if (sm?.id && !merged.some((m: any) => m?.id === sm.id)) merged.push(sm);
-      }
-      return merged;
-    })(),
+    messages: mergedStreamMessages,
     isRunning: stream.isLoading,
   });
 
@@ -1101,6 +1286,33 @@ export function LangGraphRuntimeProvider({
         content: optimisticContent,
       };
 
+      // If thread has active interrupts and user sends text in chat instead of clicking popup
+      if (activeInterrupts.length > 0) {
+        const textOnly = typeof content === "string" ? content.trim().toLowerCase() : "";
+        const isAffirmative = ["allow", "always allow", "approve", "yes", "continue", "proceed", "y", "ok", "go ahead", "run"].includes(textOnly);
+        const isDeny = ["deny", "no", "cancel", "stop", "reject", "block", "dont", "don't"].includes(textOnly);
+
+        if (isAffirmative) {
+          console.log("[LangGraphRuntime] Translating affirmative chat input to interrupt approve decision");
+          await resumeInterrupt({ decisions: [{ type: "approve" }] });
+          return;
+        } else if (isDeny) {
+          console.log("[LangGraphRuntime] Translating negative chat input to interrupt reject decision");
+          await resumeInterrupt({ decisions: [{ type: "reject", message: typeof content === "string" ? content : "User denied via chat" }] });
+          return;
+        } else {
+          console.log("[LangGraphRuntime] Resuming interrupt with custom user response/feedback");
+          await resumeInterrupt({
+            decisions: [{
+              type: "reject",
+              message: typeof content === "string" ? content : JSON.stringify(content),
+            }]
+          });
+          return;
+        }
+      }
+
+      streamingThreadIdRef.current = threadId ?? null;
       await stream.submit(
         { messages: [newMessage] },
         {
@@ -1249,6 +1461,7 @@ export function LangGraphRuntimeProvider({
         content: optimisticContent,
       };
 
+      streamingThreadIdRef.current = threadId ?? null;
       await stream.submit(
         { messages: [newMessage] },
         {
@@ -1304,6 +1517,7 @@ export function LangGraphRuntimeProvider({
         }
       }
 
+      streamingThreadIdRef.current = threadId ?? null;
       await stream.submit(
         null,
         {
@@ -1328,6 +1542,17 @@ export function LangGraphRuntimeProvider({
       );
     },
     onCancel: async () => {
+      streamingThreadIdRef.current = null;
+      const pending: any[] = (stream as any).interrupts ?? persistedInterrupts;
+      setActedInterruptIds((prev) => {
+        const next = new Set(prev);
+        for (const intr of pending) {
+          const key = getInterruptKey(intr);
+          if (key) next.add(key);
+        }
+        return next;
+      });
+      setPersistedInterrupts([]);
       await stream.stop();
     },
     adapters: {
@@ -1356,18 +1581,11 @@ export function LangGraphRuntimeProvider({
     },
   });
 
-  const streamInterrupts: any[] | undefined = (stream as any).interrupts;
-  const streamInterrupt: any = (stream as any).interrupt;
-  const interrupts: any[] = useMemo(() => {
-    if (Array.isArray(streamInterrupts)) return streamInterrupts.filter((i) => i != null);
-    return streamInterrupt ? [streamInterrupt] : [];
-  }, [streamInterrupts, streamInterrupt]);
-
   const contextValue = useMemo(() => ({
     isLoading: stream.isLoading,
     isThreadLoading: stream.isThreadLoading,
     submitRef,
-    interrupts,
+    interrupts: activeInterrupts,
     resumeInterrupt,
     voiceMode,
     setVoiceMode,
@@ -1376,7 +1594,7 @@ export function LangGraphRuntimeProvider({
     workflowId: workflowId ?? null,
     audioRepliesMap,
     ttsPendingSet,
-  }), [stream.isLoading, stream.isThreadLoading, submitRef, interrupts, resumeInterrupt, voiceMode, setVoiceMode, newThread, threadId, workflowId, audioRepliesMap, ttsPendingSet]);
+  }), [stream.isLoading, stream.isThreadLoading, submitRef, activeInterrupts, resumeInterrupt, voiceMode, setVoiceMode, newThread, threadId, workflowId, audioRepliesMap, ttsPendingSet]);
 
   return (
     <LangGraphRuntimeContext.Provider value={contextValue}>

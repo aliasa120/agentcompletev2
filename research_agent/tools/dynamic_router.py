@@ -19,6 +19,11 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 # Configure logging
 logger = logging.getLogger("dynamic_router")
 
+from research_agent.plugins import (
+    enabled_plugins_from_bootstrap,
+    is_tool_allowed,
+)
+
 # Import all core tools to build the Master Registry
 from research_agent.tools.unified_search import unified_search
 from research_agent.tools.unified_extract import unified_extract
@@ -26,9 +31,14 @@ from research_agent.tools.unified_image import create_post_image
 from research_agent.tools.youtube_transcript import youtube_transcript
 from research_agent.tools.think import think_tool
 from research_agent.tools.fetch_images_brave import fetch_images_brave
-from research_agent.tools.view_candidate_images import view_candidate_images
 from research_agent.tools.analyze_images_gemini import analyze_images_gemini
-from research_agent.tools.save_to_supabase import save_posts_to_supabase
+from research_agent.tools.save_wordpress_post import save_wordpress_post, save_posts_to_supabase
+from research_agent.tools.social_saver_tools import (
+    save_instagram_post,
+    save_facebook_post,
+    save_youtube_video,
+    save_social_bundle,
+)
 from research_agent.tools.get_design_guide import get_design_guide
 from research_agent.tools.read_skill import read_skill
 from research_agent.tools.list_skills import list_skills
@@ -50,7 +60,7 @@ from research_agent.memory.honcho_provider import (
 )
 from research_agent.tools.text_to_speech import text_to_speech
 from research_agent.tools.terminal_tool import terminal
-from research_agent.tools.ask_permission import ask_permission
+from research_agent.tools.upload_to_storage import upload_to_storage
 
 # Registry mapping tool names to actual tool objects
 TOOL_OBJECTS: Dict[str, BaseTool] = {
@@ -60,9 +70,13 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
     "youtube_transcript": youtube_transcript,
     "think_tool": think_tool,
     "fetch_images_brave": fetch_images_brave,
-    "view_candidate_images": view_candidate_images,
     "analyze_images_gemini": analyze_images_gemini,
+    "save_wordpress_post": save_wordpress_post,
     "save_posts_to_supabase": save_posts_to_supabase,
+    "save_instagram_post": save_instagram_post,
+    "save_facebook_post": save_facebook_post,
+    "save_youtube_video": save_youtube_video,
+    "save_social_bundle": save_social_bundle,
     "get_design_guide": get_design_guide,
     "read_skill": read_skill,
     "list_skills": list_skills,
@@ -84,7 +98,7 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
     "analyze_attachment": omni_analyzer,
     "text_to_speech": text_to_speech,
     "terminal": terminal,
-    "ask_permission": ask_permission,
+    "upload_to_storage": upload_to_storage,
 }
 
 # Rich tool metadata including descriptions, keywords (synonyms), and example triggers
@@ -154,15 +168,6 @@ TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
             "Get image URLs for this news topic."
         ]
     },
-    "view_candidate_images": {
-        "short_description": "Render and inspect candidate image details and dimensions.",
-        "keywords": ["view images", "inspect photos", "assess image resolution", "choose photos", "examine pictures"],
-        "example_triggers": [
-            "Inspect the fetched image options.",
-            "Examine the resolution and layout of candidate photos.",
-            "Choose which candidate image to use."
-        ]
-    },
     "analyze_images_gemini": {
         "short_description": "Use Gemini Vision to analyze candidate images against brand guide and output an editing prompt.",
         "keywords": ["analyze image", "image prompt creator", "gemini vision", "check brand style", "design analysis"],
@@ -172,6 +177,15 @@ TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
             "Assess style compliance of the selected photo."
         ]
     },
+    "save_wordpress_post": {
+        "short_description": "Save a generated WordPress blog post with title, category, and markdown content to database.",
+        "keywords": ["save wordpress post", "save blog post", "store article", "draft wordpress", "save article to db"],
+        "example_triggers": [
+            "Save this blog post to database.",
+            "Save the article draft for WordPress.",
+            "Store the written post in the database."
+        ]
+    },
     "save_posts_to_supabase": {
         "short_description": "Save final blog and social posts to the database.",
         "keywords": ["save posts", "save database", "supabase save", "store articles", "commit post"],
@@ -179,6 +193,42 @@ TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
             "Save the finalized social posts to Supabase.",
             "Store the written posts in the database.",
             "Save this post to the DB."
+        ]
+    },
+    "save_instagram_post": {
+        "short_description": "Save an Instagram post, reel, or carousel with caption and media URL.",
+        "keywords": ["save instagram", "save insta", "save reel", "post to instagram", "instagram reel saver"],
+        "example_triggers": [
+            "Save this Instagram reel to database.",
+            "Save the Instagram post draft.",
+            "Create and save an Insta reel."
+        ]
+    },
+    "save_facebook_post": {
+        "short_description": "Save a Facebook page post, photo, or video reel.",
+        "keywords": ["save facebook", "save fb", "facebook post saver", "fb reel", "facebook photo"],
+        "example_triggers": [
+            "Save this Facebook post to database.",
+            "Save the FB video reel.",
+            "Save post for my Facebook page."
+        ]
+    },
+    "save_youtube_video": {
+        "short_description": "Save a YouTube video or Shorts upload draft with title, tags, and custom thumbnail.",
+        "keywords": ["save youtube", "save yt", "youtube shorts", "upload youtube draft", "youtube video saver"],
+        "example_triggers": [
+            "Save this YouTube video draft.",
+            "Save YouTube Shorts with thumbnail.",
+            "Save video draft to YouTube posts."
+        ]
+    },
+    "save_social_bundle": {
+        "short_description": "Save a multi-platform social media campaign across Instagram, Facebook, YouTube, and X.",
+        "keywords": ["save social bundle", "multi platform post", "campaign save", "save all social posts"],
+        "example_triggers": [
+            "Save this cross-platform social campaign.",
+            "Save posts for Instagram, Facebook, and YouTube.",
+            "Save the social bundle to database."
         ]
     },
     "get_design_guide": {
@@ -262,13 +312,18 @@ TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
             "Check disk space via command line."
         ]
     },
-    "ask_permission": {
-        "short_description": "Ask the user for explicit human approval before performing critical or destructive actions.",
-        "keywords": ["ask permission", "permission", "request permission", "human approval", "confirm action", "confirm first"],
+    "upload_to_storage": {
+        "short_description": "Upload a local file to cloud storage (Cloudflare R2 / Supabase) and return a public shareable link.",
+        "keywords": [
+            "upload", "upload file", "upload to storage", "storage link", "share link",
+            "public url", "download link", "shareable link", "get link", "give me link",
+            "r2", "cloudflare r2", "cloud storage", "host file", "publish file",
+        ],
         "example_triggers": [
-            "Ask permission before dropping database table.",
-            "Request confirmation from user before deleting files.",
-            "Ask permission to perform critical system update."
+            "Make this PDF and give me its link.",
+            "Upload the chart image and share the URL.",
+            "I need a download link for the report.",
+            "Upload this video to storage so I can post it."
         ]
     }
 }
@@ -277,9 +332,20 @@ TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
 FALLBACK_CATEGORIES: Dict[str, List[str]] = {
     "search": ["unified_search", "fetch_images_brave"],
     "extract": ["unified_extract", "youtube_transcript"],
-    "content": ["create_post_image", "analyze_images_gemini", "view_candidate_images", "get_design_guide"],
+    "content": ["create_post_image", "analyze_images_gemini", "get_design_guide"],
     "skills": ["read_skill", "list_skills", "manage_skill"],
-    "publishing": ["get_wordpress_categories", "publish_to_wordpress", "save_posts_to_supabase"],
+    "storage": ["upload_to_storage"],
+    "publishing": [
+        "get_wordpress_categories",
+        "publish_to_wordpress",
+        "save_wordpress_post",
+        "save_posts_to_supabase",
+        "save_instagram_post",
+        "save_facebook_post",
+        "save_youtube_video",
+        "save_social_bundle",
+        "upload_to_storage",
+    ],
     "reasoning": ["think_tool"]
 }
 
@@ -342,6 +408,12 @@ def generate_tool_metadata(tool_name: str, raw_description: str) -> Dict[str, An
         }
 
 
+def _enabled_plugins_from_db() -> set:
+    """Fetch the enabled plugin set from Supabase (all enabled on failure)."""
+    from research_agent.plugins import enabled_plugins_from_db
+    return enabled_plugins_from_db()
+
+
 def get_allowed_routing_tools(agent_id: str) -> Dict[str, set[str]]:
     """Retrieve the set of tool keys assigned to this agent grouped by resolved loading mode ('normal' or 'super')."""
     result = {"normal": set(), "super": set()}
@@ -394,9 +466,14 @@ def get_allowed_routing_tools(agent_id: str) -> Dict[str, set[str]]:
         all_mcp_settings = bootstrap.get("mcp_tool_settings") or []
         mcp_tool_modes = {row["tool_key"]: row["loading_mode"] for row in all_mcp_settings}
 
+        enabled_plugins = enabled_plugins_from_bootstrap(bootstrap)
+
         for a in assignments:
             t_key = a.get("tool_key")
             t_type = a.get("tool_type")
+
+            if t_type == "builtin" and not is_tool_allowed(t_key, enabled_plugins):
+                continue
 
             # Resolve global loading mode
             mode = a.get("loading_mode")
@@ -680,7 +757,8 @@ def list_tools(
             allowed = get_allowed_routing_tools(agent_id)
             allowed_tools = allowed.get("normal", set()).union(allowed.get("super", set()))
         else:
-            allowed_tools = set(TOOL_OBJECTS.keys())
+            enabled_plugins = _enabled_plugins_from_db()
+            allowed_tools = {k for k in TOOL_OBJECTS if is_tool_allowed(k, enabled_plugins)}
 
         mcp_tools = []
         if client:
@@ -793,6 +871,86 @@ def list_tools(
         }, indent=2)
 
 
+def get_tool_permission_mode(tool_name: str, agent_id: Optional[str] = None, user_id: Optional[str] = None) -> str:
+    """Retrieve the permission mode ('always_allow', 'ask', 'deny') for a tool from Supabase/cache."""
+    try:
+        from supabase import create_client
+        url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
+        if not url or not key:
+            return "always_allow"
+        client = create_client(url, key)
+
+        # 1. Check mcp_tool_settings table directly for this tool_key
+        try:
+            mcp_res = client.table("mcp_tool_settings").select("permission_mode").eq("tool_key", tool_name).execute()
+            if mcp_res.data and len(mcp_res.data) > 0:
+                p_mode = mcp_res.data[0].get("permission_mode")
+                if p_mode:
+                    return p_mode
+        except Exception:
+            pass
+
+        # 2. Check bootstrap / agent_settings
+        bootstrap_resp = client.rpc("get_backend_bootstrap_data").execute()
+        bootstrap = bootstrap_resp.data or {}
+        all_settings = bootstrap.get("agent_settings") or []
+        for row in all_settings:
+            k = row.get("key")
+            v = row.get("value")
+            if k in ("mcp_tools_permission_modes", "builtin_tools_permission_modes") and v:
+                try:
+                    parsed = json.loads(v) if isinstance(v, str) else v
+                    if tool_name in parsed:
+                        return parsed[tool_name]
+                except Exception:
+                    pass
+        return "always_allow"
+    except Exception as e:
+        logger.warning(f"Failed to get tool permission mode for '{tool_name}': {e}")
+        return "always_allow"
+
+
+def get_tool_bindings(agent_id: Optional[str], tool_name: str) -> Dict[str, Any]:
+    """Retrieve parameter bindings for a tool from agent_tool_assignments, mcp_tool_settings, or agent_settings."""
+    try:
+        from supabase import create_client
+        url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
+        if not url or not key:
+            return {}
+        client = create_client(url, key)
+
+        # 1. Check mcp_tool_settings
+        try:
+            mcp_res = client.table("mcp_tool_settings").select("parameter_bindings").eq("tool_key", tool_name).execute()
+            if mcp_res.data and len(mcp_res.data) > 0:
+                bindings = mcp_res.data[0].get("parameter_bindings")
+                if bindings:
+                    return json.loads(bindings) if isinstance(bindings, str) else bindings
+        except Exception:
+            pass
+
+        # 2. Check agent_settings
+        bootstrap_resp = client.rpc("get_backend_bootstrap_data").execute()
+        bootstrap = bootstrap_resp.data or {}
+        all_settings = bootstrap.get("agent_settings") or []
+        for row in all_settings:
+            k = row.get("key")
+            v = row.get("value")
+            if k in ("builtin_tools_parameter_bindings", "mcp_tools_parameter_bindings") and v:
+                try:
+                    parsed = json.loads(v) if isinstance(v, str) else v
+                    if tool_name in parsed:
+                        return parsed[tool_name]
+                except Exception:
+                    pass
+        return {}
+    except Exception as e:
+        logger.warning(f"Failed to get tool bindings for '{tool_name}': {e}")
+        return {}
+
+
 @tool(parse_docstring=True)
 def load_tools(
     tool_names: List[str],
@@ -820,11 +978,19 @@ def load_tools(
         allowed = get_allowed_routing_tools(agent_id)
         allowed_tools = allowed.get("normal", set()).union(allowed.get("super", set()))
 
+    if allowed_tools is None:
+        plugin_enabled = _enabled_plugins_from_db()
+
     for name in tool_names:
         name = name.strip()
-        
+
         # Security/Access check: if agent_id is passed, the tool MUST be in the allowed list
         if allowed_tools is not None and name not in allowed_tools:
+            not_found.append(name)
+            continue
+
+        # Plugin gate: tools owned by a disabled plugin are unavailable
+        if allowed_tools is None and not is_tool_allowed(name, plugin_enabled):
             not_found.append(name)
             continue
 
@@ -838,19 +1004,10 @@ def load_tools(
                     tool_obj = mcp_tools[0]
             except Exception as e:
                 logger.warning(f"Failed to load dynamic MCP tool '{name}': {e}")
-                try:
-                    log_path = os.path.join(tempfile.gettempdir(), "agent_load.log")
-                    with open(log_path, "a", encoding="utf-8") as f:
-                        import traceback
-                        f.write(f"\n--- Failed to load dynamic MCP tool '{name}' ---\n")
-                        f.write(traceback.format_exc())
-                        f.write("-" * 40 + "\n")
-                except Exception:
-                    pass
 
         if tool_obj:
-            if agent_id:
-                bindings = get_tool_bindings(agent_id, name)
+            bindings = get_tool_bindings(agent_id, name)
+            if bindings:
                 tool_obj = bind_tool_parameters(tool_obj, bindings)
             try:
                 schema_dict = convert_to_openai_tool(tool_obj)
@@ -912,17 +1069,64 @@ def call_tool(
         allowed_tools = allowed.get("normal", set()).union(allowed.get("super", set()))
         if tool_name not in allowed_tools:
             return f"Error: Tool '{tool_name}' is not assigned to this agent or is disabled."
+    else:
+        # Plugin gate: tools owned by a disabled plugin are unavailable
+        if tool_name in TOOL_OBJECTS and not is_tool_allowed(tool_name, _enabled_plugins_from_db()):
+            return f"Error: Tool '{tool_name}' belongs to a disabled plugin and cannot be executed."
+
+    # Permission check: verify if tool is denied or requires human confirmation
+    perm_mode = get_tool_permission_mode(tool_name, agent_id=agent_id, user_id=user_id)
+    if perm_mode == "deny":
+        return f"Error: Tool '{tool_name}' execution is blocked/denied by your security permissions."
+
+    if perm_mode == "ask":
+        from langgraph.types import interrupt
+        from langgraph.errors import GraphInterrupt
+        interrupt_payload = {
+            "action_requests": [{
+                "name": tool_name,
+                "args": arguments,
+                "description": f"Tool '{tool_name}' requires explicit human approval before running."
+            }],
+            "review_configs": [{
+                "action_name": tool_name,
+                "allowed_decisions": ["approve", "reject", "edit"]
+            }]
+        }
+        try:
+            resume_data = interrupt(interrupt_payload)
+        except GraphInterrupt:
+            # MUST re-raise GraphInterrupt so LangGraph halts execution and prompts the user in the UI!
+            raise
+        except Exception as int_err:
+            logger.warning(f"Failed to raise interrupt for tool '{tool_name}': {int_err}")
+            resume_data = None
+
+        if isinstance(resume_data, dict):
+            decisions = resume_data.get("decisions") or []
+            if decisions:
+                decision = decisions[0]
+                d_type = decision.get("type")
+                if d_type == "reject":
+                    msg = decision.get("message") or "User denied tool execution."
+                    return f"Execution of tool '{tool_name}' was denied by user: {msg}"
+                elif d_type == "edit":
+                    if "edited_action" in decision and isinstance(decision["edited_action"], dict) and "args" in decision["edited_action"]:
+                        arguments = decision["edited_action"]["args"]
+                    elif "args" in decision:
+                        arguments = decision["args"]
+                    elif "edited_args" in decision:
+                        arguments = decision["edited_args"]
 
     # Fetch bindings and merge arguments
-    if agent_id:
-        bindings = get_tool_bindings(agent_id, tool_name)
-        if bindings:
-            bound_params = {}
-            for param_name, param_cfg in bindings.items():
-                if isinstance(param_cfg, dict) and not param_cfg.get("decide_by_ai", True):
-                    bound_params[param_name] = param_cfg.get("value")
-            if bound_params:
-                arguments = {**arguments, **bound_params}
+    bindings = get_tool_bindings(agent_id, tool_name)
+    if bindings:
+        bound_params = {}
+        for param_name, param_cfg in bindings.items():
+            if isinstance(param_cfg, dict) and not param_cfg.get("decide_by_ai", True):
+                bound_params[param_name] = param_cfg.get("value")
+        if bound_params:
+            arguments = {**arguments, **bound_params}
 
     logger.info(f"Executing dynamic tool '{tool_name}' with arguments: {arguments}")
     
@@ -1154,4 +1358,36 @@ def get_tool_bindings(agent_id: str, tool_name: str) -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"Error fetching tool bindings: {e}")
     return {}
+
+
+def get_tool_json_schema(tool_or_key: Any) -> Dict[str, Any]:
+    """Extract a clean, standard JSON Schema representation of a tool's parameters and metadata."""
+    tool_obj = TOOL_OBJECTS.get(tool_or_key) if isinstance(tool_or_key, str) else tool_or_key
+    if not tool_obj:
+        return {"name": str(tool_or_key), "description": "", "parameters": {"type": "object", "properties": {}, "required": []}}
+    
+    try:
+        openai_dict = convert_to_openai_tool(tool_obj)
+        func = openai_dict.get("function", {})
+        return {
+            "name": func.get("name", getattr(tool_obj, "name", "")),
+            "description": func.get("description", getattr(tool_obj, "description", "")),
+            "parameters": func.get("parameters", {"type": "object", "properties": {}, "required": []})
+        }
+    except Exception as e:
+        logger.warning(f"Error converting tool schema for {tool_obj}: {e}")
+        return {
+            "name": getattr(tool_obj, "name", str(tool_or_key)),
+            "description": getattr(tool_obj, "description", ""),
+            "parameters": {"type": "object", "properties": {}, "required": []}
+        }
+
+
+def get_all_tool_schemas() -> Dict[str, Any]:
+    """Return a mapping of all registered built-in tools to their JSON schemas."""
+    schemas = {}
+    for key, tool_obj in TOOL_OBJECTS.items():
+        schemas[key] = get_tool_json_schema(tool_obj)
+    return schemas
+
 

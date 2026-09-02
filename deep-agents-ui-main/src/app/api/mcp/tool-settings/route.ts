@@ -91,6 +91,8 @@ export async function POST(req: Request) {
       tool_name: t.tool_name ?? t.tool_key,
       enabled: true,
       loading_mode: "primary",
+      permission_mode: "always_allow",
+      parameter_bindings: {},
       updated_at: new Date().toISOString(),
     }));
 
@@ -118,8 +120,8 @@ export async function POST(req: Request) {
   }
 }
 
-// PATCH /api/mcp/tool-settings — toggle a tool enabled/disabled or change loading_mode
-// Body: { connection_id, tool_key, enabled, loading_mode }
+// PATCH /api/mcp/tool-settings — toggle a tool enabled/disabled or change loading_mode / permission_mode
+// Body: { connection_id, tool_key, enabled, loading_mode, permission_mode, parameter_bindings }
 export async function PATCH(req: Request) {
     const cookieStore = await cookies();
     const supabase = getSupabaseClient(cookieStore);
@@ -128,7 +130,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   try {
-    const { connection_id, tool_key, enabled, loading_mode } = await req.json();
+    const { connection_id, tool_key, enabled, loading_mode, permission_mode, parameter_bindings } = await req.json();
     if (!connection_id || !tool_key) {
       return NextResponse.json({ error: "connection_id and tool_key required" }, { status: 400 });
     }
@@ -136,6 +138,8 @@ export async function PATCH(req: Request) {
     const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() };
     if (enabled !== undefined) updatePayload.enabled = enabled;
     if (loading_mode !== undefined) updatePayload.loading_mode = loading_mode;
+    if (permission_mode !== undefined) updatePayload.permission_mode = permission_mode;
+    if (parameter_bindings !== undefined) updatePayload.parameter_bindings = parameter_bindings;
 
     const { data, error } = await supabase
       .from("mcp_tool_settings")
@@ -146,6 +150,25 @@ export async function PATCH(req: Request) {
       .single();
 
     if (error) throw error;
+
+    // Also sync to agent_settings for high-speed cache
+    if (permission_mode !== undefined) {
+      const { data: currentPerm } = await supabase.from("agent_settings").select("value").eq("key", "mcp_tools_permission_modes").single();
+      const perms = currentPerm?.value ? (typeof currentPerm.value === "string" ? JSON.parse(currentPerm.value) : currentPerm.value) : {};
+      perms[tool_key] = permission_mode;
+      await supabase.from("agent_settings").upsert({ key: "mcp_tools_permission_modes", value: JSON.stringify(perms), updated_at: new Date().toISOString() }, { onConflict: "key" });
+    }
+
+    if (parameter_bindings !== undefined) {
+      const { data: currentBind } = await supabase.from("agent_settings").select("value").eq("key", "mcp_tools_parameter_bindings").single();
+      const binds = currentBind?.value ? (typeof currentBind.value === "string" ? JSON.parse(currentBind.value) : currentBind.value) : {};
+      if (parameter_bindings === null || Object.keys(parameter_bindings).length === 0) {
+        delete binds[tool_key];
+      } else {
+        binds[tool_key] = parameter_bindings;
+      }
+      await supabase.from("agent_settings").upsert({ key: "mcp_tools_parameter_bindings", value: JSON.stringify(binds), updated_at: new Date().toISOString() }, { onConflict: "key" });
+    }
 
     try {
       triggerAgentReload();
@@ -162,8 +185,8 @@ export async function PATCH(req: Request) {
   }
 }
 
-// PUT /api/mcp/tool-settings — bulk update (enable all / disable all or change mode)
-// Body: { connection_id, enabled, loading_mode }
+// PUT /api/mcp/tool-settings — bulk update (enable all / disable all or change mode / permission)
+// Body: { connection_id, enabled, loading_mode, permission_mode }
 export async function PUT(req: Request) {
     const cookieStore = await cookies();
     const supabase = getSupabaseClient(cookieStore);
@@ -172,7 +195,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   try {
-    const { connection_id, enabled, loading_mode } = await req.json();
+    const { connection_id, enabled, loading_mode, permission_mode } = await req.json();
     if (!connection_id) {
       return NextResponse.json({ error: "connection_id required" }, { status: 400 });
     }
@@ -180,13 +203,25 @@ export async function PUT(req: Request) {
     const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() };
     if (enabled !== undefined) updatePayload.enabled = enabled;
     if (loading_mode !== undefined) updatePayload.loading_mode = loading_mode;
+    if (permission_mode !== undefined) updatePayload.permission_mode = permission_mode;
 
-    const { error } = await supabase
+    const { data: updatedRows, error } = await supabase
       .from("mcp_tool_settings")
       .update(updatePayload)
-      .eq("connection_id", connection_id);
+      .eq("connection_id", connection_id)
+      .select();
 
     if (error) throw error;
+
+    // Sync all updated keys to agent_settings
+    if (permission_mode !== undefined && updatedRows) {
+      const { data: currentPerm } = await supabase.from("agent_settings").select("value").eq("key", "mcp_tools_permission_modes").single();
+      const perms = currentPerm?.value ? (typeof currentPerm.value === "string" ? JSON.parse(currentPerm.value) : currentPerm.value) : {};
+      updatedRows.forEach((r: any) => {
+        perms[r.tool_key] = permission_mode;
+      });
+      await supabase.from("agent_settings").upsert({ key: "mcp_tools_permission_modes", value: JSON.stringify(perms), updated_at: new Date().toISOString() }, { onConflict: "key" });
+    }
 
     try {
       triggerAgentReload();

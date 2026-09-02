@@ -16,10 +16,16 @@ A hardline blocklist (rm -rf /, mkfs, dd to block devices, fork bombs,
 shutdown, formatting drives, …) is ALWAYS refused and cannot be overridden.
 
 File Visibility:
-- Every file created by a command is auto-detected and uploaded to Supabase
-- The tool result includes a FILE_URL:<url> line per file; the chat UI renders
-  these as download/preview cards so users can see the files immediately
-- The file also remains on disk at its local path (server filesystem)
+- Files created by a command stay in the thread workspace
+  (output/threads/<thread_id>/) and are listed in the chat UI's Files panel,
+  where the user can preview and download them
+- Newly created files are named in the tool result so the agent knows what it
+  produced; call ``upload_to_storage(file_path=...)`` when the user asks for a
+  link or a shareable copy
+- Blanket mirroring of every created file to Cloudflare R2 / Supabase is opt-in
+  via agent_settings ``storage_auto_upload_files`` (env
+  STORAGE_AUTO_UPLOAD_FILES); when on, the result also includes a
+  FILE_URL:<url> line per file, which the chat UI renders as a download card
 - In Docker deployments, ./output and ./logs are mounted to the host so files
   are visible there too (see docker-compose.yml)
 """
@@ -164,79 +170,36 @@ _BENIGN_RE = re.compile(
 
 
 def upload_file_to_supabase(file_path: str, thread_id: Optional[str] = None) -> Optional[str]:
-    """Upload a file to Supabase Storage and return the public URL.
-    
+    """Upload a file to unified storage (R2-first, Supabase fallback); return public URL.
+
     This makes files created by the terminal tool visible to users.
-    Files are stored under ``terminal/YYYY-MM-DD/{thread_id}/`` so a daily cleanup cron can
+    Files are stored under ``{category}/YYYY-MM-DD/{thread_id}/`` so a daily cleanup cron can
     manage older files while keeping thread outputs organized.
     """
-    try:
-        import datetime
-        from supabase import create_client
-        
-        supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
-        if not supabase_url or not key:
-            logger.warning("[terminal] Supabase not configured, cannot upload file")
-            return None
-        
-        if not os.path.exists(file_path):
-            logger.warning(f"[terminal] File does not exist: {file_path}")
-            return None
-        
-        client = create_client(supabase_url, key)
-        today = datetime.date.today().isoformat()
-        filename = os.path.basename(file_path)
-        unique_id = str(uuid.uuid4())[:8]
-        safe_tid = sanitize_thread_id(thread_id) if thread_id else "general"
-        storage_path = f"terminal/{today}/{safe_tid}/{unique_id}_{filename}"
-        
-        with open(file_path, "rb") as f:
-            file_content = f.read()
-        
-        # Determine content type
-        ext = filename.lower().split(".")[-1] if "." in filename else ""
-        content_type_map = {
-            "pdf": "application/pdf",
-            "png": "image/png",
-            "jpg": "image/jpeg",
-            "jpeg": "image/jpeg",
-            "gif": "image/gif",
-            "webp": "image/webp",
-            "svg": "image/svg+xml",
-            "mp3": "audio/mpeg",
-            "wav": "audio/wav",
-            "ogg": "audio/ogg",
-            "m4a": "audio/mp4",
-            "mp4": "video/mp4",
-            "webm": "video/webm",
-            "txt": "text/plain",
-            "md": "text/markdown",
-            "csv": "text/csv",
-            "json": "application/json",
-            "html": "text/html",
-            "py": "text/x-python",
-            "js": "text/javascript",
-            "ts": "text/typescript",
-            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "zip": "application/zip",
-        }
-        content_type = content_type_map.get(ext, "application/octet-stream")
-        
-        client.storage.from_("uploads").upload(
-            path=storage_path,
-            file=file_content,
-            file_options={"content-type": content_type},
-        )
-        
-        public_url = f"{supabase_url}/storage/v1/object/public/uploads/{storage_path}"
-        logger.info(f"[terminal] File uploaded to Supabase: {public_url}")
-        return public_url
-    except Exception as e:
-        logger.error(f"[terminal] Failed to upload file to Supabase: {e}")
+    from research_agent import storage_service
+
+    if not os.path.exists(file_path):
+        logger.warning(f"[terminal] File does not exist: {file_path}")
         return None
+
+    ext = os.path.splitext(file_path)[1].lower().lstrip(".")
+    if ext in ("png", "jpg", "jpeg", "webp", "gif", "svg"):
+        category = "images"
+    elif ext in ("mp3", "wav", "ogg", "m4a"):
+        category = "audio"
+    elif ext in ("mp4", "webm", "mov", "avi", "mkv"):
+        category = "video"
+    elif ext in ("pdf", "pptx", "ppt", "docx", "doc", "xlsx", "xls", "csv", "md", "txt"):
+        category = "documents"
+    else:
+        category = "terminal"
+
+    return storage_service.upload_file(
+        local_path=file_path,
+        filename=os.path.basename(file_path),
+        category=category,
+        thread_id=thread_id,
+    )
 
 
 def detect_hardline(command: str) -> Optional[str]:
@@ -303,13 +266,20 @@ def _run_command(
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
                 with open(target_path, "w", encoding="utf-8") as f:
                     f.write(file_content)
-                public_url = upload_file_to_supabase(target_path, thread_id=thread_id)
+                # Local write only; upload on request (see the new-file note below).
+                public_url = None
+                try:
+                    from research_agent import storage_service
+                    if storage_service.auto_upload_enabled():
+                        public_url = upload_file_to_supabase(target_path, thread_id=thread_id)
+                except Exception:
+                    public_url = None
                 url_msg = f"\n{FILE_URL_MARKER}{public_url}" if public_url else ""
                 heredoc_notes.append(
-                    f"✅ Written heredoc file to {target_path} ({len(file_content)} bytes){url_msg}"
+                    f"Written heredoc file to {target_path} ({len(file_content)} bytes){url_msg}"
                 )
             except Exception as fe:
-                heredoc_notes.append(f"❌ Failed writing heredoc file: {fe}")
+                heredoc_notes.append(f"Failed writing heredoc file: {fe}")
         # Anything after the closing delimiter (e.g. `python3 script.py`) still runs.
         run_command = (cmd[: heredoc_match.start()] + cmd[heredoc_match.end() :]).strip()
 
@@ -398,27 +368,43 @@ def _run_command(
     if not combined.strip():
         combined = "(no output)"
 
-    # Detect ANY newly created file (any extension) and upload it so the user
-    # can see/download it. A path that didn't exist before the command ran is a
-    # new file; also catch in-place rewrites via mtime within the last few seconds.
+    # Detect newly created files so the agent (and the user) know what was produced.
+    # A path that didn't exist before the command ran is a new file.
+    #
+    # These files stay in the thread workspace and are listed/openable through the
+    # UI's Files panel, so they are NOT auto-uploaded to cloud storage. Call
+    # `upload_to_storage(file_path=...)` when a shareable link is actually wanted.
+    # Blanket mirroring can be restored with agent_settings
+    # `storage_auto_upload_files` / env STORAGE_AUTO_UPLOAD_FILES.
+    auto_upload = False
+    try:
+        from research_agent import storage_service
+        auto_upload = storage_service.auto_upload_enabled()
+    except Exception:
+        auto_upload = False
+
     uploaded_files = []
+    created_files = []
     try:
         if os.path.exists(cwd):
-            now = time.time()
             for full_p in _walk_files(cwd):
                 if full_p in before_files:
                     continue
                 try:
-                    if os.path.getsize(full_p) > MAX_UPLOAD_BYTES:
-                        logger.info(f"[terminal] Skipping upload of large file: {full_p}")
-                        continue
+                    size = os.path.getsize(full_p)
                 except OSError:
+                    continue
+                created_files.append(full_p)
+                if not auto_upload:
+                    continue
+                if size > MAX_UPLOAD_BYTES:
+                    logger.info(f"[terminal] Skipping upload of large file: {full_p}")
                     continue
                 url = upload_file_to_supabase(full_p, thread_id=thread_id)
                 if url:
                     uploaded_files.append((full_p, url))
     except Exception as e:
-        logger.warning(f"[terminal] Output file upload check failed: {e}")
+        logger.warning(f"[terminal] Output file detection failed: {e}")
 
     result_text = f"$ {cmd}\n(exit {proc.returncode})\n{combined.strip()}"
     if heredoc_notes:
@@ -427,7 +413,7 @@ def _run_command(
         notes = []
         for full_p, url in uploaded_files:
             notes.append(
-                f"📄 Generated File: {os.path.basename(full_p)}\n"
+                f"Generated File: {os.path.basename(full_p)}\n"
                 f"{FILE_URL_MARKER}{url}\n"
                 f"   Local path: {full_p}"
             )
@@ -435,6 +421,15 @@ def _run_command(
         result_text += (
             "\n\nTell the user the files are ready and include the download links "
             "(they are also shown as file cards in the chat)."
+        )
+    elif created_files:
+        names = ", ".join(sorted(os.path.basename(p) for p in created_files[:20]))
+        more = f" (+{len(created_files) - 20} more)" if len(created_files) > 20 else ""
+        result_text += (
+            f"\n\nFiles created in the workspace: {names}{more}\n"
+            "They are visible to the user in the Files panel. If the user asked for a "
+            "link or a shareable/downloadable copy, call "
+            "`upload_to_storage(file_path=\"<filename>\")` and share the returned URL."
         )
     return result_text
 
@@ -473,13 +468,13 @@ def terminal(
     - Inspect server logs: `tail -n 100 logs/server_stdout.log`
     - Access system info: `uname -a` or `systeminfo`
 
-    Files you create are automatically detected, uploaded, and returned with a
-    FILE_URL marker so the chat UI shows them as downloadable file cards.
-    The file also stays on disk at its local path (server filesystem).
+    Files you create stay in the thread workspace and are listed in the tool
+    result. The user can preview and download them from the chat's Files panel.
+    If the user asks for a LINK or a shareable copy, call
+    `upload_to_storage(file_path="<filename>")` afterwards and share the URL.
 
-    Safety: before running a risky/destructive command you MUST first call
-    ``ask_permission(action=..., reason=...)`` and only execute once the user
-    approves. Catastrophic commands (rm -rf /, formatting drives, fork bombs,
+    Safety: the system automatically manages permissions and can interrupt for
+    user approval if configured. Catastrophic commands (rm -rf /, formatting drives, fork bombs,
     shutdown, raw writes to block devices) are always refused by this tool.
 
     Args:
@@ -490,8 +485,8 @@ def terminal(
 
     Returns:
         The command's exit code and combined stdout/stderr (truncated), or a
-        block notice for hardline-blocked commands. Created files are listed
-        with a FILE_URL:<url> line that the UI renders as a file card.
+        block notice for hardline-blocked commands. Newly created files are
+        named so you can reference or upload them.
     """
     command = (command or "").strip()
     if not command:

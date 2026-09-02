@@ -10,6 +10,7 @@ export interface ThreadItem {
   title: string;
   description: string;
   assistantId?: string;
+  messages?: any[];
 }
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -144,6 +145,7 @@ export function useThreads(props: {
           title,
           description,
           assistantId,
+          messages: Array.isArray((thread.values as any)?.messages) ? (thread.values as any).messages : [],
         };
       });
     },

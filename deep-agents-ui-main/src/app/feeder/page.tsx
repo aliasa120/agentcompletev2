@@ -6,9 +6,12 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import {
     Settings, Home, Activity, Database, RefreshCw, Trash2,
-    Rss, Globe, Clock, ChevronRight
+    Rss, Globe, Clock, ChevronRight, AlarmClock
 } from "lucide-react";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
+import { PluginGate } from "@/app/components/settings/PluginsSection";
+import { StatCard, FeederWorkflow, minutesLabel, formatPKT } from "./_components/feeder-ui";
+import { RunHistoryCard } from "./_components/run-history";
 
 interface PendingArticle {
     id: string;
@@ -19,29 +22,16 @@ interface PendingArticle {
     url: string;
 }
 
-function formatPKT(iso: string | null): string {
-    if (!iso) return "—";
-    const d = new Date(iso);
-    return d.toLocaleString("en-PK", {
-        timeZone: "Asia/Karachi",
-        month: "short", day: "numeric",
-        hour: "2-digit", minute: "2-digit",
-        hour12: false,
-    });
-}
-
-interface Workflow {
-    id: string;
-    name: string;
-}
-
 export default function FeederDashboard() {
-    const [workflows, setWorkflows] = useState<Workflow[]>([]);
+    const [workflows, setWorkflows] = useState<FeederWorkflow[]>([]);
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>("");
     const [stats, setStats] = useState({ pending: 0, processing: 0, done: 0, total: 0 });
     const [pendingArticles, setPendingArticles] = useState<PendingArticle[]>([]);
     const [isFetching, setIsFetching] = useState(false);
     const [pipelineLog, setPipelineLog] = useState<string>("");
+    const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
+    const selectedWorkflow = workflows.find(w => w.id === selectedWorkflowId);
 
     const loadData = useCallback(async (workflowId: string) => {
         if (!workflowId) return;
@@ -79,7 +69,7 @@ export default function FeederDashboard() {
             try {
                 const { data } = await supabase
                     .from("workflows")
-                    .select("id, name")
+                    .select("id, name, is_active, feeder_enabled, feeder_interval_minutes, feeder_last_trigger_at, feeder_max_age_minutes, feeder_max_articles_per_run, feeder_cluster_threshold")
                     .eq("is_active", true)
                     .order("name");
                 if (data && data.length > 0) {
@@ -123,6 +113,7 @@ export default function FeederDashboard() {
             if (selectedWorkflowId) {
                 loadData(selectedWorkflowId);
             }
+            setHistoryRefreshKey(k => k + 1);
         }
     };
 
@@ -133,95 +124,98 @@ export default function FeederDashboard() {
         loadData(selectedWorkflowId);
     };
 
-    const handleRefresh = () => {
-        if (selectedWorkflowId) {
-            loadData(selectedWorkflowId);
-        }
-    };
-
     return (
+        <PluginGate pluginKey="feeder">
         <div className="flex h-screen flex-col bg-background">
-            <header className="flex h-16 shrink-0 items-center justify-between border-b px-6">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-3">
-                        <Activity className="h-5 w-5 text-primary" />
-                        <h1 className="text-xl font-semibold">Feeder Dashboard</h1>
-                    </div>
-                    {workflows.length > 0 && (
-                        <div className="flex items-center gap-2 border-l pl-4">
-                            <span className="text-xs font-semibold text-muted-foreground">Workflow:</span>
-                            <select
-                                value={selectedWorkflowId}
-                                onChange={e => setSelectedWorkflowId(e.target.value)}
-                                className="h-9 rounded-lg border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary transition-all font-semibold"
-                            >
-                                {workflows.map(wf => (
-                                    <option key={wf.id} value={wf.id}>{wf.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
+            <header className="flex flex-wrap shrink-0 items-center gap-x-3 gap-y-2 border-b px-4 sm:px-6 py-2">
+                <div className="flex items-center gap-2 min-w-0">
+                    <Activity className="h-5 w-5 text-primary shrink-0" />
+                    <h1 className="text-lg sm:text-xl font-semibold truncate">Feeder Dashboard</h1>
                 </div>
-                <div className="flex items-center gap-2">
+                {workflows.length > 0 && (
+                    <select
+                        value={selectedWorkflowId}
+                        onChange={e => setSelectedWorkflowId(e.target.value)}
+                        className="h-8 rounded-lg border border-input bg-background px-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary transition-all max-w-[160px] sm:max-w-none"
+                    >
+                        {workflows.map(wf => (
+                            <option key={wf.id} value={wf.id}>{wf.name}</option>
+                        ))}
+                    </select>
+                )}
+                <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
                     <ThemeToggle />
-                    {/* Run Pipeline — moved to header per user request */}
                     <Button
                         onClick={triggerPipeline}
                         disabled={isFetching || !selectedWorkflowId}
                         size="sm"
-                        className="bg-primary text-primary-foreground"
+                        className="bg-primary text-primary-foreground h-8"
                     >
-                        <Rss className={`mr-2 h-4 w-4 ${isFetching ? "animate-pulse" : ""}`} />
-                        {isFetching ? "Running…" : "Run Feeder"}
+                        <Rss className={`h-4 w-4 sm:mr-2 ${isFetching ? "animate-pulse" : ""}`} />
+                        <span className="hidden sm:inline">{isFetching ? "Running…" : "Run Feeder"}</span>
                     </Button>
-
-                    {/* Clear Pending — moved to header per user request */}
                     <Button
                         variant="destructive"
                         size="sm"
                         onClick={clearPending}
                         disabled={isFetching || !selectedWorkflowId}
+                        className="h-8"
+                        title="Clear pending articles"
                     >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Clear Pending
+                        <Trash2 className="h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Clear Pending</span>
                     </Button>
-
-                    <Button variant="outline" size="sm" onClick={handleRefresh} disabled={!selectedWorkflowId}>
-                        <RefreshCw className="mr-2 h-4 w-4" />Refresh
+                    <Button
+                        variant="outline" size="sm" className="h-8"
+                        onClick={() => selectedWorkflowId && loadData(selectedWorkflowId)}
+                        disabled={!selectedWorkflowId}
+                        title="Refresh"
+                    >
+                        <RefreshCw className="h-4 w-4" />
                     </Button>
                     <Link href="/feeder/settings">
-                        <Button variant="outline" size="sm">
-                            <Settings className="mr-2 h-4 w-4" />Settings
+                        <Button variant="outline" size="sm" className="h-8" title="Feeder settings">
+                            <Settings className="h-4 w-4 sm:mr-2" />
+                            <span className="hidden sm:inline">Settings</span>
                         </Button>
                     </Link>
                     <Link href="/">
-                        <Button variant="outline" size="sm">
-                            <Home className="mr-2 h-4 w-4" />Agent
+                        <Button variant="outline" size="sm" className="h-8" title="Back to agent">
+                            <Home className="h-4 w-4" />
                         </Button>
                     </Link>
                 </div>
             </header>
 
-            <main className="flex-1 overflow-auto p-6 space-y-6">
+            <main className="flex-1 overflow-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+                {/* Schedule status strip */}
+                {selectedWorkflow && (
+                    <div className="rounded-xl border bg-card shadow-sm px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                        <span className="flex items-center gap-1.5 font-semibold text-foreground">
+                            <AlarmClock className="h-3.5 w-3.5 text-primary" />
+                            {selectedWorkflow.feeder_enabled
+                                ? <>Auto-run every {minutesLabel(selectedWorkflow.feeder_interval_minutes)}</>
+                                : <>Auto-run is off</>}
+                        </span>
+                        <span className="text-muted-foreground">
+                            Keeps {selectedWorkflow.feeder_max_articles_per_run ?? 100} articles/run · window {minutesLabel(selectedWorkflow.feeder_max_age_minutes ?? 60)}
+                        </span>
+                        <span className="text-muted-foreground">Last run: {formatPKT(selectedWorkflow.feeder_last_trigger_at)}</span>
+                        <Link
+                            href="/feeder/settings/schedule"
+                            className="ml-auto font-semibold text-primary hover:underline"
+                        >
+                            Change schedule
+                        </Link>
+                    </div>
+                )}
+
                 {/* Stats row */}
-                <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-                    {[
-                        { label: "Pending", value: stats.pending, icon: Database, color: "text-amber-500", bg: "bg-amber-50 dark:bg-amber-950/20", sub: "In queue" },
-                        { label: "Processing", value: stats.processing, icon: Activity, color: "text-primary", bg: "bg-primary/10", sub: "With agent" },
-                        { label: "Done", value: stats.done, icon: Activity, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/20", sub: "Completed" },
-                        { label: "Total", value: stats.total, icon: Globe, color: "text-muted-foreground", bg: "bg-muted", sub: "All articles" },
-                    ].map(({ label, value, icon: Icon, color, bg, sub }) => (
-                        <div key={label} className="rounded-xl border border-border bg-card shadow-sm p-4 flex items-center gap-4">
-                            <div className={`rounded-lg p-2.5 ${bg} ${color}`}>
-                                <Icon className="h-5 w-5" />
-                            </div>
-                            <div>
-                                <p className="text-xs text-muted-foreground">{label}</p>
-                                <p className="text-2xl font-bold text-foreground">{value}</p>
-                                <p className="text-xs text-muted-foreground">{sub}</p>
-                            </div>
-                        </div>
-                    ))}
+                <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-4">
+                    <StatCard label="Pending" value={stats.pending} icon={Database} color="text-amber-500" sub="In queue" />
+                    <StatCard label="Processing" value={stats.processing} icon={Activity} sub="With agent" />
+                    <StatCard label="Done" value={stats.done} icon={Activity} color="text-emerald-600" sub="Completed" />
+                    <StatCard label="Total" value={stats.total} icon={Globe} color="text-muted-foreground" sub="All articles" />
                 </div>
 
                 {/* Pipeline log */}
@@ -236,6 +230,9 @@ export default function FeederDashboard() {
                     </div>
                 )}
 
+                {/* Run history: which layer stopped which article, and why */}
+                <RunHistoryCard workflowId={selectedWorkflowId} refreshKey={historyRefreshKey} />
+
                 {/* Pending articles list */}
                 <div className="rounded-xl border bg-card shadow-sm">
                     <div className="p-4 border-b flex items-center gap-2">
@@ -248,7 +245,7 @@ export default function FeederDashboard() {
                     <div className="divide-y max-h-[420px] overflow-auto">
                         {pendingArticles.length === 0 ? (
                             <div className="p-8 text-center text-muted-foreground text-sm">
-                                No pending articles. Run the feeder pipeline to fetch new ones.
+                                No pending articles. Run the feeder or enable auto-run in Settings → Schedule.
                             </div>
                         ) : (
                             pendingArticles.map((art, i) => (
@@ -263,11 +260,12 @@ export default function FeederDashboard() {
                                         >
                                             {art.title}
                                         </a>
-                                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                                            <span className="flex items-center gap-1">
-                                                <Globe className="h-3 w-3" />{art.source_domain}
+                                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                                            <span className="flex items-center gap-1 min-w-0">
+                                                <Globe className="h-3 w-3 shrink-0" />
+                                                <span className="truncate">{art.source_domain}</span>
                                             </span>
-                                            <span className="flex items-center gap-1">
+                                            <span className="flex items-center gap-1 shrink-0">
                                                 <Clock className="h-3 w-3" />
                                                 {formatPKT(art.published_at || art.created_at)}
                                             </span>
@@ -281,5 +279,6 @@ export default function FeederDashboard() {
                 </div>
             </main>
         </div>
+        </PluginGate>
     );
 }

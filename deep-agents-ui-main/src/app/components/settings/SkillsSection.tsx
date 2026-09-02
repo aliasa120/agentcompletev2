@@ -250,7 +250,7 @@ export function SkillsSection() {
     if (!newSkillKey || !newSkillLabel) return;
     setCreating(true);
     try {
-      await fetch("/api/skills", {
+      const res = await fetch("/api/skills", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -261,36 +261,73 @@ export function SkillsSection() {
           source: "user",
         }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        toast.error(data.error || "Failed to create skill");
+        return;
+      }
+      toast.success("Skill created successfully!");
       setNewSkillKey("");
       setNewSkillLabel("");
       setShowCreateForm(false);
-      fetchSkillsData();
+      await fetchSkillsData();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to create skill");
     } finally {
       setCreating(false);
     }
   };
 
   const handleUpdate = async (id: string, data: Partial<Skill>) => {
-    await fetch(`/api/skills/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    await fetchSkillsData();
+    try {
+      const res = await fetch(`/api/skills/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error) {
+        toast.error(json.error || "Failed to update skill");
+        return;
+      }
+      toast.success("Skill updated successfully!");
+      await fetchSkillsData();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to update skill");
+    }
   };
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/skills/${id}`, { method: "DELETE" });
-    setSkills(prev => prev.filter(s => s.id !== id));
+    try {
+      const res = await fetch(`/api/skills/${id}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error) {
+        toast.error(json.error || "Failed to delete skill");
+        return;
+      }
+      toast.success("Skill removed");
+      setSkills(prev => prev.filter(s => s.id !== id));
+    } catch (e: any) {
+      toast.error(e.message || "Failed to delete skill");
+    }
   };
 
   const handlePromote = async (skillId: string) => {
-    await fetch("/api/skills/promote", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ skill_id: skillId }),
-    });
-    await fetchSkillsData();
+    try {
+      const res = await fetch("/api/skills/promote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skill_id: skillId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error) {
+        toast.error(json.error || "Failed to promote skill");
+        return;
+      }
+      await fetchSkillsData();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to promote skill");
+    }
   };
 
   if (loading) {

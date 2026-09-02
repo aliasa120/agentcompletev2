@@ -100,17 +100,34 @@ export async function PATCH(req: Request) {
   }
 }
 
+const PROVIDER_ENDPOINTS: Record<string, { baseUrl: string; keyName: string; envKey: string }> = {
+  openrouter: { baseUrl: "https://openrouter.ai/api/v1", keyName: "openrouter_client_api_key", envKey: "OPENROUTER_API_KEY" },
+  gemini:     { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", keyName: "gemini_client_api_key", envKey: "GEMINI_API_KEY" },
+  grok:       { baseUrl: "https://api.x.ai/v1", keyName: "grok_client_api_key", envKey: "XAI_API_KEY" },
+  together:   { baseUrl: "https://api.together.xyz/v1", keyName: "together_client_api_key", envKey: "TOGETHER_API_KEY" },
+  cerebras:   { baseUrl: "https://api.cerebras.ai/v1", keyName: "cerebras_client_api_key", envKey: "CEREBRAS_API_KEY" },
+  groq:       { baseUrl: "https://api.groq.com/openai/v1", keyName: "groq_client_api_key", envKey: "GROQ_API_KEY" },
+  deepseek:   { baseUrl: "https://api.deepseek.com/v1", keyName: "deepseek_client_api_key", envKey: "DEEPSEEK_API_KEY" },
+  mistral:    { baseUrl: "https://api.mistral.ai/v1", keyName: "mistral_client_api_key", envKey: "MISTRAL_API_KEY" },
+  fireworks:  { baseUrl: "https://api.fireworks.ai/inference/v1", keyName: "fireworks_client_api_key", envKey: "FIREWORKS_API_KEY" },
+  ollama:     { baseUrl: "http://localhost:11434/v1", keyName: "ollama_client_api_key", envKey: "OLLAMA_API_KEY" },
+};
+
 // POST /api/test-ai-model — execute test model call
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
   const supabase = getSupabaseClient(cookieStore);
   let provider: string;
   let model: string;
+  let customBaseUrl: string = "";
+  let customApiKey: string = "";
 
   try {
     const body = await request.json();
     provider      = (body.provider ?? "openrouter").trim().toLowerCase();
     model         = (body.model    ?? "").trim();
+    customBaseUrl = (body.base_url ?? "").trim();
+    customApiKey  = (body.api_key  ?? "").trim();
   } catch {
     return NextResponse.json({ success: false, error: "Invalid JSON body." }, { status: 400 });
   }
@@ -119,85 +136,89 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "model is required." }, { status: 400 });
   }
 
-  let resolvedKey = "";
-  let endpoint = "";
+  // Load all user settings from DB
+  let settingsMap = new Map<string, string>();
+  let customAiProviders: any[] = [];
+  try {
+    const { data: settings } = await supabase
+      .from("agent_settings")
+      .select("key, value");
+    settingsMap = new Map((settings || []).map(s => [s.key, s.value]));
+
+    const rawCustom = settingsMap.get("custom_ai_providers");
+    if (rawCustom) {
+      try { customAiProviders = JSON.parse(rawCustom); } catch {}
+    }
+  } catch {}
+
+  let resolvedKey = customApiKey;
+  let baseUrl = customBaseUrl;
   let headers: Record<string, string> = { "Content-Type": "application/json" };
 
-  if (provider === "gemini") {
-    try {
-      const { data } = await supabase
-        .from("agent_settings")
-        .select("value")
-        .eq("key", "gemini_client_api_key")
-        .single();
-      if (data?.value) {
-        resolvedKey = data.value.trim();
-      }
-    } catch {}
-
-    if (!resolvedKey) {
-      resolvedKey = process.env.GEMINI_API_KEY || "";
+  const builtin = PROVIDER_ENDPOINTS[provider];
+  if (builtin) {
+    baseUrl = builtin.baseUrl;
+    if (provider === "ollama") {
+      const dbOllamaBase = settingsMap.get("ollama_base_url")?.trim();
+      if (dbOllamaBase) baseUrl = dbOllamaBase;
+      else if (process.env.OLLAMA_BASE_URL) baseUrl = process.env.OLLAMA_BASE_URL;
     }
 
     if (!resolvedKey) {
+      resolvedKey = settingsMap.get(builtin.keyName)?.trim() || process.env[builtin.envKey] || "";
+    }
+
+    if (provider !== "ollama" && !resolvedKey) {
       return NextResponse.json(
-        { success: false, error: "No Gemini Client API Key configured.", provider, model },
+        { success: false, error: `No API key configured for ${provider}. Please add it in ENV Keys or AI Providers.`, provider, model },
         { status: 400 }
       );
     }
-    // Gemini OpenAI compat endpoint
-    endpoint = `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`;
-    headers["Authorization"] = `Bearer ${resolvedKey}`;
   } else {
-    // OpenRouter
-    // Load OpenRouter key from DB
-    try {
-      const { data } = await supabase
-        .from("agent_settings")
-        .select("value")
-        .eq("key", "openrouter_client_api_key")
-        .single();
-      if (data?.value) {
-        resolvedKey = data.value.trim();
+    // Check if custom provider
+    const foundCustom = customAiProviders.find((cp: any) => cp.id === provider);
+    if (foundCustom) {
+      baseUrl = foundCustom.base_url || foundCustom.baseUrl || baseUrl;
+      if (!resolvedKey) {
+        resolvedKey = foundCustom.api_key || foundCustom.apiKey || "";
       }
-    } catch {}
-
-    if (!resolvedKey) {
-      resolvedKey = process.env.OPENROUTER_API_KEY || "";
     }
+  }
 
-    if (!resolvedKey) {
-      return NextResponse.json(
-        { success: false, error: "No OpenRouter Client API Key configured.", provider, model },
-        { status: 400 }
-      );
-    }
+  if (!baseUrl) {
+    baseUrl = "https://openrouter.ai/api/v1";
+  }
 
-    // Strip "openrouter/" prefix from model if present
-    if (model.startsWith("openrouter/")) {
-      model = model.slice("openrouter/".length);
-    }
-
-    endpoint = `https://openrouter.ai/api/v1/chat/completions`;
+  if (resolvedKey) {
     headers["Authorization"] = `Bearer ${resolvedKey}`;
+  }
+  if (provider === "openrouter") {
     headers["HTTP-Referer"] = "http://localhost:3000";
     headers["X-Title"] = "AgentComplete";
   }
 
+  const endpoint = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+
+  // Strip provider prefix from model if present (e.g. "openrouter/...")
+  let cleanModel = model;
+  if (cleanModel.startsWith(`${provider}/`)) {
+    cleanModel = cleanModel.slice(`${provider}/`.length);
+  }
+
   const start = Date.now();
-  console.log(`[test-ai-model] → ${provider} | ${model} | ${endpoint}`);
+  console.log(`[test-ai-model] → ${provider} | ${cleanModel} | ${endpoint}`);
 
   try {
     const resp = await fetch(endpoint, {
       method: "POST",
       headers,
       body: JSON.stringify({
-        model,
+        model: cleanModel,
         messages: [{ role: "user", content: "Reply with one word: ok" }],
         max_tokens: 8,
         temperature: 0,
       }),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(45_000),
     });
 
     const latency_ms = Date.now() - start;
@@ -205,7 +226,7 @@ export async function POST(request: NextRequest) {
     if (!resp.ok) {
       let errText = "";
       try { errText = await resp.text(); } catch { /* ignore */ }
-      const short = errText.slice(0, 200);
+      const short = errText.slice(0, 250);
       console.log(`[test-ai-model] ✗ HTTP ${resp.status} in ${latency_ms}ms: ${short}`);
       return NextResponse.json({
         success: false,
@@ -216,13 +237,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.log(`[test-ai-model] ✓ ${latency_ms}ms — ${model} OK`);
-    return NextResponse.json({ success: true, latency_ms, provider, model });
+    console.log(`[test-ai-model] ✓ ${latency_ms}ms — ${cleanModel} OK`);
+    return NextResponse.json({ success: true, latency_ms, provider, model: cleanModel });
 
   } catch (err: unknown) {
     const latency_ms = Date.now() - start;
     const message = err instanceof Error ? err.message : String(err);
     console.log(`[test-ai-model] ✗ Error in ${latency_ms}ms: ${message}`);
-    return NextResponse.json({ success: false, error: message, latency_ms, provider, model });
+    return NextResponse.json({ success: false, error: message, latency_ms, provider, model: cleanModel });
   }
 }

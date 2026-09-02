@@ -33,7 +33,7 @@ interface PythonParseResult {
   nextRunAt: string | null;
 }
 
-function getNextRunFromPython(scheduleStr: string): PythonParseResult {
+function getNextRunFromPython(scheduleStr: string, timezone?: string | null): PythonParseResult {
   try {
     const pythonCode = `
 import json
@@ -42,8 +42,8 @@ import sys
 sys.path.insert(0, ".")
 from research_agent.tools.cronjob import parse_schedule, compute_next_run
 try:
-    parsed = parse_schedule(${JSON.stringify(scheduleStr)})
-    next_run = compute_next_run(parsed)
+    parsed = parse_schedule(${JSON.stringify(scheduleStr)}, tz=${timezone ? JSON.stringify(timezone) : "None"})
+    next_run = compute_next_run(parsed, tz=${timezone ? JSON.stringify(timezone) : "None"})
     print(json.dumps({"success": True, "schedule": parsed, "next_run_at": next_run}))
 except Exception as e:
     print(json.dumps({"success": False, "error": str(e)}))
@@ -60,6 +60,21 @@ except Exception as e:
     console.error("Failed to parse schedule using Python:", err);
     throw err;
   }
+}
+
+async function getUserTimezone(supabase: any, userId: string): Promise<string | null> {
+  try {
+    const { data } = await supabase
+      .from("agent_settings")
+      .select("value")
+      .eq("user_id", userId)
+      .eq("key", "timezone")
+      .maybeSingle();
+    if (data?.value) return data.value;
+  } catch (err) {
+    console.error("Failed to load user timezone preference:", err);
+  }
+  return null;
 }
 
 // GET /api/scheduled-tasks — list all scheduled tasks
@@ -114,7 +129,11 @@ export async function POST(req: Request) {
       provider,
       base_url,
       enabled_toolsets,
-      workdir
+      workdir,
+      timezone,
+      mount_chat,
+      context_summary,
+      origin
     } = body;
 
     if (!schedule) {
@@ -129,15 +148,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "script is required when no_agent is true" }, { status: 400 });
     }
 
+    // Timezone: per-task override > user's saved scheduler preference
+    const userTimezone = await getUserTimezone(supabase, user.id);
+    const effectiveTimezone = timezone || userTimezone;
+
     // Call Python to get structured schedule and next run timestamp
     let parsedSchedule;
     let nextRunAt;
     try {
-      const parsed = getNextRunFromPython(schedule);
+      const parsed = getNextRunFromPython(schedule, effectiveTimezone);
       parsedSchedule = parsed.schedule;
       nextRunAt = parsed.nextRunAt;
     } catch (parseErr: any) {
       return NextResponse.json({ error: `Invalid schedule: ${parseErr.message}` }, { status: 400 });
+    }
+
+    // A one-shot whose resolved time is already in the past would never fire
+    if (parsedSchedule?.kind === "once" && !nextRunAt) {
+      return NextResponse.json(
+        { error: `Schedule "${schedule}" resolves to a time in the past. Pick a future time.` },
+        { status: 400 }
+      );
     }
 
     const taskName = name || (prompt ? (prompt.length > 45 ? prompt.substring(0, 45) + "..." : prompt) : path.basename(script || "Cron Task"));
@@ -161,6 +192,10 @@ export async function POST(req: Request) {
         base_url: base_url ?? null,
         enabled_toolsets: enabled_toolsets ?? [],
         workdir: workdir ?? null,
+        timezone: effectiveTimezone ?? null,
+        mount_chat: mount_chat ?? null,
+        context_summary: context_summary ?? null,
+        origin: origin ?? {},
         next_run_at: nextRunAt,
         state: "scheduled",
         enabled: true,

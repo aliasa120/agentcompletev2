@@ -16,27 +16,71 @@ function elapsed(isoStr: string | null | undefined): number {
     return (Date.now() - new Date(isoStr).getTime()) / 1000;
 }
 
+// Mirrors research_agent/plugins.py semantics: enabled when any user enabled
+// the plugin, else when no override exists and the catalog default is on.
+async function isPluginEnabled(pluginKey: string): Promise<boolean> {
+    try {
+        const { data: pluginRow } = await supabase
+            .from("plugins")
+            .select("default_enabled")
+            .eq("plugin_key", pluginKey)
+            .maybeSingle();
+        if (!pluginRow) return true;
+        const { data: overrides } = await supabase
+            .from("user_plugin_settings")
+            .select("enabled")
+            .eq("plugin_key", pluginKey);
+        const rows = overrides ?? [];
+        if (rows.some((r: { enabled: boolean }) => r.enabled)) return true;
+        if (rows.length > 0) return false;
+        return !!pluginRow.default_enabled;
+    } catch {
+        return true;
+    }
+}
+
 export async function GET() {
     const now = new Date().toISOString();
     const status: Record<string, unknown> = { checked_at: now };
 
     try {
-        // ── Feeder status ──────────────────────────────────────────────────
-        const { data: fRows } = await supabase
-            .from("feeder_settings")
-            .select("key,value")
-            .in("key", ["feeder_auto_trigger_enabled", "feeder_auto_trigger_interval_minutes", "feeder_last_trigger_at"]);
+        // ── Feeder status (per-workflow schedules — matches cron_scheduler.py) ──
+        const feederPluginEnabled = await isPluginEnabled("feeder");
+        if (!feederPluginEnabled) {
+            status.feeder = { enabled: false };
+        } else {
+            const { data: wfs } = await supabase
+                .from("workflows")
+                .select("id, name, feeder_interval_minutes, feeder_last_trigger_at")
+                .eq("is_active", true)
+                .eq("feeder_enabled", true);
 
-        const fm: Record<string, string> = {};
-        for (const r of fRows ?? []) fm[r.key] = r.value ?? "";
+            const schedules = (wfs ?? []).map((w) => {
+                const interval = w.feeder_interval_minutes || 30;
+                const elapsedMin = elapsed(w.feeder_last_trigger_at) / 60;
+                return {
+                    workflow_id: w.id,
+                    workflow_name: w.name,
+                    interval_min: interval,
+                    elapsed_min: Math.round(elapsedMin),
+                    next_in_min: Math.round(Math.max(0, interval - elapsedMin)),
+                };
+            });
 
-        const fEnabled = fm.feeder_auto_trigger_enabled === "true";
-        const fInterval = parseFloat(fm.feeder_auto_trigger_interval_minutes || "30");
-        const fElapsed = elapsed(fm.feeder_last_trigger_at) / 60; // minutes
-        const fNextIn = Math.max(0, fInterval - fElapsed);
-        status.feeder = fEnabled
-            ? { enabled: true, interval_min: fInterval, elapsed_min: Math.round(fElapsed), next_in_min: Math.round(fNextIn) }
-            : { enabled: false };
+            if (schedules.length === 0) {
+                status.feeder = { enabled: false };
+            } else {
+                // Report the soonest upcoming run as the headline status
+                const soonest = schedules.reduce((a, b) => (b.next_in_min < a.next_in_min ? b : a));
+                status.feeder = {
+                    enabled: true,
+                    interval_min: soonest.interval_min,
+                    elapsed_min: soonest.elapsed_min,
+                    next_in_min: soonest.next_in_min,
+                    schedules,
+                };
+            }
+        }
 
         // ── Agent status ───────────────────────────────────────────────────
         const { data: aRows } = await supabase

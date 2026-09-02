@@ -1,16 +1,13 @@
-"""Shared slash-command registry (Hermes-lite).
+"""Shared slash-command registry (Universal '/' interface).
 
-Two delivery surfaces share this one registry:
-  - **Web composer** — assistant-ui slash popover; `/cmd` text reaches the graph.
-  - **Messaging platforms** (Telegram / Slack / Discord) — native `/` commands are
-    owned by those platforms, so we use the ``!`` prefix there (e.g. ``!learn``)
-    to avoid interference with the platforms' own command handling.
+All delivery surfaces (Web composer, Telegram, Discord, Slack) share this one registry.
+Universal prefix: '/' (with transparent '!' fallback support).
 
 Command kinds:
   - ``session`` : handled client/platform-side, never sent to the agent
-                  (new thread, status, voice toggle, help …).
+                  (start, new, stop, status, voice toggle, help …).
   - ``agent``   : rewritten by the graph's ``preprocess_input`` node into an
-                  agent instruction (only /learn today).
+                  agent instruction (e.g. /learn).
 """
 
 from __future__ import annotations
@@ -18,27 +15,28 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
-# Prefix used on messaging platforms (web composer / is fine — it's our own UI).
-PLATFORM_PREFIX = "!"
+# Universal command prefix
+PLATFORM_PREFIX = "/"
 
 
 @dataclass(frozen=True)
 class CommandDef:
     name: str                                 # canonical name without prefix
     description: str
-    category: str                             # "Session" | "Tools & Skills" | "Info"
+    category: str                             # "Session" | "Tools & Skills" | "Voice Control" | "Info"
     kind: str                                 # "session" | "agent"
     args_hint: str = ""
     aliases: Tuple[str, ...] = field(default_factory=tuple)
 
 
 COMMAND_REGISTRY: tuple[CommandDef, ...] = (
+    CommandDef("start",  "Select or switch the active workflow",                  "Session",        "session", aliases=("workflows",)),
     CommandDef("new",    "Start a new conversation thread",                       "Session",        "session"),
+    CommandDef("stop",   "Stop and cancel active agent execution",                "Session",        "session", aliases=("cancel", "abort")),
     CommandDef("status", "Show the active workflow and thread",                 "Session",        "session"),
     CommandDef("voice",  "Voice replies: on=mirror voice, tts=always, off=never", "Voice Control",  "session", "[on|off|tts]", aliases=("voice-on", "voice-off", "voice-tts", "voice_on", "voice_off", "voice_tts")),
-    CommandDef("model",  "Change the agent model for this thread",              "Session",        "session"),
-    CommandDef("help",   "List available commands",                             "Info",           "session", aliases=("commands",)),
     CommandDef("learn",  "Learn a reusable skill from a description or this chat", "Tools & Skills", "agent", "<what to learn from>"),
+    CommandDef("help",   "List available commands",                             "Info",           "session", aliases=("commands",)),
 )
 
 _COMMANDS_BY_NAME = {c.name: c for c in COMMAND_REGISTRY}
@@ -50,13 +48,13 @@ for _c in COMMAND_REGISTRY:
 def resolve_command(text: str) -> Optional[Tuple[CommandDef, str]]:
     """Parse a leading command from message text.
 
-    Accepts ``!name args`` (messaging) and ``/name args`` (web composer).
+    Accepts both ``/name args`` and ``!name args`` across all platforms.
     Returns (CommandDef, args) or None.
     """
     if not text:
         return None
     text = text.lstrip()
-    if not text.startswith((PLATFORM_PREFIX, "/")):
+    if not text.startswith(("/", "!")):
         return None
     body = text[1:]
     name, _, args = body.partition(" ")
@@ -67,9 +65,10 @@ def resolve_command(text: str) -> Optional[Tuple[CommandDef, str]]:
 
 
 def help_lines() -> list[str]:
-    """Human-readable command list for !help responses."""
+    """Human-readable command list for /help responses."""
     lines = []
     for c in COMMAND_REGISTRY:
         hint = f" {c.args_hint}" if c.args_hint else ""
-        lines.append(f"{PLATFORM_PREFIX}{c.name}{hint} — {c.description}")
+        lines.append(f"/{c.name}{hint} — {c.description}")
     return lines
+

@@ -15,18 +15,199 @@ import base64
 import mimetypes
 import threading
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
-from langchain_core.messages import SystemMessage
+from dotenv import load_dotenv
+load_dotenv()
+
+from langchain_core.messages import SystemMessage, AIMessage, ToolCall, ToolMessage
 from langchain_core.tools import tool, StructuredTool
 from langchain_core.runnables import RunnableConfig
+from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware.human_in_the_loop import (
+    HumanInTheLoopMiddleware,
+    InterruptOnConfig,
+    ActionRequest,
+    ReviewConfig,
+    HITLRequest,
+    Decision,
+)
+
+from langgraph.types import interrupt
 from deepagents import create_deep_agent
 from research_agent.fs_backend import thread_filesystem_backend
 
+
+class SafeHumanInTheLoopMiddleware(HumanInTheLoopMiddleware):
+    """Resilient Human-In-The-Loop middleware that safely handles batch tool approvals,
+    broadcasts single 'approve'/'reject' decisions to all batch calls, and unpacks ID-wrapped payloads.
+    """
+    def after_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:
+        messages = state.get("messages", []) if isinstance(state, dict) else getattr(state, "messages", [])
+        if not messages:
+            return None
+
+        last_ai_msg = next((msg for msg in reversed(messages) if isinstance(msg, AIMessage)), None)
+        if not last_ai_msg or not getattr(last_ai_msg, "tool_calls", None):
+            return None
+
+        action_requests: list[ActionRequest] = []
+        review_configs: list[ReviewConfig] = []
+        interrupt_indices: list[int] = []
+
+        for idx, tool_call in enumerate(last_ai_msg.tool_calls):
+            if (config := self.interrupt_on.get(tool_call["name"])) is not None:
+                action_request, review_config = self._create_action_and_config(
+                    tool_call, config, state, runtime
+                )
+                action_requests.append(action_request)
+                review_configs.append(review_config)
+                interrupt_indices.append(idx)
+
+        if not action_requests:
+            return None
+
+        hitl_request = HITLRequest(
+            action_requests=action_requests,
+            review_configs=review_configs,
+        )
+
+        raw_resume = interrupt(hitl_request)
+
+        # Unpack resume data robustly
+        decisions: list[dict] = []
+        if isinstance(raw_resume, dict):
+            if "decisions" in raw_resume:
+                decisions = raw_resume["decisions"]
+            else:
+                for v in raw_resume.values():
+                    if isinstance(v, dict) and "decisions" in v:
+                        decisions = v["decisions"]
+                        break
+                if not decisions and "type" in raw_resume:
+                    decisions = [raw_resume]
+        elif isinstance(raw_resume, list):
+            decisions = raw_resume
+        elif raw_resume in ("approve", True):
+            decisions = [{"type": "approve"}]
+        elif raw_resume in ("reject", False):
+            decisions = [{"type": "reject"}]
+
+        if not isinstance(decisions, list) or not decisions:
+            decisions = [{"type": "approve"}]
+
+        # If user passed 1 decision (e.g. 'approve') for N batch calls, expand to all calls
+        if len(decisions) == 1 and len(interrupt_indices) > 1:
+            decisions = [decisions[0]] * len(interrupt_indices)
+        elif len(decisions) < len(interrupt_indices):
+            decisions = list(decisions) + [{"type": "approve"} for _ in range(len(interrupt_indices) - len(decisions))]
+
+        # Process decisions and rebuild tool calls in original order
+        revised_tool_calls: list[ToolCall] = []
+        artificial_tool_messages: list[ToolMessage] = []
+        decision_idx = 0
+
+        for idx, tool_call in enumerate(last_ai_msg.tool_calls):
+            if idx in interrupt_indices:
+                config = self.interrupt_on[tool_call["name"]]
+                decision = decisions[decision_idx] if decision_idx < len(decisions) else {"type": "approve"}
+                decision_idx += 1
+
+                revised_tool_call, tool_message = self._process_decision(
+                    decision, tool_call, config
+                )
+                if revised_tool_call is not None:
+                    revised_tool_calls.append(revised_tool_call)
+                if tool_message:
+                    artificial_tool_messages.append(tool_message)
+            else:
+                revised_tool_calls.append(tool_call)
+
+        last_ai_msg.tool_calls = revised_tool_calls
+        return {"messages": [last_ai_msg, *artificial_tool_messages]}
+
+    async def aafter_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:
+        return self.after_model(state, runtime)
+
+
+class CurrentDateTimeMiddleware(AgentMiddleware):
+    """Injects the LIVE current date/time into the system prompt on every model call.
+
+    Without this, the date is frozen at process-start time (``{date}`` is substituted
+    once at compile time), so a long-running server would tell the model the wrong day.
+    Scheduling tools rely on the model knowing "now", so this is refreshed per call
+    and rendered in the user's saved scheduler timezone (``agent_settings.timezone``).
+    """
+
+    name = "CurrentDateTimeMiddleware"
+
+    def _resolve_timezone(self) -> Optional[str]:
+        try:
+            from research_agent.tools.cronjob import _resolve_tz
+        except Exception:
+            return None
+        try:
+            from research_agent.tools.provider_engine import get_settings
+            tz = _resolve_tz((get_settings() or {}).get("timezone"))
+            if tz:
+                return tz
+        except Exception:
+            pass
+        return _resolve_tz(os.getenv("HERMES_TIMEZONE", ""))
+
+    def _datetime_block(self) -> str:
+        tz_name = self._resolve_timezone()
+        now = datetime.now()
+        if tz_name:
+            try:
+                from zoneinfo import ZoneInfo
+                now = datetime.now(ZoneInfo(tz_name))
+            except Exception:
+                now = datetime.now().astimezone()
+        else:
+            now = now.astimezone()
+
+        label = tz_name or (now.tzname() or "server local time")
+        return (
+            "\n\n## Current Date & Time (live — refreshed every turn)\n"
+            f"- Current date: {now.strftime('%Y-%m-%d')} ({now.strftime('%A')})\n"
+            f"- Current time: {now.strftime('%H:%M')} ({now.strftime('%I:%M %p').lstrip('0')})\n"
+            f"- Timezone: {label}\n"
+            f"- Tomorrow: {(now + timedelta(days=1)).strftime('%Y-%m-%d (%A)')}\n"
+            "Use this as the anchor for every relative date/time the user mentions "
+            "('today', 'tonight', '3:40pm', 'in 2 hours', 'tomorrow'). When scheduling, "
+            "pass the user's wording (e.g. '15:40', 'tomorrow at 9am') straight to the "
+            "`cronjob` tool — it resolves against this same current date. NEVER invent a "
+            "future date the user did not ask for.\n"
+        )
+
+    def wrap_model_call(self, request, handler):
+        try:
+            block = self._datetime_block()
+            existing = request.system_message
+            base = existing.content if existing is not None else ""
+            request = request.override(system_message=SystemMessage(content=f"{base}{block}"))
+        except Exception as e:
+            print(f"[workflow_compiler] CurrentDateTimeMiddleware skipped: {e}")
+        return handler(request)
+
+    async def awrap_model_call(self, request, handler):
+        try:
+            block = self._datetime_block()
+            existing = request.system_message
+            base = existing.content if existing is not None else ""
+            request = request.override(system_message=SystemMessage(content=f"{base}{block}"))
+        except Exception as e:
+            print(f"[workflow_compiler] CurrentDateTimeMiddleware skipped: {e}")
+        return await handler(request)
+
+
 from research_agent.chat_model import ResilientChatModel
+from research_agent.plugins import enabled_plugins_from_bootstrap, is_tool_allowed
 from research_agent.tools.mcp_loader import load_mcp_tools_for_agent
 from research_agent.tools.provider_engine import (
+    resolve_provider_credentials,
     get_provider_base_url,
     get_provider_api_key,
     get_provider_config,
@@ -38,10 +219,14 @@ from research_agent.tools import (
     unified_extract,
     think_tool,
     fetch_images_brave,
-    view_candidate_images,
     analyze_images_gemini,
     create_post_image,
     save_posts_to_supabase,
+    save_wordpress_post,
+    save_instagram_post,
+    save_facebook_post,
+    save_youtube_video,
+    save_social_bundle,
     get_design_guide,
     read_skill,
     get_wordpress_categories,
@@ -64,7 +249,7 @@ from research_agent.tools import (
     youtube_transcript,
     text_to_speech,
     terminal,
-    ask_permission,
+    upload_to_storage,
     list_tools,
     load_tools,
     call_tool,
@@ -132,34 +317,29 @@ def _get_base64_image(file_path: str) -> tuple[str, str]:
     return encoded, mime_type
 
 
-def _get_agent_system_prompt_with_images(client, agent_id: str, base_prompt: str) -> SystemMessage | str:
+def _get_agent_system_prompt_with_images(client, agent_id: str, base_prompt: str) -> str:
     assets = _load_agent_design_assets(client, agent_id)
     if not assets:
         return base_prompt
 
-    content_blocks = [{"type": "text", "text": base_prompt}]
-    content_blocks.append({
-        "type": "text",
-        "text": "\n\n=== ATTACHED BRAND/STYLE REFERENCE IMAGES ===\nYou can refer to these images directly by their Key or Label in your instructions (e.g. \"Reference Image 1\" or by their Key/Label)."
-    })
-
+    ref_lines = []
     for idx, asset in enumerate(assets, start=1):
-        try:
-            img_base64, mime_type = _get_base64_image(asset["file_path"])
-            content_blocks.append({
-                "type": "text",
-                "text": f"\nReference Image {idx}:\n- Key: {asset['asset_key']}\n- Label: {asset['label']}\n- File Path: {asset['file_path']}"
-            })
-            content_blocks.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:{mime_type};base64,{img_base64}"
-                }
-            })
-        except Exception as e:
-            print(f"[workflow_compiler] Error loading reference image {asset['file_path']}: {e}")
+        ref_lines.append(
+            f"Reference Image {idx}:\n"
+            f"- Key: {asset.get('asset_key', f'ref{idx}')}\n"
+            f"- Label: {asset.get('label', '')}\n"
+            f"- File Path: {asset.get('file_path', '')}"
+        )
 
-    return SystemMessage(content=content_blocks)
+    return (
+        f"{base_prompt}\n\n"
+        "=== ATTACHED BRAND/STYLE REFERENCE IMAGES ===\n"
+        "The following brand/style reference images are attached to your configuration:\n\n"
+        + "\n\n".join(ref_lines) + "\n\n"
+        "Usage Guide:\n"
+        "- When creating or editing images, pass these reference images or their keys to `create_post_image`.\n"
+        "- If you need to inspect or analyze the visual details/contents of any brand image or attachment, call `omni_analyzer`.\n"
+    )
 
 
 def _bind_agent_id_to_list_skills(list_skills_tool, agent_id: str, user_id: str = ""):
@@ -298,15 +478,21 @@ def load_dynamic_agents_by_workflow() -> dict:
 
         mcp_tool_modes = {row["tool_key"]: row["loading_mode"] for row in (bootstrap.get("mcp_tool_settings") or [])}
 
+        enabled_plugins = enabled_plugins_from_bootstrap(bootstrap)
+
         tool_lookup = {
             "unified_search": unified_search,
             "unified_extract": unified_extract,
             "think_tool": think_tool,
             "fetch_images_brave": fetch_images_brave,
-            "view_candidate_images": view_candidate_images,
             "analyze_images_gemini": analyze_images_gemini,
             "create_post_image": create_post_image,
             "save_posts_to_supabase": save_posts_to_supabase,
+            "save_wordpress_post": save_wordpress_post,
+            "save_instagram_post": save_instagram_post,
+            "save_facebook_post": save_facebook_post,
+            "save_youtube_video": save_youtube_video,
+            "save_social_bundle": save_social_bundle,
             "get_design_guide": get_design_guide,
             "read_skill": read_skill,
             "get_wordpress_categories": get_wordpress_categories,
@@ -320,7 +506,7 @@ def load_dynamic_agents_by_workflow() -> dict:
             "cronjob": cronjob,
             "text_to_speech": text_to_speech,
             "terminal": terminal,
-            "ask_permission": ask_permission,
+            "upload_to_storage": upload_to_storage,
             "search_conversation_history": search_conversation_history,
             "omni_analyzer": omni_analyzer,
             "analyze_attachment": omni_analyzer,
@@ -390,6 +576,7 @@ def load_dynamic_agents_by_workflow() -> dict:
 
             main_cfg = main_configs[0]
             main_id = main_cfg["id"]
+            user_id = main_cfg.get("user_id") or wf.get("user_id")
             base_main_prompt = main_cfg.get("system_prompt", "").replace("{date}", datetime.now().strftime("%Y-%m-%d"))
 
             try:
@@ -407,12 +594,16 @@ def load_dynamic_agents_by_workflow() -> dict:
                 print(f"[workflow_compiler] Failed to build tools index: {e}")
 
             WORKSPACE_PATH_DIRECTIVE = (
-                "\n\n## Workspace and Path Rules:\n"
-                "- All tools (`write_file`, `read_file`, `edit_file`, `terminal`) run inside your current conversation thread workspace directory.\n"
-                "- ALWAYS use simple relative paths (e.g. `write_file(\"make_charts.py\", ...)` or `write_file(\"data.json\", ...)`).\n"
-                "- In Python code: ALWAYS save charts, images, PDFs, and data using relative filenames in the current directory (e.g. `plt.savefig(\"chart1.png\")`, `SimpleDocTemplate(\"report.pdf\")`).\n"
+                "\n\n## Workspace, Tool Calling, and Conversation Rules:\n"
+                "- All tools (`write_file`, `read_file`, `edit_file`, `terminal`, `call_tool`) run inside your current conversation thread workspace directory.\n"
+                "- When creating files, ALWAYS call `write_file(file_path=\"filename.ext\", content=\"...\")` with the full content string (never leave arguments empty).\n"
+                "- When executing scripts or commands, ALWAYS call `terminal(command=\"...\")` with the command string.\n"
+                "- ALWAYS use simple relative paths.\n"
                 "- DO NOT hardcode `/tmp/` or absolute paths in your Python code or terminal commands.\n"
-                "- Run scripts directly via `terminal(\"python make_charts.py\")`.\n"
+                "\n## Tool Call Completion, Result Presentation, and Multi-Turn Rules:\n"
+                "1. Whenever you execute a tool (like `call_tool`, creating a Google Doc, writing a file, etc.) and the tool returns data (such as a link or URL), you MUST ALWAYS write a final helpful message to the user summarizing the result, sharing any generated links/URLs, and confirming completion.\n"
+                "2. When a tool action has ALREADY been executed and completed in previous messages in this conversation (e.g. document already created), NEVER call the tool again for the same target unless the user explicitly requests changes or a new document.\n"
+                "3. If the user sends 'continue', 'proceed', or a follow-up, do NOT re-execute already completed actions; reference the existing result and ask what they would like to do next or proceed to subsequent steps.\n"
             )
 
             main_prompt = _get_agent_system_prompt_with_images(client, main_id, base_main_prompt) + WORKSPACE_PATH_DIRECTIVE
@@ -420,16 +611,9 @@ def load_dynamic_agents_by_workflow() -> dict:
             main_provider = (main_cfg.get("provider") or "openrouter").strip().lower()
             main_model_name = main_cfg.get("model") or "google/gemini-2.5-flash"
 
-            actual_main_provider = main_provider if main_provider in get_all_provider_names() else "openrouter"
-            main_base_url = get_provider_base_url(actual_main_provider)
-            cfg = get_provider_config(actual_main_provider)
-            if cfg and "base_url_env" in cfg and not main_base_url.endswith("/v1"):
-                main_base_url = main_base_url + "/v1"
-
-            if actual_main_provider == "openrouter":
-                main_api_key = db_settings.get("openrouter_client_api_key", "").strip() or get_provider_api_key("openrouter")
-            else:
-                main_api_key = get_provider_api_key(actual_main_provider)
+            main_base_url, main_api_key, main_model_name = resolve_provider_credentials(
+                main_provider, main_model_name, settings=db_settings, user_id=user_id
+            )
 
             main_model = ResilientChatModel(
                 agent_type="main_agent",
@@ -442,12 +626,30 @@ def load_dynamic_agents_by_workflow() -> dict:
             )
 
             main_tools = []
-            bindings_by_tool = {a.get("tool_key"): a.get("parameter_bindings") or {} for a in tool_assignments_by_agent.get(main_id, [])}
+            main_interrupt_on = {}
+            bindings_by_tool = {a.get("tool_key"): a.get("parameter_bindings") for a in tool_assignments_by_agent.get(main_id, []) if a.get("parameter_bindings")}
+            permissions_by_tool = {a.get("tool_key"): a.get("permission_mode") for a in tool_assignments_by_agent.get(main_id, []) if a.get("permission_mode")}
             from research_agent.tools.dynamic_router import bind_tool_parameters
+
+            try:
+                builtin_perm_modes = json.loads(db_settings.get("builtin_tools_permission_modes") or "{}") if isinstance(db_settings.get("builtin_tools_permission_modes"), str) else (db_settings.get("builtin_tools_permission_modes") or {})
+                builtin_param_bindings = json.loads(db_settings.get("builtin_tools_parameter_bindings") or "{}") if isinstance(db_settings.get("builtin_tools_parameter_bindings"), str) else (db_settings.get("builtin_tools_parameter_bindings") or {})
+            except Exception:
+                builtin_perm_modes = {}
+                builtin_param_bindings = {}
+
+            try:
+                mcp_perm_modes = json.loads(db_settings.get("mcp_tools_permission_modes") or "{}") if isinstance(db_settings.get("mcp_tools_permission_modes"), str) else (db_settings.get("mcp_tools_permission_modes") or {})
+                mcp_param_bindings = json.loads(db_settings.get("mcp_tools_parameter_bindings") or "{}") if isinstance(db_settings.get("mcp_tools_parameter_bindings"), str) else (db_settings.get("mcp_tools_parameter_bindings") or {})
+            except Exception:
+                mcp_perm_modes = {}
+                mcp_param_bindings = {}
 
             for a in tool_assignments_by_agent.get(main_id, []):
                 t_type = a.get("tool_type")
                 t_key = a.get("tool_key")
+                if t_type == "builtin" and not is_tool_allowed(t_key, enabled_plugins):
+                    continue
                 loading_mode = a.get("loading_mode")
                 if not loading_mode:
                     loading_mode = builtin_loading_modes.get(t_key, "primary") if t_type == "builtin" else mcp_tool_modes.get(t_key, "primary")
@@ -462,6 +664,15 @@ def load_dynamic_agents_by_workflow() -> dict:
                     loading_mode = "primary"
 
                 if loading_mode != "primary":
+                    continue
+
+                perm_mode = (
+                    permissions_by_tool.get(t_key)
+                    or builtin_perm_modes.get(t_key)
+                    or mcp_perm_modes.get(t_key)
+                    or "always_allow"
+                )
+                if perm_mode == "deny":
                     continue
 
                 if t_type == "builtin" and t_key in tool_lookup:
@@ -480,21 +691,51 @@ def load_dynamic_agents_by_workflow() -> dict:
                     elif t_key == "call_tool":
                         tool_func = _bind_agent_id_to_call_tool(call_tool, main_id, user_id=main_user_id)
 
-                    bindings = bindings_by_tool.get(t_key) or {}
+                    bindings = (
+                        bindings_by_tool.get(t_key)
+                        or builtin_param_bindings.get(t_key)
+                        or {}
+                    )
                     if bindings:
                         tool_func = bind_tool_parameters(tool_func, bindings)
+
+                    tool_name = getattr(tool_func, "name", t_key)
+                    if perm_mode == "ask":
+                        main_interrupt_on[tool_name] = True
                     main_tools.append(tool_func)
                 elif t_key.startswith("unified_"):
                     tool_func = make_dynamic_unified_tool(t_key)
-                    bindings = bindings_by_tool.get(t_key) or {}
+                    bindings = (
+                        bindings_by_tool.get(t_key)
+                        or builtin_param_bindings.get(t_key)
+                        or {}
+                    )
                     if bindings:
                         tool_func = bind_tool_parameters(tool_func, bindings)
+
+                    tool_name = getattr(tool_func, "name", t_key)
+                    if perm_mode == "ask":
+                        main_interrupt_on[tool_name] = True
                     main_tools.append(tool_func)
 
             main_mcp = load_mcp_tools_for_agent(main_id)
             for t in main_mcp:
-                bindings = bindings_by_tool.get(t.name) or {}
-                main_tools.append(bind_tool_parameters(t, bindings) if bindings else t)
+                perm_mode = (
+                    permissions_by_tool.get(t.name)
+                    or mcp_perm_modes.get(t.name)
+                    or "always_allow"
+                )
+                if perm_mode == "deny":
+                    continue
+                bindings = (
+                    bindings_by_tool.get(t.name)
+                    or mcp_param_bindings.get(t.name)
+                    or {}
+                )
+                wrapped_t = bind_tool_parameters(t, bindings) if bindings else t
+                if perm_mode == "ask":
+                    main_interrupt_on[t.name] = True
+                main_tools.append(wrapped_t)
 
             subagents = []
             for sub in local_subs:
@@ -517,17 +758,10 @@ def load_dynamic_agents_by_workflow() -> dict:
                 sub_prompt = _get_agent_system_prompt_with_images(client, sub_id, base_sub_prompt)
                 sub_provider = (sub.get("provider") or "openrouter").strip().lower()
                 sub_model_name = sub.get("model") or "google/gemini-2.5-flash"
-                actual_sub_provider = sub_provider if sub_provider in get_all_provider_names() else "openrouter"
 
-                sub_base_url = get_provider_base_url(actual_sub_provider)
-                sub_cfg = get_provider_config(actual_sub_provider)
-                if sub_cfg and "base_url_env" in sub_cfg and not sub_base_url.endswith("/v1"):
-                    sub_base_url = sub_base_url + "/v1"
-
-                if actual_sub_provider == "openrouter":
-                    sub_api_key = db_settings.get("openrouter_client_api_key", "").strip() or get_provider_api_key("openrouter")
-                else:
-                    sub_api_key = get_provider_api_key(actual_sub_provider)
+                sub_base_url, sub_api_key, sub_model_name = resolve_provider_credentials(
+                    sub_provider, sub_model_name, settings=db_settings, user_id=user_id
+                )
 
                 sub_agent_type = "research_subagent" if "research" in sub["name"].lower() else "content_subagent"
                 sub_model = ResilientChatModel(
@@ -541,11 +775,15 @@ def load_dynamic_agents_by_workflow() -> dict:
                 )
 
                 sub_tools = []
-                sub_bindings_by_tool = {a.get("tool_key"): a.get("parameter_bindings") or {} for a in tool_assignments_by_agent.get(sub_id, [])}
+                sub_interrupt_on = {}
+                sub_bindings_by_tool = {a.get("tool_key"): a.get("parameter_bindings") for a in tool_assignments_by_agent.get(sub_id, []) if a.get("parameter_bindings")}
+                sub_permissions_by_tool = {a.get("tool_key"): a.get("permission_mode") for a in tool_assignments_by_agent.get(sub_id, []) if a.get("permission_mode")}
 
                 for a in tool_assignments_by_agent.get(sub_id, []):
                     t_type = a.get("tool_type")
                     t_key = a.get("tool_key")
+                    if t_type == "builtin" and not is_tool_allowed(t_key, enabled_plugins):
+                        continue
                     loading_mode = a.get("loading_mode")
                     if not loading_mode:
                         loading_mode = builtin_loading_modes.get(t_key, "primary") if t_type == "builtin" else mcp_tool_modes.get(t_key, "primary")
@@ -560,6 +798,15 @@ def load_dynamic_agents_by_workflow() -> dict:
                         loading_mode = "primary"
 
                     if loading_mode != "primary":
+                        continue
+
+                    perm_mode = (
+                        sub_permissions_by_tool.get(t_key)
+                        or builtin_perm_modes.get(t_key)
+                        or mcp_perm_modes.get(t_key)
+                        or "always_allow"
+                    )
+                    if perm_mode == "deny":
                         continue
 
                     if t_type == "builtin" and t_key in tool_lookup:
@@ -578,38 +825,70 @@ def load_dynamic_agents_by_workflow() -> dict:
                         elif t_key == "call_tool":
                             tool_func = _bind_agent_id_to_call_tool(call_tool, sub_id, user_id=sub_user_id)
 
-                        bindings = sub_bindings_by_tool.get(t_key) or {}
+                        bindings = (
+                            sub_bindings_by_tool.get(t_key)
+                            or builtin_param_bindings.get(t_key)
+                            or {}
+                        )
                         if bindings:
                             tool_func = bind_tool_parameters(tool_func, bindings)
+
+                        tool_name = getattr(tool_func, "name", t_key)
+                        if perm_mode == "ask":
+                            sub_interrupt_on[tool_name] = True
                         sub_tools.append(tool_func)
 
                 sub_mcp = load_mcp_tools_for_agent(sub_id)
                 for t in sub_mcp:
-                    bindings = sub_bindings_by_tool.get(t.name) or {}
-                    sub_tools.append(bind_tool_parameters(t, bindings) if bindings else t)
+                    perm_mode = (
+                        sub_permissions_by_tool.get(t.name)
+                        or mcp_perm_modes.get(t.name)
+                        or "always_allow"
+                    )
+                    if perm_mode == "deny":
+                        continue
+                    bindings = (
+                        sub_bindings_by_tool.get(t.name)
+                        or mcp_param_bindings.get(t.name)
+                        or {}
+                    )
+                    wrapped_t = bind_tool_parameters(t, bindings) if bindings else t
+                    if perm_mode == "ask":
+                        sub_interrupt_on[t.name] = True
+                    sub_tools.append(wrapped_t)
 
+                sub_mw = [CurrentDateTimeMiddleware()]
+                if sub_interrupt_on:
+                    sub_mw.append(SafeHumanInTheLoopMiddleware(interrupt_on=sub_interrupt_on))
                 subagents.append({
                     "name": sub["name"],
                     "description": sub.get("description") or "",
                     "system_prompt": sub_prompt,
                     "model": sub_model,
                     "tools": sub_tools,
+                    "middleware": sub_mw,
                 })
 
             for sa in subagents:
                 sa["tools"] = [t for t in sa["tools"] if getattr(t, "name", "") not in ("analyze_images_gemini", "get_design_guide")]
             main_tools = [t for t in main_tools if getattr(t, "name", "") not in ("analyze_images_gemini", "get_design_guide")]
 
+            main_mw = [CurrentDateTimeMiddleware()]
+            if main_interrupt_on:
+                main_mw.append(SafeHumanInTheLoopMiddleware(interrupt_on=main_interrupt_on))
             compiled_agent = create_deep_agent(
                 model=main_model,
                 tools=main_tools,
+                middleware=main_mw,
                 subagents=subagents,
                 system_prompt=main_prompt,
                 name=wf["name"].lower().replace(" ", "-"),
                 backend=thread_filesystem_backend,
+                interrupt_on=None,
             )
             workflows_compiled[str(wf_id)] = compiled_agent
             workflows_compiled[wf["name"]] = compiled_agent
+
 
         return workflows_compiled
     except Exception as e:
@@ -834,6 +1113,7 @@ def finalize_response(state, config: RunnableConfig):
             final_text,
             platform=platform,
             user_id=configurable.get("user_id"),
+            thread_id=configurable.get("thread_id"),
             purpose="mirror",
             max_chars=3000,
         )
@@ -975,12 +1255,19 @@ def save_chat_history(state, config: RunnableConfig):
                             if url.startswith("data:") and len(url) > 1000:
                                 mime = url.split(";")[0].replace("data:", "") if ";" in url else "image/png"
                                 part = {"type": "image_url", "image_url": {"url": f"data:{mime};placeholder"}}
-                        elif part.get("type") in ["audio", "video", "file"]:
-                            url = part.get("audio") or part.get("video") or part.get("data") or ""
-                            if "supabase.co/storage/v1/object/public/uploads" in url or url.startswith("data:"):
+                        elif part.get("type") in ["audio", "video", "file", "document"]:
+                            url = part.get("audio") or part.get("video") or part.get("data") or part.get("url") or ""
+                            # Only placeholder giant raw inline base64 data: URIs (> 1000 chars) to prevent checkpoint bloat.
+                            # NEVER delete or strip HTTP/HTTPS storage URLs (Cloudflare R2 / Supabase)!
+                            if url.startswith("data:") and len(url) > 1000:
                                 filename = part.get("filename") or "attached_file"
-                                part = {"type": "text", "text": f"\n\n[Attachment: {filename}]\n"}
+                                mime = part.get("mimeType") or "application/octet-stream"
+                                if part.get("type") == "file":
+                                    part = {"type": "file", "data": f"data:{mime};placeholder", "filename": filename, "mimeType": mime}
+                                else:
+                                    part = {"type": "text", "text": f"\n\n[Attachment: {filename}]\n"}
                         elif part.get("type") == "input_audio":
+
                             part = {
                                 "type": "input_audio",
                                 "input_audio": {

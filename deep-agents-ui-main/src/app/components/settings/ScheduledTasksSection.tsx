@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import {
   AlarmClock, Play, Pause, Trash2, Eye, Plus, Calendar, RefreshCw,
   Layers, CheckCircle2, XCircle, Loader2, Sparkles, Terminal, X,
-  ExternalLink, ChevronRight, HelpCircle
+  ExternalLink, ChevronRight, HelpCircle, Globe
 } from "lucide-react";
 
 interface ScheduledTask {
@@ -35,6 +35,9 @@ interface ScheduledTask {
   paused_at: string | null;
   deliver: string;
   workdir: string | null;
+  timezone: string | null;
+  mount_chat: string | null;
+  context_summary: string | null;
   last_run_at: string | null;
   last_run_logs: string | null;
   last_status: string | null;
@@ -52,6 +55,45 @@ interface Workflow {
   id: string;
   name: string;
 }
+
+const COMMON_TIMEZONES = [
+  "UTC",
+  "Asia/Karachi",
+  "Asia/Kolkata",
+  "Asia/Dubai",
+  "Asia/Riyadh",
+  "Asia/Tehran",
+  "Asia/Shanghai",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Asia/Seoul",
+  "Australia/Sydney",
+  "Pacific/Auckland",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Europe/Moscow",
+  "Europe/Istanbul",
+  "Africa/Cairo",
+  "Africa/Lagos",
+  "Africa/Johannesburg",
+  "America/Sao_Paulo",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Mexico_City",
+];
+
+const BROWSER_TIMEZONE = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    return "";
+  }
+})();
+
+const ALL_TIMEZONES = Array.from(new Set([BROWSER_TIMEZONE, ...COMMON_TIMEZONES].filter(Boolean))).sort();
 
 export function ScheduledTasksSection() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
@@ -75,7 +117,70 @@ export function ScheduledTasksSection() {
   const [formProvider, setFormProvider] = useState("");
   const [formWorkdir, setFormWorkdir] = useState("");
   const [formDeliver, setFormDeliver] = useState("local");
+  const [formTimezone, setFormTimezone] = useState("");
+  const [formContextSummary, setFormContextSummary] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Scheduler preferences (per-user, stored in agent_settings)
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userTimezone, setUserTimezone] = useState<string>("");
+  const [userTimeFormat, setUserTimeFormat] = useState<string>("locale");
+  const [savingPrefs, setSavingPrefs] = useState(false);
+
+  const fetchPrefs = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setUserId(user.id);
+      const { data } = await supabase
+        .from("agent_settings")
+        .select("key,value")
+        .in("key", ["timezone", "time_format"]);
+      const map: Record<string, string> = {};
+      for (const row of data ?? []) map[row.key] = row.value ?? "";
+      setUserTimezone(map["timezone"] || "");
+      setUserTimeFormat(map["time_format"] || "locale");
+    } catch (err) {
+      console.error("Failed to load scheduler preferences:", err);
+    }
+  };
+
+  const savePrefs = async (timezone: string, timeFormat: string) => {
+    if (!userId) {
+      toast.error("Not signed in — could not save preferences");
+      return;
+    }
+    setSavingPrefs(true);
+    try {
+      const { error } = await supabase
+        .from("agent_settings")
+        .upsert([
+          { user_id: userId, key: "timezone", value: timezone },
+          { user_id: userId, key: "time_format", value: timeFormat },
+        ]);
+      if (error) throw error;
+      setUserTimezone(timezone);
+      setUserTimeFormat(timeFormat);
+      toast.success("Scheduler preferences saved");
+    } catch (err: any) {
+      toast.error(`Failed to save preferences: ${err.message}`);
+    } finally {
+      setSavingPrefs(false);
+    }
+  };
+
+  // Format an ISO timestamp in the user's preferred timezone + time format
+  const fmtDateTime = (iso: string | null): string => {
+    if (!iso) return "Never";
+    try {
+      const opts: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" };
+      if (userTimezone) opts.timeZone = userTimezone;
+      if (userTimeFormat === "12h") opts.hour12 = true;
+      if (userTimeFormat === "24h") opts.hour12 = false;
+      return new Intl.DateTimeFormat("en-US", opts).format(new Date(iso));
+    } catch {
+      return new Date(iso).toLocaleString();
+    }
+  };
 
   const fetchTasks = async () => {
     try {
@@ -116,7 +221,7 @@ export function ScheduledTasksSection() {
   };
 
   useEffect(() => {
-    Promise.all([fetchTasks(), fetchSkills(), fetchWorkflows()]).finally(() => setLoading(false));
+    Promise.all([fetchTasks(), fetchSkills(), fetchWorkflows(), fetchPrefs()]).finally(() => setLoading(false));
   }, []);
 
   // Real-time task status updates subscription
@@ -221,6 +326,8 @@ export function ScheduledTasksSection() {
         provider: formProvider || undefined,
         workdir: formWorkdir || undefined,
         deliver: formDeliver || "local",
+        timezone: formTimezone || undefined,
+        context_summary: formContextSummary || undefined,
         origin: formWorkflowId ? { workflow_id: formWorkflowId } : undefined,
       };
 
@@ -252,6 +359,8 @@ export function ScheduledTasksSection() {
       setFormProvider("");
       setFormWorkdir("");
       setFormDeliver("local");
+      setFormTimezone("");
+      setFormContextSummary("");
 
       fetchTasks();
     } catch (err: any) {
@@ -338,6 +447,68 @@ export function ScheduledTasksSection() {
         />
       </JanCard>
 
+      {/* Scheduler preferences: timezone + time format */}
+      <JanCard>
+        <CardItem
+          align="start"
+          className="flex-col sm:flex-row gap-3"
+          title={
+            <span className="flex items-center gap-2">
+              <Globe className="h-5 w-5 text-primary" />
+              Scheduler Preferences
+            </span>
+          }
+          description="When you tell the agent e.g. 'schedule this for 9pm', cron times are interpreted in your timezone. Set your native timezone below — the agent and scheduler handle the rest."
+          actions={
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 text-xs gap-1.5"
+              disabled={savingPrefs}
+              onClick={() => savePrefs(userTimezone, userTimeFormat)}
+            >
+              {savingPrefs && <Loader2 className="h-3 w-3 animate-spin" />}
+              Save Preferences
+            </Button>
+          }
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 px-4 pb-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="pref-timezone" className="text-xs font-semibold">Your Timezone</Label>
+            <select
+              id="pref-timezone"
+              value={userTimezone}
+              onChange={e => setUserTimezone(e.target.value)}
+              className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">Browser default ({BROWSER_TIMEZONE || "auto"}{userTimezone ? "" : " — active"})</option>
+              {ALL_TIMEZONES.map(tz => (
+                <option key={tz} value={tz}>{tz}</option>
+              ))}
+            </select>
+            <p className="text-[10px] text-muted-foreground">
+              {userTimezone
+                ? `Active: ${userTimezone} — cron rules like '0 21 * * *' fire at 9pm in this zone.`
+                : `Active: ${BROWSER_TIMEZONE || "browser locale"} (auto-detected) — set an explicit zone for server-side accuracy.`}
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="pref-timeformat" className="text-xs font-semibold">Time Format</Label>
+            <select
+              id="pref-timeformat"
+              value={userTimeFormat}
+              onChange={e => setUserTimeFormat(e.target.value)}
+              className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="locale">Browser locale default</option>
+              <option value="12h">12-hour (9:00 PM)</option>
+              <option value="24h">24-hour (21:00)</option>
+            </select>
+            <p className="text-[10px] text-muted-foreground">Display only — affects how run times are shown in the task list.</p>
+          </div>
+        </div>
+      </JanCard>
+
       {/* Task table / grid */}
       <JanCard className="p-0 overflow-hidden">
         {loading ? (
@@ -371,7 +542,7 @@ export function ScheduledTasksSection() {
                     <td className="px-5 py-4 min-w-[200px]">
                       <div className="flex flex-col gap-0.5">
                         <span className="font-semibold text-foreground">{task.name}</span>
-                        {task.context_from && task.context_from.length > 0 && (
+                        {(task.context_from && task.context_from.length > 0) && (
                           <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1">
                             <Layers className="h-3 w-3" />
                             <span>Depends on:</span>
@@ -384,10 +555,26 @@ export function ScheduledTasksSection() {
                             </div>
                           </div>
                         )}
+                        {task.mount_chat && (
+                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1" title={`Mounted chat thread: ${task.mount_chat}`}>
+                            <Globe className="h-3 w-3" />
+                            <span>Chat context mounted</span>
+                          </div>
+                        )}
+                        {task.context_summary && (
+                          <div className="text-[10px] text-muted-foreground mt-1 truncate max-w-[220px]" title={task.context_summary}>
+                            {task.context_summary}
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-5 py-4 whitespace-nowrap">
                       <span className="font-medium text-xs font-mono">{task.schedule_display}</span>
+                      {task.timezone && (
+                        <div className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1" title="Task timezone">
+                          <Globe className="h-3 w-3" /> {task.timezone}
+                        </div>
+                      )}
                     </td>
                     <td className="px-5 py-4 whitespace-nowrap">
                       {task.no_agent ? (
@@ -408,13 +595,13 @@ export function ScheduledTasksSection() {
                         {getResultBadge(task)}
                         {task.last_run_at && (
                           <span className="text-xs text-muted-foreground">
-                            {new Date(task.last_run_at).toLocaleString()}
+                            {fmtDateTime(task.last_run_at)}
                           </span>
                         )}
                       </div>
                     </td>
                     <td className="px-5 py-4 whitespace-nowrap text-xs text-muted-foreground">
-                      {task.next_run_at ? new Date(task.next_run_at).toLocaleString() : "Never"}
+                      {fmtDateTime(task.next_run_at)}
                     </td>
                     <td className="px-5 py-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1.5">
@@ -473,7 +660,7 @@ export function ScheduledTasksSection() {
               <div>
                 <h3 className="font-semibold text-sm">{activeLogTask.name} — Logs</h3>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Last ran: {activeLogTask.last_run_at ? new Date(activeLogTask.last_run_at).toLocaleString() : "Never"}
+                  Last ran: {fmtDateTime(activeLogTask.last_run_at)}
                 </p>
               </div>
               <button
@@ -542,18 +729,39 @@ export function ScheduledTasksSection() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="task-schedule" className="text-xs font-semibold">Schedule Rule</Label>
-                  <span className="text-[10px] text-muted-foreground flex items-center gap-0.5" title="Duration: '30m' (once in 30 min), Interval: 'every 2h' (recurring), Cron: '0 9 * * *' (cron expression)">
+                  <span className="text-[10px] text-muted-foreground flex items-center gap-0.5" title="Time today: '15:40' or '3:40 PM' (anchored to today's date) · Tomorrow: 'tomorrow at 9am' · Weekday: 'friday at 18:00' · Duration: '30m' (once in 30 min) · Interval: 'every 2h' (recurring) · Cron: '0 21 * * *' · Explicit date: '2026-07-06T21:00:00'">
                     <HelpCircle className="h-3 w-3" /> Formats
                   </span>
                 </div>
                 <Input
                   id="task-schedule"
-                  placeholder="e.g. every 30m, 1h, 0 9 * * *, 2026-07-06T12:00:00"
+                  placeholder="e.g. 15:40 (today), tomorrow at 9am, every 30m, 0 21 * * *"
                   value={formSchedule}
                   onChange={e => setFormSchedule(e.target.value)}
                   className="h-9 text-xs font-mono"
                   required
                 />
+              </div>
+
+              {/* Timezone override */}
+              <div className="space-y-1.5">
+                <Label htmlFor="task-timezone" className="text-xs font-semibold">Timezone (optional)</Label>
+                <select
+                  id="task-timezone"
+                  value={formTimezone}
+                  onChange={e => setFormTimezone(e.target.value)}
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">
+                    {userTimezone
+                      ? `My saved timezone (${userTimezone})`
+                      : `Browser default (${BROWSER_TIMEZONE || "auto"})`}
+                  </option>
+                  {ALL_TIMEZONES.map(tz => (
+                    <option key={tz} value={tz}>{tz}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-muted-foreground">Cron and timestamp schedules are evaluated in this timezone.</p>
               </div>
 
               {/* Workflow selection */}
@@ -588,18 +796,31 @@ export function ScheduledTasksSection() {
 
               {/* Prompt (conditional) */}
               {!formNoAgent ? (
-                <div className="space-y-1.5">
-                  <Label htmlFor="task-prompt" className="text-xs font-semibold">Agent Instruction Prompt</Label>
-                  <Textarea
-                    id="task-prompt"
-                    placeholder="Provide specific instruction for the agent background run. Write blog post, check stats, etc..."
-                    value={formPrompt}
-                    onChange={e => setFormPrompt(e.target.value)}
-                    rows={4}
-                    className="text-xs"
-                    required={!formNoAgent}
-                  />
-                </div>
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="task-prompt" className="text-xs font-semibold">Agent Instruction Prompt</Label>
+                    <Textarea
+                      id="task-prompt"
+                      placeholder="Provide specific instruction for the agent background run. Write blog post, check stats, etc..."
+                      value={formPrompt}
+                      onChange={e => setFormPrompt(e.target.value)}
+                      rows={4}
+                      className="text-xs"
+                      required={!formNoAgent}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="task-summary" className="text-xs font-semibold">Task Background (optional)</Label>
+                    <Textarea
+                      id="task-summary"
+                      placeholder="Why does this task exist? Goals, context, preferences — injected into every run so the agent understands intent."
+                      value={formContextSummary}
+                      onChange={e => setFormContextSummary(e.target.value)}
+                      rows={2}
+                      className="text-xs"
+                    />
+                  </div>
+                </>
               ) : (
                 /* Script path (conditional) */
                 <div className="space-y-1.5">

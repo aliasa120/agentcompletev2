@@ -2,18 +2,15 @@
 
 /**
  * ToolApprovalInterruptList — human-in-the-loop approval cards for LangGraph
- * interrupts emitted by the backend (the `ask_permission` tool; payload shape
- * matches LangChain's HumanInTheLoop middleware:
- * { action_requests: [...], review_configs: [...] }).
- *
- * Reads pending interrupts from LangGraphRuntimeContext and resumes the run
- * via stream.submit(null, { command: { resume } }).
+ * interrupts emitted by the backend (Deep Agents HumanInTheLoop middleware or
+ * dynamic tools). Supports single tool calls and batched multiple tool calls
+ * (action_requests: [...]), argument editing, always-allow persistence, and denial.
  */
 
-import { useState, type FC } from "react";
+import { useState, useMemo, useEffect, type FC } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, Check, X, Pencil, TerminalSquare } from "lucide-react";
+import { AlertCircle, Check, X, Pencil, TerminalSquare, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLangGraphRuntime } from "@/providers/LangGraphRuntimeProvider";
 
@@ -23,30 +20,46 @@ interface ActionRequest {
   description?: string;
 }
 
-interface ReviewConfig {
-  actionName?: string;
-  allowedDecisions?: string[];
+interface BatchPayload {
+  actionRequests: ActionRequest[];
+  allowedDecisions: string[];
 }
 
-function getPayload(interrupt: any): { actionRequest: ActionRequest; reviewConfig: ReviewConfig } | null {
+function getBatchPayload(interrupt: any): BatchPayload | null {
   const v = interrupt?.value ?? interrupt;
   if (!v || typeof v !== "object") return null;
+
   const reqs = v.action_requests ?? v.actionRequests ?? [];
   const cfgs = v.review_configs ?? v.reviewConfigs ?? [];
-  const req = Array.isArray(reqs) ? reqs[0] : undefined;
-  if (!req) return null;
-  const cfg = Array.isArray(cfgs) ? cfgs[0] : undefined;
-  return {
-    actionRequest: {
-      name: req.name,
-      args: req.args ?? req.arguments ?? {},
-      description: req.description,
-    },
-    reviewConfig: {
-      actionName: cfg?.action_name ?? cfg?.actionName,
-      allowedDecisions: cfg?.allowed_decisions ?? cfg?.allowedDecisions,
-    },
-  };
+
+  if (Array.isArray(reqs) && reqs.length > 0) {
+    const actionRequests: ActionRequest[] = reqs.map((r: any) => ({
+      name: r.name || r.tool_name || "tool",
+      args: r.args ?? r.arguments ?? {},
+      description: r.description,
+    }));
+
+    const cfg = Array.isArray(cfgs) && cfgs.length > 0 ? cfgs[0] : undefined;
+    const allowedDecisions = cfg?.allowed_decisions ?? cfg?.allowedDecisions ?? ["approve", "reject", "edit"];
+
+    return { actionRequests, allowedDecisions };
+  }
+
+  // Fallback for flat structure
+  if (v.name || v.tool_name) {
+    return {
+      actionRequests: [
+        {
+          name: v.name || v.tool_name,
+          args: v.args ?? v.arguments ?? {},
+          description: v.description,
+        },
+      ],
+      allowedDecisions: ["approve", "reject", "edit"],
+    };
+  }
+
+  return null;
 }
 
 const ApprovalCard: FC<{
@@ -56,138 +69,223 @@ const ApprovalCard: FC<{
 }> = ({ interrupt, onResume, isLoading }) => {
   const [rejectionMessage, setRejectionMessage] = useState("");
   const [isEditing, setIsEditing] = useState(false);
-  const [editedArgs, setEditedArgs] = useState<Record<string, unknown>>({});
+  const [editedArgsMap, setEditedArgsMap] = useState<Record<number, Record<string, unknown>>>({});
   const [showRejectionInput, setShowRejectionInput] = useState(false);
+  const [savingAlwaysAllow, setSavingAlwaysAllow] = useState(false);
 
-  const payload = getPayload(interrupt);
-  if (!payload) return null;
-  const { actionRequest, reviewConfig } = payload;
+  const payload = getBatchPayload(interrupt);
+  if (!payload || payload.actionRequests.length === 0) return null;
 
-  const allowedDecisions = reviewConfig.allowedDecisions ?? ["approve", "reject", "edit"];
-  const isTerminal = actionRequest.name === "terminal";
+  const { actionRequests, allowedDecisions } = payload;
+  const isBatch = actionRequests.length > 1;
 
-  const handleApprove = () => onResume({ decisions: [{ type: "approve" }] });
+  const handleApproveAll = () => {
+    onResume({
+      decisions: actionRequests.map(() => ({ type: "approve" })),
+    });
+  };
 
-  const handleReject = () => {
+  const handleRejectAll = () => {
     if (showRejectionInput) {
-      onResume({ decisions: [{ type: "reject", message: rejectionMessage.trim() }] });
+      const msg = rejectionMessage.trim() || "User rejected tool execution.";
+      onResume({
+        decisions: actionRequests.map(() => ({ type: "reject", message: msg })),
+      });
     } else {
       setShowRejectionInput(true);
     }
   };
 
   const handleEditSave = () => {
-    onResume({
-      decisions: [
-        {
+    const decisions = actionRequests.map((req, idx) => {
+      const edits = editedArgsMap[idx];
+      if (edits) {
+        return {
           type: "edit",
-          edited_action: { name: actionRequest.name, args: editedArgs },
-        },
-      ],
+          edited_action: { name: req.name, args: edits },
+        };
+      }
+      return { type: "approve" };
     });
+    onResume({ decisions });
   };
 
   const startEditing = () => {
     setIsEditing(true);
-    setEditedArgs(JSON.parse(JSON.stringify(actionRequest.args)));
+    const initialMap: Record<number, Record<string, unknown>> = {};
+    actionRequests.forEach((req, idx) => {
+      initialMap[idx] = JSON.parse(JSON.stringify(req.args || {}));
+    });
+    setEditedArgsMap(initialMap);
     setShowRejectionInput(false);
   };
 
-  const updateEditedArg = (key: string, value: string) => {
+  const updateEditedArg = (reqIdx: number, key: string, value: string) => {
     try {
       const parsedValue =
         value.trim().startsWith("{") || value.trim().startsWith("[")
           ? JSON.parse(value)
           : value;
-      setEditedArgs((prev) => ({ ...prev, [key]: parsedValue }));
+      setEditedArgsMap((prev) => ({
+        ...prev,
+        [reqIdx]: { ...(prev[reqIdx] || {}), [key]: parsedValue },
+      }));
     } catch {
-      setEditedArgs((prev) => ({ ...prev, [key]: value }));
+      setEditedArgsMap((prev) => ({
+        ...prev,
+        [reqIdx]: { ...(prev[reqIdx] || {}), [key]: value },
+      }));
+    }
+  };
+
+  const handleAlwaysAllow = async (toolName: string) => {
+    setSavingAlwaysAllow(true);
+    try {
+      await fetch("/api/tools/permissions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tool_key: toolName,
+          permission_mode: "always_allow",
+        }),
+      });
+    } catch (e) {
+      console.warn("Failed to persist always_allow:", e);
+    } finally {
+      setSavingAlwaysAllow(false);
+      handleApproveAll();
     }
   };
 
   return (
-    <div className="w-full rounded-xl border border-yellow-500/40 bg-yellow-500/5 p-4 shadow-sm">
-      <div className="mb-3 flex items-center gap-2 text-foreground">
-        <AlertCircle size={16} className="text-yellow-600 dark:text-yellow-400" />
-        <span className="text-xs font-semibold uppercase tracking-wider">
-          Approval required
-        </span>
-      </div>
-
-      {actionRequest.description && (
-        <p className="mb-3 text-sm text-muted-foreground">{actionRequest.description}</p>
-      )}
-
-      <div className="mb-4 rounded-md border border-border bg-background p-3">
-        <div className="mb-2 flex items-center gap-1.5">
-          {isTerminal && <TerminalSquare size={13} className="text-muted-foreground" />}
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {actionRequest.name}
+    <div className="w-full rounded-xl border border-amber-500/40 bg-amber-500/5 p-4 shadow-sm space-y-3">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-foreground">
+          {isBatch ? (
+            <Layers size={17} className="text-amber-600 dark:text-amber-400" />
+          ) : (
+            <AlertCircle size={17} className="text-amber-600 dark:text-amber-400" />
+          )}
+          <span className="text-xs font-semibold uppercase tracking-wider">
+            {isBatch
+              ? `Batch Tool Execution Permission Required (${actionRequests.length} calls)`
+              : "Tool Execution Permission Required"}
           </span>
         </div>
-
-        {isEditing ? (
-          <div className="mt-2 space-y-3">
-            {Object.entries(actionRequest.args).map(([key, value]) => (
-              <div key={key}>
-                <label className="mb-1 block text-xs font-medium text-foreground">{key}</label>
-                <Textarea
-                  value={
-                    editedArgs[key] !== undefined
-                      ? typeof editedArgs[key] === "string"
-                        ? (editedArgs[key] as string)
-                        : JSON.stringify(editedArgs[key], null, 2)
-                      : typeof value === "string"
-                        ? value
-                        : JSON.stringify(value, null, 2)
-                  }
-                  onChange={(e) => updateEditedArg(key, e.target.value)}
-                  className="font-mono text-xs"
-                  rows={typeof value === "string" && value.length < 100 ? 2 : 4}
-                  disabled={isLoading}
-                />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-sm border border-border bg-muted/40 p-2 font-mono text-xs text-foreground">
-            {isTerminal && typeof actionRequest.args?.command === "string"
-              ? (actionRequest.args.command as string)
-              : JSON.stringify(actionRequest.args, null, 2)}
-          </pre>
+        {!isBatch && (
+          <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+            {actionRequests[0].name}
+          </span>
         )}
       </div>
 
+      {/* Tool Requests List */}
+      <div className="space-y-2.5">
+        {actionRequests.map((req, idx) => {
+          const isTerminal = req.name === "terminal";
+          const currentArgs = isEditing ? editedArgsMap[idx] || req.args : req.args;
+
+          return (
+            <div
+              key={idx}
+              className="rounded-md border border-border bg-background p-3 space-y-2"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  {isTerminal ? (
+                    <TerminalSquare size={13} className="text-muted-foreground" />
+                  ) : (
+                    <span className="text-xs font-bold font-mono text-primary">
+                      {isBatch ? `#${idx + 1} ${req.name}` : req.name}
+                    </span>
+                  )}
+                  {req.description && (
+                    <span className="text-[11px] text-muted-foreground ml-2 truncate max-w-[300px]">
+                      {req.description}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Arguments (Display or Edit mode) */}
+              {isEditing ? (
+                <div className="space-y-2 pt-1">
+                  {Object.entries(req.args || {}).map(([key, value]) => (
+                    <div key={key}>
+                      <label className="mb-1 block text-[11px] font-medium text-foreground font-mono">
+                        {key}
+                      </label>
+                      <Textarea
+                        value={
+                          currentArgs[key] !== undefined
+                            ? typeof currentArgs[key] === "string"
+                              ? (currentArgs[key] as string)
+                              : JSON.stringify(currentArgs[key], null, 2)
+                            : typeof value === "string"
+                              ? value
+                              : JSON.stringify(value, null, 2)
+                        }
+                        onChange={(e) => updateEditedArg(idx, key, e.target.value)}
+                        className="font-mono text-xs"
+                        rows={typeof value === "string" && value.length < 80 ? 2 : 3}
+                        disabled={isLoading || savingAlwaysAllow}
+                      />
+                    </div>
+                  ))}
+                  {(!req.args || Object.keys(req.args).length === 0) && (
+                    <p className="text-[11px] text-muted-foreground italic">No arguments</p>
+                  )}
+                </div>
+              ) : (
+                <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-sm border border-border bg-muted/40 p-2 font-mono text-xs text-foreground">
+                  {isTerminal && typeof req.args?.command === "string"
+                    ? (req.args.command as string)
+                    : JSON.stringify(req.args, null, 2)}
+                </pre>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Denial Reason Input */}
       {showRejectionInput && !isEditing && (
-        <div className="mb-4">
-          <label className="mb-2 block text-xs font-medium text-foreground">
-            Rejection message (optional — the agent will see this)
+        <div className="space-y-1">
+          <label className="block text-xs font-medium text-foreground">
+            Denial reason (optional — feedback returned to the agent)
           </label>
           <Textarea
             value={rejectionMessage}
             onChange={(e) => setRejectionMessage(e.target.value)}
-            placeholder="Explain why you're rejecting this command…"
-            className="text-sm"
+            placeholder="Explain why you're denying this action…"
+            className="text-xs"
             rows={2}
-            disabled={isLoading}
+            disabled={isLoading || savingAlwaysAllow}
           />
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      {/* Action Buttons */}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
         {isEditing ? (
           <>
-            <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={isLoading}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditing(false)}
+              disabled={isLoading || savingAlwaysAllow}
+            >
               Cancel
             </Button>
             <Button
               size="sm"
               onClick={handleEditSave}
-              disabled={isLoading}
+              disabled={isLoading || savingAlwaysAllow}
               className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700"
             >
-              <Check size={14} />
-              {isLoading ? "Saving…" : "Save & approve"}
+              <Check size={14} className="mr-1" />
+              {isLoading ? "Saving…" : isBatch ? "Save & Allow All" : "Save & Allow"}
             </Button>
           </>
         ) : showRejectionInput ? (
@@ -199,46 +297,73 @@ const ApprovalCard: FC<{
                 setShowRejectionInput(false);
                 setRejectionMessage("");
               }}
-              disabled={isLoading}
+              disabled={isLoading || savingAlwaysAllow}
             >
               Cancel
             </Button>
-            <Button variant="destructive" size="sm" onClick={handleReject} disabled={isLoading}>
-              {isLoading ? "Rejecting…" : "Confirm reject"}
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleRejectAll}
+              disabled={isLoading || savingAlwaysAllow}
+            >
+              {isLoading ? "Denying…" : isBatch ? "Confirm Deny All" : "Confirm Deny"}
             </Button>
           </>
         ) : (
           <>
+            {allowedDecisions.includes("approve") && (
+              <Button
+                size="sm"
+                onClick={handleApproveAll}
+                disabled={isLoading || savingAlwaysAllow}
+                className={cn(
+                  "bg-green-600 text-white hover:bg-green-700",
+                  "dark:bg-green-600 dark:hover:bg-green-700 font-medium text-xs",
+                )}
+              >
+                <Check size={14} className="mr-1" />
+                {isLoading ? "Allowing…" : isBatch ? `Allow All (${actionRequests.length})` : "Allow"}
+              </Button>
+            )}
+
+            {!isBatch && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => handleAlwaysAllow(actionRequests[0].name)}
+                disabled={isLoading || savingAlwaysAllow}
+                className="bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 font-medium text-xs"
+                title="Automatically allow all future calls to this tool without prompting again"
+              >
+                <Check size={13} className="mr-1 text-primary" />
+                {savingAlwaysAllow ? "Saving…" : "Always Allow for this tool"}
+              </Button>
+            )}
+
             {allowedDecisions.includes("reject") && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleReject}
-                disabled={isLoading}
-                className="text-destructive hover:bg-destructive/10"
+                onClick={handleRejectAll}
+                disabled={isLoading || savingAlwaysAllow}
+                className="text-destructive hover:bg-destructive/10 border-destructive/30 text-xs"
               >
-                <X size={14} />
-                Reject
+                <X size={14} className="mr-1" />
+                {isBatch ? "Deny All" : "Deny"}
               </Button>
             )}
+
             {allowedDecisions.includes("edit") && (
-              <Button variant="outline" size="sm" onClick={startEditing} disabled={isLoading}>
-                <Pencil size={14} />
-                Edit
-              </Button>
-            )}
-            {allowedDecisions.includes("approve") && (
               <Button
+                variant="ghost"
                 size="sm"
-                onClick={handleApprove}
-                disabled={isLoading}
-                className={cn(
-                  "bg-green-600 text-white hover:bg-green-700",
-                  "dark:bg-green-600 dark:hover:bg-green-700",
-                )}
+                onClick={startEditing}
+                disabled={isLoading || savingAlwaysAllow}
+                className="text-muted-foreground text-xs"
               >
-                <Check size={14} />
-                {isLoading ? "Approving…" : "Approve"}
+                <Pencil size={13} className="mr-1" />
+                Edit Arguments
               </Button>
             )}
           </>
@@ -250,23 +375,50 @@ const ApprovalCard: FC<{
 
 export const ToolApprovalInterruptList: FC = () => {
   const { interrupts, resumeInterrupt, isLoading } = useLangGraphRuntime();
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
-  const actionable = interrupts.filter((intr) => getPayload(intr) !== null);
-  if (actionable.length === 0) return null;
+  // Clear dismissed IDs when all interrupts are resolved
+  useEffect(() => {
+    if (!interrupts || interrupts.length === 0 || !isLoading) {
+      setDismissedIds(new Set());
+    }
+  }, [interrupts, isLoading]);
+
+  const actionable = useMemo(() => {
+    const seen = new Set<string>();
+    const list: { intr: any; id: string }[] = [];
+    for (const intr of interrupts || []) {
+      const payload = getBatchPayload(intr);
+      if (payload !== null) {
+        const id =
+          intr?.id ??
+          intr?.interrupt_id ??
+          `${payload.actionRequests.map((r) => r.name).join("-")}-${JSON.stringify(payload.actionRequests.map((r) => r.args))}`;
+        if (!seen.has(id) && !dismissedIds.has(id)) {
+          seen.add(id);
+          list.push({ intr, id });
+        }
+      }
+    }
+    return list;
+  }, [interrupts, dismissedIds]);
+
+  // Immediately disappear when stream is actively executing (resumed) or no actionable interrupts
+  if (isLoading || actionable.length === 0) return null;
 
   return (
     <div className="mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-3 px-2">
-      {actionable.map((intr, i) => {
-        const id = intr?.id ?? intr?.interrupt_id ?? `interrupt-${i}`;
-        return (
-          <ApprovalCard
-            key={id}
-            interrupt={intr}
-            isLoading={isLoading}
-            onResume={(value) => resumeInterrupt(value, intr?.id ?? intr?.interrupt_id)}
-          />
-        );
-      })}
+      {actionable.map(({ intr, id }, i) => (
+        <ApprovalCard
+          key={`${id}-${i}`}
+          interrupt={intr}
+          isLoading={isLoading}
+          onResume={(value) => {
+            setDismissedIds((prev) => new Set(prev).add(id));
+            resumeInterrupt(value, intr?.id ?? intr?.interrupt_id);
+          }}
+        />
+      ))}
     </div>
   );
 };

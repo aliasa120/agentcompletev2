@@ -38,6 +38,7 @@ from research_agent.workflow_compiler import (
     finalize_response,
     save_chat_history,
     run_in_thread,
+    CurrentDateTimeMiddleware,
 )
 from research_agent.prompts import (
     MAIN_AGENT_INSTRUCTIONS,
@@ -52,9 +53,13 @@ from research_agent.tools import (
     omni_analyzer,
     think_tool,
     fetch_images_brave,
-    view_candidate_images,
     analyze_images_gemini,
     save_posts_to_supabase,
+    save_wordpress_post,
+    save_instagram_post,
+    save_facebook_post,
+    save_youtube_video,
+    save_social_bundle,
     get_design_guide,
     read_skill,
     list_skills,
@@ -64,11 +69,13 @@ from research_agent.tools import (
     search_conversation_history,
     text_to_speech,
     terminal,
+    upload_to_storage,
 )
+from research_agent.plugins import enabled_plugins_from_db, is_tool_allowed
 from research_agent.tools.provider_engine import get_llm_config
 
 # Inject today's date into the default prompt
-INSTRUCTIONS = MAIN_AGENT_INSTRUCTIONS.format(date=datetime.now().strftime("%Y-%m-%d"))
+INSTRUCTIONS = MAIN_AGENT_INSTRUCTIONS.replace("{date}", datetime.now().strftime("%Y-%m-%d"))
 
 # ── Dynamic Workflow Compilation ───────────────────────────────────────────────
 _LOG_PATH = os.path.join(tempfile.gettempdir(), "agent_load.log")
@@ -192,7 +199,6 @@ else:
         "tools": [
             read_skill,
             fetch_images_brave,
-            view_candidate_images,
             analyze_images_gemini,
             create_post_image,
             get_design_guide,
@@ -200,31 +206,39 @@ else:
         ],
     }
 
+    _fallback_tool_candidates = [
+        unified_search,
+        unified_extract,
+        think_tool,
+        fetch_images_brave,
+        analyze_images_gemini,
+        create_post_image,
+        save_posts_to_supabase,
+        get_design_guide,
+        read_skill,
+        list_skills,
+        manage_skill,
+        get_wordpress_categories,
+        publish_to_wordpress,
+        youtube_transcript,
+        search_conversation_history,
+        omni_analyzer,
+        text_to_speech,
+        terminal,
+        upload_to_storage,
+    ]
+    _enabled_plugins = enabled_plugins_from_db()
+    fallback_tools = [
+        t for t in _fallback_tool_candidates
+        if is_tool_allowed(getattr(t, "name", ""), _enabled_plugins)
+    ]
+
     fallback_agent = create_deep_agent(
         model=model,
-        tools=[
-            unified_search,
-            unified_extract,
-            think_tool,
-            fetch_images_brave,
-            view_candidate_images,
-            analyze_images_gemini,
-            create_post_image,
-            save_posts_to_supabase,
-            get_design_guide,
-            read_skill,
-            list_skills,
-            manage_skill,
-            get_wordpress_categories,
-            publish_to_wordpress,
-            youtube_transcript,
-            search_conversation_history,
-            omni_analyzer,
-            text_to_speech,
-            terminal,
-        ],
+        tools=fallback_tools,
         subagents=[research_subagent, content_subagent],
         system_prompt=INSTRUCTIONS,
+        middleware=[CurrentDateTimeMiddleware()],
         name="research-agent",
         backend=thread_filesystem_backend,
     )

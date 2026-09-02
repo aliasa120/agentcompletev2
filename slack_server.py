@@ -42,15 +42,17 @@ except ImportError:
     logger.error("langgraph-sdk is not installed. Run: uv pip install langgraph-sdk")
     sys.exit(1)
 
-# Agent feature helpers (command registry + TTS audio markers)
+# Agent feature helpers (command registry + TTS audio markers + task tracker)
 try:
     from research_agent.commands import resolve_command, help_lines as cmd_help_lines
     from research_agent.tts import extract_audio_markers
+    from research_agent.task_tracker import TaskTracker
 except ImportError as ie:
-    logger.warning(f"research_agent helpers not importable ({ie}); !commands and voice replies disabled")
+    logger.warning(f"research_agent helpers not importable ({ie}); commands and voice replies disabled")
     resolve_command = None
     cmd_help_lines = lambda: []  # noqa: E731
     extract_audio_markers = lambda t: (None, False, None, t or "")  # noqa: E731
+    TaskTracker = None
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or os.environ.get("SUPABASE_ANON_KEY", "").strip()
@@ -272,24 +274,116 @@ class SlackBotInstance:
         return None
 
     async def _send_approval_prompt(self, channel_id: str, thread_id: str, payload: dict):
+        """Universal Tool Approval card for Slack with argument truncation and Always-Allow."""
+        import json as _json
         reqs = payload.get("action_requests") or payload.get("actionRequests") or []
+        if not reqs and (payload.get("name") or payload.get("tool_name")):
+            reqs = [payload]
+        req_count = max(1, len(reqs))
         req_data = reqs[0] if reqs else {}
-        command = (req_data.get("args") or {}).get("command", "<?>")
-        desc = req_data.get("description") or "The agent wants to run a potentially risky command."
-        text = f"⚠️ *Command approval required*\nThe agent wants to run:\n```{command}```\n{desc}"
+        tool_name = req_data.get("name") or req_data.get("tool_name") or "tool"
+        args = req_data.get("args") or req_data.get("arguments") or {}
+        desc = req_data.get("description") or f"Tool '{tool_name}' requires human approval before running."
+
+
+
+        # Cache approval info for this thread
+        if not hasattr(self, "pending_tool_approvals"):
+            self.pending_tool_approvals = {}
+        self.pending_tool_approvals[thread_id] = {
+            "tool_name": tool_name,
+            "args": args,
+            "desc": desc,
+            "req_count": req_count,
+        }
+
+
+        # Format arguments with safe truncation (Slack max 3000 chars per block)
+        args_lines = []
+        if isinstance(args, dict) and args:
+            for k, v in args.items():
+                if isinstance(v, str):
+                    val_str = (v[:120] + f"… ({len(v)} chars)") if len(v) > 120 else v
+                elif isinstance(v, (int, float, bool)):
+                    val_str = str(v)
+                else:
+                    dumped = _json.dumps(v)
+                    val_str = (dumped[:120] + f"… ({len(dumped)} chars)") if len(dumped) > 120 else dumped
+                args_lines.append(f"• *{k}*: `{val_str}`")
+            formatted_args = "\n".join(args_lines)
+        else:
+            dumped = str(args)
+            formatted_args = f"`{(dumped[:200] + '…') if len(dumped) > 200 else dumped}`"
+
+        is_batch = len(reqs) > 1
+        header = f"🛡️ *Tool Execution Permission Required*{' (Batch: ' + str(len(reqs)) + ' calls)' if is_batch else ''}"
+        text = f"{header}\n🔧 *Tool:* `{tool_name}`\n📝 *Details:* {desc}\n📋 *Arguments:*\n{formatted_args}"
+
+        # Strictly enforce Slack's 3000-character section text limit
+        if len(text) > 2800:
+            text = text[:2750] + "\n\n… *(truncated)*"
+
         blocks = [
             {"type": "section", "text": {"type": "mrkdwn", "text": text}},
             {
                 "type": "actions",
                 "elements": [
-                    {"type": "button", "text": {"type": "plain_text", "text": "✅ Approve"},
-                     "style": "primary", "action_id": f"term_ok:{thread_id}", "value": thread_id},
+                    {"type": "button", "text": {"type": "plain_text", "text": "✅ Allow"},
+                     "style": "primary", "action_id": f"tool_ok:{thread_id}", "value": thread_id},
+                    {"type": "button", "text": {"type": "plain_text", "text": f"🔓 Always Allow {tool_name[:15]}"},
+                     "action_id": f"tool_always:{thread_id}:{tool_name}", "value": thread_id},
                     {"type": "button", "text": {"type": "plain_text", "text": "❌ Deny"},
-                     "style": "danger", "action_id": f"term_no:{thread_id}", "value": thread_id},
+                     "style": "danger", "action_id": f"tool_no:{thread_id}", "value": thread_id},
                 ],
             },
         ]
-        await self.web_client.chat_postMessage(channel=channel_id, blocks=blocks, text=text)
+        try:
+            await self.web_client.chat_postMessage(channel=channel_id, blocks=blocks, text=text[:2800])
+        except Exception as e:
+            logger.warning(f"Slack blocks postMessage failed: {e}. Falling back to plain text.")
+            plain_fallback = f"🛡️ *Tool Approval Required: {tool_name}*\n{desc}"
+            await self.web_client.chat_postMessage(channel=channel_id, text=plain_fallback)
+
+    async def _persist_always_allow(self, tool_name: str):
+        """Persist permission_mode='always_allow' for a tool in Supabase."""
+        import json as _json
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self._sync_persist_always_allow(tool_name)
+            )
+        except Exception as e:
+            logger.warning(f"Failed to persist always_allow on Slack for {tool_name}: {e}")
+
+    def _sync_persist_always_allow(self, tool_name: str):
+        import json as _json
+        mcp_res = supabase.table("mcp_tool_settings").select("id").eq("tool_key", tool_name).execute()
+        if mcp_res.data and len(mcp_res.data) > 0:
+            supabase.table("mcp_tool_settings").update({
+                "permission_mode": "always_allow",
+                "updated_at": "now()"
+            }).eq("tool_key", tool_name).execute()
+            perm_key = "mcp_tools_permission_modes"
+        else:
+            perm_key = "builtin_tools_permission_modes"
+
+        query = supabase.table("agent_settings").select("value").eq("key", perm_key)
+        if self.user_id:
+            query = query.eq("user_id", self.user_id)
+        current_res = query.maybe_single().execute()
+        current_val = current_res.data.get("value") if current_res and current_res.data else {}
+        perms = _json.loads(current_val) if isinstance(current_val, str) else (current_val or {})
+        perms[tool_name] = "always_allow"
+
+        upsert_payload = {
+            "key": perm_key,
+            "value": _json.dumps(perms),
+            "updated_at": "now()"
+        }
+        if self.user_id:
+            upsert_payload["user_id"] = self.user_id
+        supabase.table("agent_settings").upsert(upsert_payload, on_conflict="key,user_id").execute()
 
     async def _resume_and_continue(self, channel_id: str, thread_id: str, resume_payload: dict):
         """Resume an interrupted run after an approval decision, then finish it."""
@@ -494,6 +588,19 @@ class SlackBotInstance:
                 if user_text or files:
                     asyncio.create_task(self.process_message(channel_id, user_text, files, thread_ts=thread_ts))
 
+        elif req.type == "slash_commands":
+            # Acknowledge the slash command request immediately
+            await client.send_socket_mode_response(SocketModeResponse(envelope_id=req.envelope_id))
+            
+            payload = req.payload
+            channel_id = payload.get("channel_id")
+            command = payload.get("command", "")
+            cmd_args = payload.get("text", "").strip()
+            full_command_text = f"{command} {cmd_args}".strip()
+            logger.info(f"Received Slack slash command: {full_command_text} in channel {channel_id}")
+            if channel_id and full_command_text:
+                asyncio.create_task(self.process_message(channel_id, full_command_text))
+
         elif req.type == "interactive":
             # Acknowledge the request immediately
             await client.send_socket_mode_response(SocketModeResponse(envelope_id=req.envelope_id))
@@ -509,14 +616,27 @@ class SlackBotInstance:
                         workflow_id, workflow_name = value.split(":", 1)
                         channel_id = payload.get("channel", {}).get("id")
                         asyncio.create_task(self.switch_workflow(channel_id, workflow_id, workflow_name))
-                elif action_id.startswith("term_ok:") or action_id.startswith("term_no:"):
-                    # Terminal command approval decision (human-in-the-loop)
-                    thread_id = action_id.split(":", 1)[1]
+                elif action_id.startswith(("term_ok:", "term_no:", "tool_ok:", "tool_no:", "tool_always:")):
+                    # Universal Tool / command approval decision (human-in-the-loop)
+                    parts = action_id.split(":")
+                    kind = parts[0]
+                    thread_id = parts[1] if len(parts) > 1 else ""
+                    tool_name = parts[2] if len(parts) > 2 else "tool"
                     channel_id = payload.get("channel", {}).get("id")
                     msg = payload.get("message", {})
-                    decision = "approve" if action_id.startswith("term_ok:") else "reject"
-                    base_text = (msg.get("text") or "").split("\n\n✅")[0].split("\n\n❌")[0]
-                    mark = "\n\n✅ _Approved — running…_" if decision == "approve" else "\n\n❌ _Denied — the agent has been told._"
+
+                    if kind == "tool_always":
+                        asyncio.create_task(self._persist_always_allow(tool_name))
+                        decision = "approve"
+                        mark = f"\n\n🔓 _Always Allowed for *{tool_name}* — executing…_"
+                    elif kind in ("term_ok", "tool_ok"):
+                        decision = "approve"
+                        mark = "\n\n✅ _Allowed — executing…_"
+                    else:
+                        decision = "reject"
+                        mark = "\n\n❌ _Denied — the agent has been told._"
+
+                    base_text = (msg.get("text") or "").split("\n\n✅")[0].split("\n\n❌")[0].split("\n\n🔓")[0]
                     try:
                         await self.web_client.chat_update(
                             channel=channel_id,
@@ -526,7 +646,29 @@ class SlackBotInstance:
                         )
                     except Exception as ue:
                         logger.warning(f"Failed to update approval message: {ue}")
-                    asyncio.create_task(self._resume_and_continue(channel_id, thread_id, {"decisions": [{"type": decision}]}))
+                    
+                    cached_info = getattr(self, "pending_tool_approvals", {}).get(thread_id, {})
+                    req_count = cached_info.get("req_count", 1)
+                    if req_count <= 1:
+                        try:
+                            pending_state = await self._pending_interrupt(thread_id)
+                            if pending_state:
+                                state_reqs = pending_state.get("action_requests") or pending_state.get("actionRequests") or []
+                                if state_reqs:
+                                    req_count = len(state_reqs)
+                        except Exception:
+                            pass
+                    req_count = max(1, req_count)
+
+                    if decision == "approve":
+                        decisions = [{"type": "approve"} for _ in range(req_count)]
+                    else:
+                        decisions = [{"type": "reject", "message": "User denied tool execution via Slack."} for _ in range(req_count)]
+
+                    resume_payload = {"decisions": decisions}
+
+                    asyncio.create_task(self._resume_and_continue(channel_id, thread_id, resume_payload))
+
 
     async def switch_workflow(self, channel_id: str, workflow_id: str, workflow_name: str):
         global RESOLVED_ASSISTANT_ID
@@ -662,23 +804,32 @@ class SlackBotInstance:
             await self.switch_workflow(channel_id, selected["id"], selected["name"])
             return
 
-        # Bang commands (!voice / !help / !new) — "!" keeps native Slack "/" handling
-        # conflict-free. Agent commands (e.g. !learn) fall through to the agent.
-        elif text.startswith("!") and resolve_command is not None:
+        # Slash and bang commands (/stop, /voice, /help, /new, /status, /start)
+        # Agent commands (e.g. /learn) fall through to the agent.
+        elif text.startswith(("/", "!")) and resolve_command is not None:
             parsed = resolve_command(text)
             if not parsed:
-                await self.web_client.chat_postMessage(channel=channel_id, text="❓ Unknown command. Try `!help`")
+                await self.web_client.chat_postMessage(channel=channel_id, text="❓ Unknown command. Try `/help`")
                 return
             cmd, args = parsed
             if cmd.kind == "agent":
-                pass  # e.g. !learn — falls through to the agent below
+                pass  # e.g. /learn — falls through to the agent below
+            elif cmd.name in ("stop", "cancel", "abort"):
+                cancelled = False
+                if TaskTracker:
+                    cancelled = await TaskTracker.cancel_run(channel_id)
+                if cancelled:
+                    await self.web_client.chat_postMessage(channel=channel_id, text="🛑 *Active execution stopped.*")
+                else:
+                    await self.web_client.chat_postMessage(channel=channel_id, text="ℹ️ No active agent task is currently running.")
+                return
             elif cmd.name == "voice":
                 mapping = {"on": "voice_only", "off": "off", "tts": "all"}
                 mode = mapping.get(args.lower())
                 if not mode:
                     await self.web_client.chat_postMessage(
                         channel=channel_id,
-                        text="Usage: `!voice on` (speak replies to voice messages) · `!voice tts` (speak every reply) · `!voice off` (text only)"
+                        text="Usage: `/voice on` (speak replies to voice messages) · `/voice tts` (speak every reply) · `/voice off` (text only)"
                     )
                     return
                 self.voice_modes[channel_id] = mode
@@ -692,13 +843,13 @@ class SlackBotInstance:
             elif cmd.name == "help":
                 await self.web_client.chat_postMessage(
                     channel=channel_id,
-                    text="🤖 *Commands*\n\n" + "\n".join(cmd_help_lines()) + "\n\nNative: `!start` · `!select <workflow>`"
+                    text="🤖 *Commands*\n\n" + "\n".join(cmd_help_lines()) + "\n\nNative: `/start` · `/select <workflow>`"
                 )
                 return
             elif cmd.name == "new":
                 session = self.active_sessions.get(channel_id)
                 if not session:
-                    await self.web_client.chat_postMessage(channel=channel_id, text="No active workflow yet — send `!start` first.")
+                    await self.web_client.chat_postMessage(channel=channel_id, text="No active workflow yet — send `/start` first.")
                     return
                 try:
                     thread = await langgraph_client.threads.create(
@@ -715,9 +866,7 @@ class SlackBotInstance:
                             if session else "📌 *Current Status*\n❌ No active session.")
                 await self.web_client.chat_postMessage(channel=channel_id, text=text_out)
                 return
-            elif cmd.name == "model":
-                await self.web_client.chat_postMessage(channel=channel_id, text="Model changes live in the web UI (Settings → Workflows).")
-                return
+
 
         # 2. Regular message routing
         session = self.active_sessions.get(channel_id)
@@ -807,23 +956,25 @@ class SlackBotInstance:
                         file_bytes = resp.content
                         logger.info(f"Downloaded {len(file_bytes)} bytes.")
 
-                        # Upload to Supabase Storage
-                        file_ext = name.split(".")[-1].lower() if "." in name else ""
-                        unique_filename = f"{uuid.uuid4()}.{file_ext}" if file_ext else str(uuid.uuid4())
-                        
-                        logger.info(f"Uploading file {name} to Supabase as {unique_filename}...")
+                        # Upload to unified storage (R2-first, Supabase fallback)
+                        from research_agent import storage_service
+
+                        logger.info(f"Uploading file {name} to unified storage...")
                         loop = asyncio.get_running_loop()
-                        await loop.run_in_executor(
+                        file_url = await loop.run_in_executor(
                             None,
-                            lambda: supabase.storage.from_("uploads").upload(
-                                path=unique_filename,
-                                file=file_bytes,
-                                file_options={"content-type": mimetype}
+                            lambda: storage_service.upload_file(
+                                data=file_bytes,
+                                filename=name,
+                                mime_type=mimetype,
+                                category="uploads",
+                                thread_id=thread_id,
+                                user_id=self.user_id,
                             )
                         )
-                        
-                        file_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/public/uploads/{unique_filename}"
-                        logger.info(f"Uploaded to Supabase: {file_url}")
+                        if not file_url:
+                            raise RuntimeError("storage upload returned no URL (check R2/Supabase configuration)")
+                        logger.info(f"Uploaded to storage: {file_url}")
                         
                         # Map to correct attachment dictionary for preflight capability sniffer
                         lower_name = name.lower()
@@ -895,6 +1046,10 @@ class SlackBotInstance:
         last_edit_text = ""
         last_edit_time = 0.0
         active_messages = {}
+
+        current_task = asyncio.current_task()
+        if TaskTracker and current_task:
+            await TaskTracker.register_run(channel_id, current_task, client=langgraph_client, thread_id=thread_id)
 
         try:
             try:
@@ -1003,6 +1158,16 @@ class SlackBotInstance:
             # mirror appends AUDIO_URL markers after streaming finishes)
             await self._finish_run(channel_id, thread_id, accumulated_text, msg_ts, thread_ts=thread_ts)
 
+        except asyncio.CancelledError:
+            logger.info(f"Stream cancelled for slack channel_id={channel_id}")
+            try:
+                await self.web_client.chat_update(
+                    channel=channel_id,
+                    ts=msg_ts,
+                    text="🛑 *Execution cancelled by user.*"
+                )
+            except Exception:
+                pass
         except Exception as e:
             logger.exception("Error processing message in Slack daemon")
             await self.web_client.chat_update(
@@ -1010,6 +1175,10 @@ class SlackBotInstance:
                 ts=msg_ts,
                 text=f"❌ *Execution Failed:*\n`{e}`"
             )
+        finally:
+            if TaskTracker:
+                await TaskTracker.unregister_run(channel_id)
+
 
 
 running_bots = {}  # conn_id -> SlackBotInstance

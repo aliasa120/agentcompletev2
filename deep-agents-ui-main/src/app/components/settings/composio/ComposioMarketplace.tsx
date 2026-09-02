@@ -182,17 +182,19 @@ export function ComposioMarketplace({
         <select value={category} onChange={e => handleCategoryChange(e.target.value)}
           className="h-10 px-3 rounded-md border border-input bg-background text-xs focus:outline-none focus:ring-2 focus:ring-primary min-w-[140px]">
           <option value="all">All Categories</option>
-          <option value="ai agents">AI &amp; Chatbots</option>
+          <option value="ai">AI &amp; Chatbots</option>
           <option value="calendar">Calendar &amp; Scheduling</option>
           <option value="crm">CRM &amp; Sales</option>
-          <option value="developer tools">Developer Tools</option>
-          <option value="email">Email</option>
-          <option value="file management & storage">File Storage</option>
-          <option value="social media accounts">Social Media</option>
-          <option value="team chat">Team Chat</option>
-          <option value="signatures">Signatures</option>
-          <option value="databases">Databases</option>
-          <option value="productivity">Productivity</option>
+          <option value="developer">Developer Tools &amp; DevOps</option>
+          <option value="ecommerce">E-Commerce &amp; Payments</option>
+          <option value="email">Email &amp; Messaging</option>
+          <option value="file">File Storage &amp; Docs</option>
+          <option value="marketing">Marketing &amp; Ads</option>
+          <option value="social media">Social Media</option>
+          <option value="team chat">Team Chat &amp; Collaboration</option>
+          <option value="website">Website &amp; CMS</option>
+          <option value="databases">Databases &amp; Analytics</option>
+          <option value="productivity">Productivity &amp; Tasks</option>
         </select>
         <select value={sort} onChange={e => handleSortChange(e.target.value)}
           className="h-10 px-3 rounded-md border border-input bg-background text-xs focus:outline-none focus:ring-2 focus:ring-primary min-w-[120px]">

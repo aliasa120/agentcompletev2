@@ -171,7 +171,7 @@ export async function GET() {
 }
 
 
-// POST /api/skills — create skill
+// POST /api/skills — create or upsert skill
 export async function POST(req: Request) {
   const cookieStore = await cookies();
   const supabase = getSupabaseClient(cookieStore);
@@ -182,20 +182,29 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { skill_key, label, description, content, parent_skill_key } = body;
+    const { skill_key, label, description, content, parent_skill_key, source } = body;
     if (!skill_key || !label || !content) {
       return NextResponse.json({ error: "skill_key, label, and content are required" }, { status: 400 });
     }
+
     const { data, error } = await supabase
       .from("skills_library")
-      .insert({
-        skill_key,
-        label,
-        description: description ?? "",
-        content,
-        source: "user",
-        parent_skill_key: parent_skill_key || null
-      })
+      .upsert(
+        {
+          user_id: user.id,
+          skill_key: skill_key.toLowerCase().replace(/\s+/g, "_"),
+          label,
+          description: description ?? "",
+          content,
+          source: source || "user",
+          state: "active",
+          is_active: true,
+          trust_state: "trusted",
+          parent_skill_key: parent_skill_key || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,skill_key" }
+      )
       .select()
       .single();
     if (error) throw error;
@@ -205,6 +214,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ skill: data });
   } catch (e: unknown) {
+    console.error("[POST /api/skills] Error:", e);
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown" }, { status: 500 });
   }
 }

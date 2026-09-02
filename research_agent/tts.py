@@ -433,29 +433,26 @@ def synthesize_speech(
 
 # ── Storage ──────────────────────────────────────────────────────────────────────
 
-def upload_audio(audio: bytes, ext: str, mime: str) -> str:
-    """Upload audio to the public Supabase 'uploads' bucket; return the public URL.
+def upload_audio(audio: bytes, ext: str, mime: str, user_id: str | None = None, thread_id: str | None = None) -> str:
+    """Upload audio to unified storage (R2-first, Supabase fallback); return the public URL.
 
-    Files are stored under ``tts/YYYY-MM-DD/`` so a daily cleanup cron can
-    delete entire day-folders older than 30 days via ``cleanup_old_audio()``.
+    Files are stored thread-wise under ``tts/YYYY-MM-DD/<thread_id>/`` so the daily
+    ``storage_service.cleanup_expired_files()`` retention pass can remove expired audio
+    (legacy day-folders are still handled by ``cleanup_old_audio()``).
     """
-    import datetime
-    from supabase import create_client
+    from research_agent import storage_service
 
-    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
-    if not supabase_url or not key:
-        raise RuntimeError("Supabase not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)")
-
-    client = create_client(supabase_url, key)
-    today = datetime.date.today().isoformat()          # e.g. "2026-08-10"
-    filename = f"tts/{today}/{uuid.uuid4()}.{ext}"    # tts/2026-08-10/<uuid>.mp3
-    client.storage.from_("uploads").upload(
-        path=filename,
-        file=audio,
-        file_options={"content-type": mime},
+    url = storage_service.upload_file(
+        data=audio,
+        filename=f"{uuid.uuid4()}.{ext}",
+        mime_type=mime,
+        category="tts",
+        thread_id=thread_id,
+        user_id=user_id,
     )
-    return f"{supabase_url}/storage/v1/object/public/uploads/{filename}"
+    if not url:
+        raise RuntimeError("Audio upload failed (configure R2 credentials or Supabase storage)")
+    return url
 
 
 def cleanup_old_audio(max_age_days: int = 30) -> dict:
@@ -519,6 +516,7 @@ def synthesize_reply_audio(
     *,
     platform: str = "web",
     user_id: Optional[str] = None,
+    thread_id: Optional[str] = None,
     purpose: Optional[str] = "mirror",
     max_chars: int = 3000,
 ) -> Optional[str]:
@@ -534,7 +532,7 @@ def synthesize_reply_audio(
     for attempt in (1, 2):
         try:
             audio, ext, mime, provider = synthesize_speech(spoken, platform=platform, user_id=user_id, purpose=purpose)
-            url = upload_audio(audio, ext, mime)
+            url = upload_audio(audio, ext, mime, user_id=user_id, thread_id=thread_id)
             voice_bubble = "true" if (platform == "telegram" and ext == "ogg") else "false"
             logger.info(f"[tts] reply audio synthesized via {provider} (purpose={purpose}, {len(audio)} bytes, {ext})")
             return f"\n\n{VOICE_MARKER_PREFIX}{voice_bubble}\n{AUDIO_PROVIDER_MARKER}{provider}\n{AUDIO_URL_MARKER}{url}"

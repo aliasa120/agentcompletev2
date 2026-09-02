@@ -40,15 +40,17 @@ except ImportError:
     logger.error("langgraph-sdk is not installed. Run: uv pip install langgraph-sdk")
     sys.exit(1)
 
-# Agent feature helpers (command registry + TTS audio markers)
+# Agent feature helpers (command registry + TTS audio markers + task tracker)
 try:
     from research_agent.commands import resolve_command, help_lines as cmd_help_lines
     from research_agent.tts import extract_audio_markers
+    from research_agent.task_tracker import TaskTracker
 except ImportError as ie:
-    logger.warning(f"research_agent helpers not importable ({ie}); !commands and voice replies disabled")
+    logger.warning(f"research_agent helpers not importable ({ie}); commands and voice replies disabled")
     resolve_command = None
     cmd_help_lines = lambda: []  # noqa: E731
     extract_audio_markers = lambda t: (None, False, None, t or "")  # noqa: E731
+    TaskTracker = None
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or os.environ.get("SUPABASE_ANON_KEY", "").strip()
@@ -164,33 +166,53 @@ def format_markdown_tables(text: str) -> str:
 
 
 class ApprovalView(discord.ui.View):
-    """Inline Approve/Deny buttons for terminal command approval interrupts."""
+    """Inline Allow / Always Allow / Deny buttons for tool execution approval interrupts."""
 
-    def __init__(self, instance: "DiscordBotInstance", channel, thread_id: str, timeout: float = 900):
+    def __init__(self, instance: "DiscordBotInstance", channel, thread_id: str, tool_name: str = "tool", req_count: int = 1, timeout: float = 900):
         super().__init__(timeout=timeout)
         self.instance = instance
         self.channel = channel
         self.thread_id = thread_id
+        self.tool_name = tool_name
+        self.req_count = max(1, req_count)
         self.decided = False
 
-    async def _decide(self, interaction: discord.Interaction, decision_type: str):
+    async def _decide(self, interaction: discord.Interaction, decision_type: str, always_allow: bool = False):
         if self.decided:
             await interaction.response.send_message("Already decided.", ephemeral=True)
             return
         self.decided = True
-        mark = "✅ *Approved — running…*" if decision_type == "approve" else "❌ *Denied — the agent has been told.*"
+        if always_allow:
+            asyncio.create_task(self.instance._persist_always_allow(self.tool_name))
+            mark = f"🔓 *Always Allowed for {self.tool_name} — executing…*"
+        elif decision_type == "approve":
+            mark = "✅ *Allowed — executing…*"
+        else:
+            mark = "❌ *Denied — the agent has been told.*"
         await interaction.response.edit_message(content=interaction.message.content + "\n\n" + mark, view=None)
+        
+        if decision_type == "approve":
+            decisions = [{"type": "approve"} for _ in range(self.req_count)]
+        else:
+            decisions = [{"type": "reject", "message": "User denied tool execution via Discord."} for _ in range(self.req_count)]
+
+        resume_payload = {"decisions": decisions}
         asyncio.create_task(
             self.instance._resume_and_continue(
-                self.channel, self.thread_id, {"decisions": [{"type": decision_type}]}
+                self.channel, self.thread_id, resume_payload
             )
         )
 
-    @discord.ui.button(label="✅ Approve", style=discord.ButtonStyle.success, custom_id="term_ok")
+
+    @discord.ui.button(label="✅ Allow", style=discord.ButtonStyle.success, custom_id="tool_ok")
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self._decide(interaction, "approve")
 
-    @discord.ui.button(label="❌ Deny", style=discord.ButtonStyle.danger, custom_id="term_no")
+    @discord.ui.button(label="🔓 Always Allow", style=discord.ButtonStyle.secondary, custom_id="tool_always")
+    async def always_allow(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._decide(interaction, "approve", always_allow=True)
+
+    @discord.ui.button(label="❌ Deny", style=discord.ButtonStyle.danger, custom_id="tool_no")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self._decide(interaction, "reject")
 
@@ -207,6 +229,48 @@ class DiscordBotInstance:
 
     def get_voice_mode(self, channel_id: str) -> str:
         return self.voice_modes.get(channel_id, "voice_only")
+
+    async def _persist_always_allow(self, tool_name: str):
+        """Persist permission_mode='always_allow' for a tool in Supabase."""
+        import json as _json
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self._sync_persist_always_allow(tool_name)
+            )
+        except Exception as e:
+            logger.warning(f"Failed to persist always_allow on Discord for {tool_name}: {e}")
+
+    def _sync_persist_always_allow(self, tool_name: str):
+        import json as _json
+        mcp_res = supabase.table("mcp_tool_settings").select("id").eq("tool_key", tool_name).execute()
+        if mcp_res.data and len(mcp_res.data) > 0:
+            supabase.table("mcp_tool_settings").update({
+                "permission_mode": "always_allow",
+                "updated_at": "now()"
+            }).eq("tool_key", tool_name).execute()
+            perm_key = "mcp_tools_permission_modes"
+        else:
+            perm_key = "builtin_tools_permission_modes"
+
+        query = supabase.table("agent_settings").select("value").eq("key", perm_key)
+        if self.user_id:
+            query = query.eq("user_id", self.user_id)
+        current_res = query.maybe_single().execute()
+        current_val = current_res.data.get("value") if current_res and current_res.data else {}
+        perms = _json.loads(current_val) if isinstance(current_val, str) else (current_val or {})
+        perms[tool_name] = "always_allow"
+
+        upsert_payload = {
+            "key": perm_key,
+            "value": _json.dumps(perms),
+            "updated_at": "now()"
+        }
+        if self.user_id:
+            upsert_payload["user_id"] = self.user_id
+        supabase.table("agent_settings").upsert(upsert_payload, on_conflict="key,user_id").execute()
+
 
     async def get_enabled_workflows(self) -> list[dict]:
         loop = asyncio.get_running_loop()
@@ -335,21 +399,30 @@ class DiscordBotInstance:
             await channel.send(f"✅ **{selected['name']}** is ready!\nThread ID: `{thread_id}`")
             return
 
-        # Bang commands (!voice / !help / !new) — agent commands (e.g. !learn)
-        # fall through to the agent, where the graph rewrites them.
-        elif text.startswith("!") and resolve_command is not None:
+        # Slash and bang commands (/stop, /voice, /help, /new, /status, /start)
+        # Agent commands (e.g. /learn) fall through to the agent, where the graph rewrites them.
+        elif text.startswith(("/", "!")) and resolve_command is not None:
             parsed = resolve_command(text)
             if not parsed:
-                await channel.send("❓ Unknown command. Try `!help`")
+                await channel.send("❓ Unknown command. Try `/help`")
                 return
             cmd, args = parsed
             if cmd.kind == "agent":
                 pass  # falls through to the agent below
+            elif cmd.name in ("stop", "cancel", "abort"):
+                cancelled = False
+                if TaskTracker:
+                    cancelled = await TaskTracker.cancel_run(channel_id)
+                if cancelled:
+                    await channel.send("🛑 **Active execution stopped.**")
+                else:
+                    await channel.send("ℹ️ No active agent task is currently running.")
+                return
             elif cmd.name == "voice":
                 mapping = {"on": "voice_only", "off": "off", "tts": "all"}
                 mode = mapping.get(args.lower())
                 if not mode:
-                    await channel.send("Usage: `!voice on` (speak replies to voice messages) · `!voice tts` (speak every reply) · `!voice off` (text only)")
+                    await channel.send("Usage: `/voice on` (speak replies to voice messages) · `/voice tts` (speak every reply) · `/voice off` (text only)")
                     return
                 self.voice_modes[channel_id] = mode
                 label = {
@@ -360,12 +433,12 @@ class DiscordBotInstance:
                 await channel.send(f"Voice replies: **{label}**")
                 return
             elif cmd.name == "help":
-                await channel.send("🤖 **Commands**\n\n" + "\n".join(cmd_help_lines()) + "\n\nNative: `!start` · `!select <workflow>`")
+                await channel.send("🤖 **Commands**\n\n" + "\n".join(cmd_help_lines()) + "\n\nNative: `/start` · `/select <workflow>`")
                 return
             elif cmd.name == "new":
                 session = self.active_sessions.get(channel_id)
                 if not session:
-                    await channel.send("No active workflow yet — send `!start` first.")
+                    await channel.send("No active workflow yet — send `/start` first.")
                     return
                 try:
                     thread = await langgraph_client.threads.create(
@@ -382,9 +455,7 @@ class DiscordBotInstance:
                             if session else "📌 **Current Status**\n❌ No active session.")
                 await channel.send(text_out)
                 return
-            elif cmd.name == "model":
-                await channel.send("Model changes live in the web UI (Settings → Workflows).")
-                return
+
 
         # 2. Regular message routing
         session = self.active_sessions.get(channel_id)
@@ -460,6 +531,10 @@ class DiscordBotInstance:
         last_edit_text = ""
         last_edit_time = 0.0
 
+        current_task = asyncio.current_task()
+        if TaskTracker and current_task:
+            await TaskTracker.register_run(channel_id, current_task, client=langgraph_client, thread_id=thread_id)
+
         try:
             async for chunk in langgraph_client.runs.stream(
                 thread_id=thread_id,
@@ -496,9 +571,19 @@ class DiscordBotInstance:
             # mirror appends AUDIO_URL markers after streaming finishes)
             await self._finish_run(channel, channel_id, thread_id, accumulated_text, placeholder_msg)
 
+        except asyncio.CancelledError:
+            logger.info(f"Stream cancelled for channel_id={channel_id}")
+            try:
+                await placeholder_msg.edit(content="🛑 **Execution cancelled by user.**")
+            except Exception:
+                pass
         except Exception as e:
             logger.exception("Error processing message in Discord daemon")
             await placeholder_msg.edit(content=f"❌ *Execution Failed:*\n`{e}`")
+        finally:
+            if TaskTracker:
+                await TaskTracker.unregister_run(channel_id)
+
 
     # ── Terminal command approval (human-in-the-loop) + run finishing ──────────
 
@@ -576,21 +661,49 @@ class DiscordBotInstance:
     async def _finish_run(self, channel, channel_id: str, thread_id: str, streamed_text: str, placeholder_msg):
         """Tail of every run: pause for approval if interrupted, else deliver final
         text (markers stripped) plus any voice/audio reply file."""
-        # 1. Pending human approval? (terminal tool interrupt)
+        # 1. Pending human approval? (universal tool approval interrupt)
         pending = await self._pending_interrupt(thread_id)
         if pending:
             try:
                 await placeholder_msg.edit(content="⏸️ Agent paused — needs your approval:")
             except Exception:
                 pass
+            import json as _json
             reqs = pending.get("action_requests") or pending.get("actionRequests") or []
+            if not reqs and (pending.get("name") or pending.get("tool_name")):
+                reqs = [pending]
             req_data = reqs[0] if reqs else {}
-            command = (req_data.get("args") or {}).get("command", "<?>")
-            desc = req_data.get("description") or "The agent wants to run a potentially risky command."
-            await channel.send(
-                f"⚠️ **Command approval required**\nThe agent wants to run:\n```{command}```\n{desc}",
-                view=ApprovalView(self, channel, thread_id),
+            tool_name = req_data.get("name") or req_data.get("tool_name") or "tool"
+            args = req_data.get("args") or req_data.get("arguments") or {}
+            desc = req_data.get("description") or f"Tool '{tool_name}' requires human approval before running."
+
+            args_lines = []
+            if isinstance(args, dict) and args:
+                for k, v in args.items():
+                    if isinstance(v, str):
+                        val_str = (v[:120] + f"… ({len(v)} chars)") if len(v) > 120 else v
+                    elif isinstance(v, (int, float, bool)):
+                        val_str = str(v)
+                    else:
+                        dumped = _json.dumps(v)
+                        val_str = (dumped[:120] + f"… ({len(dumped)} chars)") if len(dumped) > 120 else dumped
+                    args_lines.append(f"• **{k}**: `{val_str}`")
+                formatted_args = "\n".join(args_lines)
+            else:
+                dumped = str(args)
+                formatted_args = f"`{(dumped[:200] + '…') if len(dumped) > 200 else dumped}`"
+
+            prompt_text = (
+                f"🛡️ **Tool Execution Permission Required**\n"
+                f"🔧 **Tool:** `{tool_name}`\n"
+                f"📝 **Details:** {desc}\n"
+                f"📋 **Arguments:**\n{formatted_args}"
             )
+            await channel.send(
+                prompt_text[:1950],
+                view=ApprovalView(self, channel, thread_id, tool_name=tool_name, req_count=len(reqs)),
+            )
+
             return
 
         # 2. Final text from thread state (includes voice-mirror markers appended

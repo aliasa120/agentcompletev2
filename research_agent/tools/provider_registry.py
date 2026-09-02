@@ -35,7 +35,7 @@ class ProviderConfig(TypedDict, total=False):
 
 
 # ── Core Registry ──────────────────────────────────────────────────────────────
-# Order determines the display order in the UI. Only OpenRouter and Gemini direct.
+# Order determines the display order in the UI. 10 major OpenAI-compatible providers.
 
 PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
     "openrouter": {
@@ -46,9 +46,10 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
         "openai_compat": True,
         "badge_color": "from-violet-500 to-purple-600",
         "default_models": [
-            {"value": "openrouter/tencent/hy3:free",       "label": "Hunyuan 3 Free",       "badge": "Free"},
-            {"value": "openrouter/google/gemini-2.5-flash", "label": "Gemini 2.5 Flash",     "badge": "Cloud"},
-            {"value": "openrouter/google/gemini-2.5-pro",   "label": "Gemini 2.5 Pro",       "badge": "Cloud"},
+            {"value": "google/gemini-2.5-flash",        "label": "Gemini 2.5 Flash",        "badge": "Vision"},
+            {"value": "anthropic/claude-3.7-sonnet",     "label": "Claude 3.7 Sonnet",       "badge": "Vision"},
+            {"value": "deepseek/deepseek-r1",            "label": "DeepSeek R1",             "badge": "Reasoning"},
+            {"value": "meta-llama/llama-3.3-70b-instruct", "label": "Llama 3.3 70B",        "badge": "Fast"},
         ],
     },
     "gemini": {
@@ -59,12 +60,119 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
         "openai_compat": True,
         "badge_color": "from-blue-500 to-indigo-600",
         "default_models": [
-            {"value": "gemini-2.5-flash",      "label": "Gemini 2.5 Flash",      "badge": "Direct"},
-            {"value": "gemini-2.5-pro",        "label": "Gemini 2.5 Pro",        "badge": "Direct"},
-            {"value": "gemini-3.1-flash-lite", "label": "Gemini 3.1 Flash Lite", "badge": "Direct"},
+            {"value": "gemini-2.5-flash", "label": "Gemini 2.5 Flash", "badge": "Vision"},
+            {"value": "gemini-2.5-pro",   "label": "Gemini 2.5 Pro",   "badge": "Vision"},
+            {"value": "gemini-2.0-flash", "label": "Gemini 2.0 Flash", "badge": "Vision"},
+        ],
+    },
+    "grok": {
+        "base_url": "https://api.x.ai/v1",
+        "env_key": "XAI_API_KEY",
+        "agent_settings_key": "grok_client_api_key",
+        "label": "xAI (Grok)",
+        "openai_compat": True,
+        "badge_color": "from-zinc-700 to-neutral-900",
+        "default_models": [
+            {"value": "grok-2-vision-1212", "label": "Grok 2 Vision", "badge": "Vision"},
+            {"value": "grok-2-latest",      "label": "Grok 2 Latest", "badge": "Direct"},
+            {"value": "grok-beta",          "label": "Grok Beta",     "badge": "Direct"},
+        ],
+    },
+    "together": {
+        "base_url": "https://api.together.xyz/v1",
+        "env_key": "TOGETHER_API_KEY",
+        "agent_settings_key": "together_client_api_key",
+        "label": "Together AI (Meta Llama)",
+        "openai_compat": True,
+        "badge_color": "from-blue-600 to-cyan-600",
+        "default_models": [
+            {"value": "meta-llama/Llama-3.2-11B-Vision-Instruct",     "label": "Llama 3.2 11B Vision", "badge": "Vision"},
+            {"value": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", "label": "Llama 3.1 70B Turbo",  "badge": "Direct"},
+            {"value": "deepseek-ai/DeepSeek-R1",                      "label": "DeepSeek R1",          "badge": "Reasoning"},
+            {"value": "Qwen/Qwen2.5-72B-Instruct-Turbo",              "label": "Qwen 2.5 72B Turbo",   "badge": "Direct"},
+        ],
+    },
+    "cerebras": {
+        "base_url": "https://api.cerebras.ai/v1",
+        "env_key": "CEREBRAS_API_KEY",
+        "agent_settings_key": "cerebras_client_api_key",
+        "label": "Cerebras (Ultra-Fast)",
+        "openai_compat": True,
+        "badge_color": "from-emerald-500 to-teal-600",
+        "default_models": [
+            {"value": "llama3.1-70b", "label": "Llama 3.1 70B (Fastest)", "badge": "UltraFast"},
+            {"value": "llama3.1-8b",  "label": "Llama 3.1 8B",            "badge": "UltraFast"},
+            {"value": "llama-3.3-70b","label": "Llama 3.3 70B",           "badge": "UltraFast"},
+        ],
+    },
+    "groq": {
+        "base_url": "https://api.groq.com/openai/v1",
+        "env_key": "GROQ_API_KEY",
+        "agent_settings_key": "groq_client_api_key",
+        "label": "Groq (LPU Inference)",
+        "openai_compat": True,
+        "badge_color": "from-orange-500 to-amber-600",
+        "default_models": [
+            {"value": "llama-3.3-70b-versatile",           "label": "Llama 3.3 70B Versatile",  "badge": "Fast"},
+            {"value": "llama-3.2-11b-vision-preview",       "label": "Llama 3.2 11B Vision",     "badge": "Vision"},
+            {"value": "deepseek-r1-distill-llama-70b",      "label": "DeepSeek R1 Distill 70B",  "badge": "Reasoning"},
+        ],
+    },
+    "deepseek": {
+        "base_url": "https://api.deepseek.com/v1",
+        "env_key": "DEEPSEEK_API_KEY",
+        "agent_settings_key": "deepseek_client_api_key",
+        "label": "DeepSeek (Direct API)",
+        "openai_compat": True,
+        "badge_color": "from-sky-500 to-blue-700",
+        "default_models": [
+            {"value": "deepseek-chat",     "label": "DeepSeek V3 (Chat)",     "badge": "Direct"},
+            {"value": "deepseek-reasoner", "label": "DeepSeek R1 (Reasoner)", "badge": "Reasoning"},
+        ],
+    },
+    "mistral": {
+        "base_url": "https://api.mistral.ai/v1",
+        "env_key": "MISTRAL_API_KEY",
+        "agent_settings_key": "mistral_client_api_key",
+        "label": "Mistral AI",
+        "openai_compat": True,
+        "badge_color": "from-amber-500 to-orange-700",
+        "default_models": [
+            {"value": "mistral-large-latest", "label": "Mistral Large", "badge": "Direct"},
+            {"value": "pixtral-large-latest", "label": "Pixtral Large", "badge": "Vision"},
+            {"value": "codestral-latest",     "label": "Codestral",     "badge": "Code"},
+        ],
+    },
+    "fireworks": {
+        "base_url": "https://api.fireworks.ai/inference/v1",
+        "env_key": "FIREWORKS_API_KEY",
+        "agent_settings_key": "fireworks_client_api_key",
+        "label": "Fireworks AI",
+        "openai_compat": True,
+        "badge_color": "from-rose-500 to-red-600",
+        "default_models": [
+            {"value": "accounts/fireworks/models/llama-v3p3-70b-instruct",       "label": "Llama 3.3 70B",       "badge": "Direct"},
+            {"value": "accounts/fireworks/models/llama-v3p2-11b-vision-instruct", "label": "Llama 3.2 11B Vision", "badge": "Vision"},
+            {"value": "accounts/fireworks/models/deepseek-r1",                    "label": "DeepSeek R1",          "badge": "Reasoning"},
+        ],
+    },
+    "ollama": {
+        "base_url": "http://localhost:11434/v1",
+        "base_url_env": "OLLAMA_BASE_URL",
+        "base_url_default": "http://localhost:11434/v1",
+        "env_key": "OLLAMA_API_KEY",
+        "agent_settings_key": "ollama_client_api_key",
+        "label": "Ollama (Self-Hosted)",
+        "openai_compat": True,
+        "badge_color": "from-slate-600 to-zinc-800",
+        "default_models": [
+            {"value": "llama3.2-vision:latest", "label": "Llama 3.2 Vision (Local)", "badge": "LocalVision"},
+            {"value": "qwen2.5:latest",         "label": "Qwen 2.5 (Local)",         "badge": "Local"},
+            {"value": "deepseek-r1:latest",     "label": "DeepSeek R1 (Local)",     "badge": "Local"},
         ],
     },
 }
+
 
 KEY_MAPPINGS: dict[str, str] = {name: cfg["env_key"] for name, cfg in PROVIDER_REGISTRY.items()}
 
