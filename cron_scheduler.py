@@ -107,8 +107,50 @@ def _sb_patch(table: str, params: str, body: dict) -> None:
     r.raise_for_status()
 
 
+def _internal_api_headers() -> dict:
+    """Headers for calling the Next.js API as a trusted server-to-server caller.
+
+    /api/publish requires a browser session or this internal token; cron has no
+    cookies, so it presents the token instead.
+    """
+    token = (
+        os.getenv("INTERNAL_API_TOKEN")
+        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        or ""
+    ).strip()
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["x-internal-token"] = token
+    return headers
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+# ── Storage retention (daily) ─────────────────────────────────────────────────
+_last_storage_cleanup_date: str | None = None
+
+
+def check_storage_retention():
+    """Delete expired files from R2/Supabase + thread_files rows (runs once per day).
+
+    Retention is per-user via the agent_settings key ``storage_retention_days``
+    (default 30, 0 = forever), snapshotted into thread_files.expires_at at upload time.
+    """
+    global _last_storage_cleanup_date
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if _last_storage_cleanup_date == today:
+        return
+    _last_storage_cleanup_date = today
+    try:
+        from research_agent import storage_service
+        result = storage_service.cleanup_expired_files()
+        log.info(f"🧹 Storage retention cleanup: deleted={result.get('deleted', 0)} errors={len(result.get('errors', []))}")
+        for err in result.get("errors", [])[:5]:
+            log.warning(f"  storage cleanup error: {err}")
+    except Exception as e:
+        log.error(f"Storage retention cleanup failed: {e}")
 
 
 def _elapsed_since(iso_str: str) -> float:
@@ -120,6 +162,30 @@ def _elapsed_since(iso_str: str) -> float:
         return (datetime.now(timezone.utc) - ts).total_seconds()
     except Exception:
         return float("inf")
+
+
+def _plugin_enabled(plugin_key: str) -> bool:
+    """Return True if a plugin is enabled (any user override wins, else catalog default).
+
+    Mirrors the semantics in research_agent/plugins.py: agents and schedules are
+    compiled globally, so a plugin counts as enabled when any user enabled it,
+    or — when no user has expressed a preference — when its default is enabled.
+    On lookup failure the plugin is assumed enabled to preserve current behaviour.
+    """
+    try:
+        plugin_rows = _sb_get("plugins", f"plugin_key=eq.{plugin_key}")
+        if not plugin_rows:
+            return True
+        plugin = plugin_rows[0]
+        override_rows = _sb_get("user_plugin_settings", f"plugin_key=eq.{plugin_key}")
+        if any(r.get("enabled") for r in override_rows):
+            return True
+        if override_rows:
+            return False
+        return bool(plugin.get("default_enabled", True))
+    except Exception as e:
+        log.warning(f"Plugin check for '{plugin_key}' failed ({e}); assuming enabled.")
+        return True
 
 
 def _strip_html(text: str) -> str:
@@ -156,6 +222,10 @@ def _retry(fn, max_attempts: int = 3, wait_seconds: int = 10, label: str = ""):
 # ── Feeder trigger ───────────────────────────────────────────────────────────
 def check_feeder() -> None:
     try:
+        if not _plugin_enabled("feeder"):
+            log.info("Feeder plugin disabled; skipping feeder trigger.")
+            return
+
         # Get all workflows
         workflows = _sb_get("workflows")
         if not workflows:
@@ -222,10 +292,17 @@ def _lg_list_assistants() -> list:
     return r.json()
 
 
-def _lg_create_thread(workflow_id: str = None) -> str:
+def _lg_create_thread(workflow_id: str = None, scheduled_task_id: str = None, scheduled_task_name: str = None) -> str:
     payload = {}
+    metadata = {}
     if workflow_id:
-        payload["metadata"] = {"workflow_id": workflow_id}
+        metadata["workflow_id"] = workflow_id
+    if scheduled_task_id:
+        metadata["scheduled_task_id"] = scheduled_task_id
+    if scheduled_task_name:
+        metadata["scheduled_task_name"] = scheduled_task_name
+    if metadata:
+        payload["metadata"] = metadata
     r = requests.post(f"{LG_URL}/threads", headers={"Content-Type": "application/json"}, json=payload, timeout=10)
     r.raise_for_status()
     return r.json()["thread_id"]
@@ -299,6 +376,166 @@ def get_final_assistant_message(thread_id: str) -> str:
     except Exception as e:
         log.warning(f"Could not parse messages for thread {thread_id}: {e}")
     return ""
+
+
+def _resolve_tz_name(tz: Optional[str]) -> Optional[str]:
+    """Validate an IANA timezone name; returns None if invalid/empty."""
+    if not tz or not str(tz).strip():
+        return None
+    tz = str(tz).strip()
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo(tz)
+        return tz
+    except Exception:
+        return None
+
+
+def _get_user_timezone(user_id: Optional[str]) -> Optional[str]:
+    """Fetch the user's scheduler timezone preference (agent_settings key 'timezone')."""
+    if not user_id:
+        return None
+    try:
+        rows = _sb_get("agent_settings", f"user_id=eq.{user_id}&key=eq.timezone&select=value")
+        if rows and rows[0].get("value"):
+            return _resolve_tz_name(rows[0]["value"])
+    except Exception as e:
+        log.debug(f"Could not fetch timezone preference for user {user_id}: {e}")
+    return None
+
+
+def _build_datetime_context_block(tz: Optional[str] = None) -> str:
+    """Render the current date/time so a background agent session knows 'now'.
+
+    Scheduled runs start in a fresh session with no user present, so without this the
+    agent has no reliable anchor for phrases like "today" inside its own prompt.
+    """
+    tz_name = _resolve_tz_name(tz)
+    now = datetime.now(timezone.utc)
+    if tz_name:
+        try:
+            from zoneinfo import ZoneInfo
+            now = now.astimezone(ZoneInfo(tz_name))
+        except Exception:
+            now = now.astimezone()
+    else:
+        now = now.astimezone()
+    label = tz_name or (now.tzname() or "server local time")
+    return (
+        "### Current Date & Time\n"
+        f"- Now: {now.strftime('%Y-%m-%d %H:%M')} ({now.strftime('%A')}, {label})\n"
+        "This is a scheduled background run. Treat the date above as \"today\" for any "
+        "relative wording in the prompt below.\n"
+    )
+
+
+def _build_chat_context_block(
+    thread_id: str,
+    max_messages: int = 20,
+    max_total_chars: int = 8000,
+    max_msg_chars: int = 1200,
+) -> str:
+    """Render the recent conversation of a chat thread as a context block.
+
+    Used for scheduled tasks created with mount_chat so the agent understands
+    WHY the task exists and what the user originally asked for.
+    """
+    try:
+        msgs = _lg_get_messages(thread_id)
+    except Exception as e:
+        log.warning(f"Could not fetch chat context from thread {thread_id}: {e}")
+        return ""
+
+    lines = []
+    total = 0
+    for m in msgs:
+        role = m.get("role") or m.get("type")
+        if role not in ("human", "user", "assistant", "ai"):
+            continue
+        content = m.get("content")
+        if isinstance(content, list):
+            parts = []
+            for p in content:
+                if isinstance(p, dict) and p.get("type") == "text":
+                    parts.append(p.get("text", ""))
+                elif isinstance(p, str):
+                    parts.append(p)
+            content = "\n".join(parts)
+        if not content or not str(content).strip():
+            continue
+        content = str(content).strip()
+        if len(content) > max_msg_chars:
+            content = content[:max_msg_chars] + "…[truncated]"
+        who = "user" if role in ("human", "user") else "assistant"
+        lines.append(f"[{who}]: {content}")
+
+    if not lines:
+        return ""
+
+    lines = lines[-max_messages:]
+    rendered = "\n".join(lines)
+    if len(rendered) > max_total_chars:
+        rendered = rendered[-max_total_chars:]
+
+    return (
+        f"### Original Chat Context (thread {thread_id})\n"
+        f"This task was created from the conversation below — it explains WHY the task exists "
+        f"and what the user wants:\n\n{rendered}\n"
+    )
+
+
+def _resolve_assistant_id() -> str:
+    """Resolve the default assistant id for background runs (fallback: 'research')."""
+    try:
+        assistants = _lg_list_assistants()
+        if assistants:
+            return assistants[0]["assistant_id"]
+    except Exception as e:
+        log.warning(f"Could not fetch assistants — using fallback 'research': {e}")
+    return "research"
+
+
+def _deliver_to_thread(thread_id: str, task_name: str, output: str, workflow_id: Optional[str] = None) -> bool:
+    """Deliver a scheduled task's output back into a chat thread (deliver='thread:<id>')."""
+    try:
+        output_snippet = output if len(output) <= 4000 else output[:4000] + "…[truncated]"
+        content = (
+            f"[Scheduled Task Delivery]\n"
+            f'The scheduled task "{task_name}" just finished running. Its output is below.\n'
+            f"Briefly inform the user of the result in a natural, conversational way.\n\n"
+            f"<task_output>\n{output_snippet}\n</task_output>"
+        )
+        run = _lg_create_run(thread_id, _resolve_assistant_id(), content, workflow_id)
+        run_id = run.get("run_id") or run.get("id")
+        if not run_id:
+            raise KeyError(f"No run_id in delivery run response: {run}")
+
+        start_time = time.time()
+        timeout = 600  # 10 min max for the delivery run
+        while time.time() - start_time < timeout:
+            try:
+                run_data = _lg_get_run(thread_id, run_id)
+                status = run_data.get("status")
+            except Exception as poll_err:
+                log.warning(f"  [Delivery Poll] {poll_err}. Retrying in 5s...")
+                time.sleep(5)
+                continue
+            if status not in ("pending", "running", "queued"):
+                if status == "success":
+                    log.info(f"📤 Delivered output of '{task_name}' to thread {thread_id}")
+                    return True
+                log.warning(f"  Delivery run for '{task_name}' ended with status: {status}")
+                return False
+            time.sleep(5)
+        log.warning(f"  Delivery run for '{task_name}' timed out after 10 minutes.")
+        try:
+            requests.post(f"{LG_URL}/threads/{thread_id}/runs/{run_id}/cancel", timeout=5)
+        except Exception:
+            pass
+        return False
+    except Exception as e:
+        log.warning(f"  Failed to deliver output of '{task_name}' to thread {thread_id}: {e}")
+        return False
 
 
 def run_script_job(script_path: str, workdir: Optional[str] = None) -> tuple[str, str]:
@@ -483,10 +720,15 @@ def check_auto_publish() -> None:
     )
 
     try:
+        if not _plugin_enabled("posts"):
+            log.info("Posts plugin disabled; skipping auto-publish.")
+            return
+
         # Read social publish settings
         rows = _sb_get(
             "agent_settings",
-            "key=in.(social_auto_publish,auto_publish_since,social_fb_enabled,social_ig_enabled,social_twitter_enabled)"
+            "key=in.(social_auto_publish,auto_publish_since,social_fb_enabled,social_ig_enabled,social_youtube_enabled,social_yt_enabled,social_twitter_enabled)"
+            "&select=key,value,user_id"
         )
         smap = {r["key"]: r["value"] for r in rows}
 
@@ -495,14 +737,58 @@ def check_auto_publish() -> None:
             return
 
         since_str    = smap.get("auto_publish_since", "") or ""
-        fb_enabled   = smap.get("social_fb_enabled", "false").lower() == "true"
-        ig_enabled   = smap.get("social_ig_enabled", "false").lower() == "true"
-        tw_enabled   = smap.get("social_twitter_enabled", "false").lower() == "true"
+
+        # Bound the sweep. Without auto_publish_since, the first tick after
+        # enabling auto-publish would treat the ENTIRE social_posts history as
+        # publishable and re-post old drafts. Stamp "now" and start from here.
+        # agent_settings is keyed (user_id, key), so the marker is written for
+        # whichever user turned auto-publish on.
+        if not since_str:
+            since_str = datetime.now(timezone.utc).isoformat()
+            owner_id = next(
+                (
+                    r.get("user_id")
+                    for r in rows
+                    if r.get("key") == "social_auto_publish"
+                    and (r.get("value") or "").strip().lower() == "true"
+                    and r.get("user_id")
+                ),
+                None,
+            )
+            if owner_id:
+                try:
+                    _sb_upsert(
+                        "agent_settings",
+                        [{"user_id": owner_id, "key": "auto_publish_since", "value": since_str}],
+                    )
+                    log.info(f"Auto-publish: no auto_publish_since marker — stamped {since_str}; older posts are skipped.")
+                except Exception as stamp_err:
+                    log.warning(f"Could not persist auto_publish_since ({stamp_err}); using in-memory cutoff for this tick.")
+            else:
+                log.warning("Auto-publish: could not determine the owner of social_auto_publish; using in-memory cutoff for this tick.")
+
+        # Platform-enabled defaults must match the Posts UI (posts/page.tsx and
+        # posts/settings/page.tsx), which shows Facebook/Instagram/YouTube ON and
+        # X/Twitter OFF when a key was never saved. Previously cron required an
+        # explicit "true", so the console and the scheduler disagreed about which
+        # platforms were live.
+        def _flag(key: str, default: bool, *aliases: str) -> bool:
+            for k in (key, *aliases):
+                raw = (smap.get(k) or "").strip().lower()
+                if raw:
+                    return raw == "true"
+            return default
+
+        fb_enabled   = _flag("social_fb_enabled", True)
+        ig_enabled   = _flag("social_ig_enabled", True)
+        yt_enabled   = _flag("social_youtube_enabled", True, "social_yt_enabled")
+        tw_enabled   = _flag("social_twitter_enabled", False)
 
         # Build list of enabled platforms
         enabled_platforms = []
         if fb_enabled:  enabled_platforms.append("facebook")
         if ig_enabled:  enabled_platforms.append("instagram")
+        if yt_enabled:  enabled_platforms.append("youtube")
         if tw_enabled:  enabled_platforms.append("twitter")
 
         if not enabled_platforms:
@@ -567,7 +853,7 @@ def check_auto_publish() -> None:
                 resp = requests.post(
                     f"{NEXT_URL}/api/publish",
                     json=payload,
-                    headers={"Content-Type": "application/json"},
+                    headers=_internal_api_headers(),
                     timeout=120,
                 )
                 if resp.ok:
@@ -661,18 +947,42 @@ def _execute_scheduled_task(task: dict) -> None:
     job_id = task["id"]
     task_name = task["name"]
     no_agent = task.get("no_agent", False)
-    
+
     log.info(f"🚀 Executing scheduled task: {task_name} (ID: {job_id})")
-    
-    # Resolve context_from
+
+    # Resolve task timezone: task override > user preference > HERMES_TIMEZONE env (inside compute_next_run)
+    task_tz = _resolve_tz_name(task.get("timezone"))
+    if not task_tz:
+        task_tz = _get_user_timezone(task.get("user_id"))
+
+    # Resolve context blocks
     context_blocks = []
+
+    # 0) Live date/time anchor so the isolated session knows what "today" means
+    context_blocks.append(_build_datetime_context_block(task_tz))
+
+    # 1) Agent-written background summary (WHY the task exists)
+    context_summary = task.get("context_summary")
+    if context_summary and str(context_summary).strip():
+        context_blocks.append(f"### Task Background\n{str(context_summary).strip()}\n")
+
+    # 2) Mounted chat conversation (the chat where the task was created)
+    mount_thread = task.get("mount_chat")
+    if mount_thread:
+        chat_block = _build_chat_context_block(mount_thread)
+        if chat_block:
+            context_blocks.append(chat_block)
+        else:
+            log.warning(f"  No chat context could be loaded for mounted thread {mount_thread}")
+
+    # 3) Upstream task outputs (context_from dependency chain)
     context_from = task.get("context_from") or []
     if isinstance(context_from, str):
         try:
             context_from = json.loads(context_from)
         except Exception:
             context_from = []
-            
+
     if context_from:
         for upstream_id in context_from:
             try:
@@ -709,16 +1019,10 @@ def _execute_scheduled_task(task: dict) -> None:
                 status, logs = run_script_job(script_path, workdir)
         else:
             # Agent LangGraph task
-            assistant_id = "research"
-            try:
-                assistants = _lg_list_assistants()
-                if assistants:
-                    assistant_id = assistants[0]["assistant_id"]
-            except Exception as e:
-                log.warning(f"Could not fetch assistants for scheduled task — using fallback 'research': {e}")
-                
+            assistant_id = _resolve_assistant_id()
+
             wf_id = task.get("origin", {}).get("workflow_id") if isinstance(task.get("origin"), dict) else None
-            thread_id = _lg_create_thread(wf_id)
+            thread_id = _lg_create_thread(wf_id, scheduled_task_id=job_id, scheduled_task_name=task_name)
             
             run = _lg_create_run(thread_id, assistant_id, prompt, wf_id)
             run_id = run.get("run_id") or run.get("id")
@@ -783,18 +1087,18 @@ def _execute_scheduled_task(task: dict) -> None:
                 enabled = False
                 state = "completed"
                 
-        # Calculate next run
+        # Calculate next run (in the task's timezone, stored as UTC)
         schedule_dict = task.get("schedule")
         if isinstance(schedule_dict, str):
             try:
                 schedule_dict = json.loads(schedule_dict)
             except Exception:
                 schedule_dict = {}
-                
+
         next_run_at = None
         if enabled and state == "scheduled":
             from research_agent.tools.cronjob import compute_next_run
-            next_run_at = compute_next_run(schedule_dict, last_run_at=now_time)
+            next_run_at = compute_next_run(schedule_dict, last_run_at=now_time, tz=task_tz)
             if not next_run_at:
                 enabled = False
                 state = "completed"
@@ -814,6 +1118,17 @@ def _execute_scheduled_task(task: dict) -> None:
     except Exception as e:
         log.error(f"Failed to update task post-run status for {task_name}: {e}")
 
+    # Deliver output back to the origin chat (deliver='thread:<id>' / 'origin')
+    deliver = (task.get("deliver") or "local").strip()
+    if deliver.startswith("thread:") and status == "success" and logs:
+        origin = task.get("origin") if isinstance(task.get("origin"), dict) else {}
+        _deliver_to_thread(
+            deliver.split(":", 1)[1].strip(),
+            task_name,
+            logs,
+            workflow_id=origin.get("workflow_id"),
+        )
+
 
 # ── Main loop ────────────────────────────────────────────────────────────────
 def main():
@@ -831,6 +1146,7 @@ def main():
         fire_in_background(check_agent)
         fire_in_background(check_scheduled_tasks)
         fire_in_background(check_auto_publish)
+        fire_in_background(check_storage_retention)
         time.sleep(TICK_SECONDS)
 
 

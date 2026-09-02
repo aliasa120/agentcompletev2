@@ -16,7 +16,7 @@ from typing import List
 import httpx
 from langchain_core.tools import tool
 
-from .provider_engine import execute_with_fallback, get_settings
+from .provider_engine import execute_with_fallback, get_settings, execute_unified_pipeline
 
 logger = logging.getLogger("unified_search")
 
@@ -171,7 +171,13 @@ def unified_search(query: str, config: RunnableConfig = None) -> str:
     Returns:
         Sourced answer with inline citations and source URLs from the active provider.
     """
-    from .provider_engine import execute_unified_pipeline
+    try:
+        from .dynamic_router import get_tool_permission_mode
+        perm_mode = get_tool_permission_mode("unified_search")
+        if perm_mode == "deny":
+            return "Error: Tool 'unified_search' execution is blocked/denied by your security permissions."
+    except Exception as perm_err:
+        pass
 
     try:
         loop = asyncio.get_event_loop()

@@ -30,7 +30,7 @@ logger = logging.getLogger("telegram_server")
 
 # Check required libraries
 try:
-    from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+    from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
     from telegram.ext import (
         Application,
         CommandHandler,
@@ -55,16 +55,18 @@ except ImportError:
     logger.error("langgraph-sdk is not installed. Run: uv pip install langgraph-sdk")
     sys.exit(1)
 
-# Agent feature helpers (command registry + TTS audio markers)
+# Agent feature helpers (command registry + TTS audio markers + task tracker)
 try:
     from research_agent.commands import resolve_command, help_lines as cmd_help_lines, COMMAND_REGISTRY
     from research_agent.tts import extract_audio_markers
+    from research_agent.task_tracker import TaskTracker
 except ImportError as ie:
-    logger.warning(f"research_agent helpers not importable ({ie}); !commands and voice replies disabled")
+    logger.warning(f"research_agent helpers not importable ({ie}); commands and voice replies disabled")
     resolve_command = None
     cmd_help_lines = lambda: []  # noqa: E731
     COMMAND_REGISTRY = ()
     extract_audio_markers = lambda t: (None, False, None, t or "")  # noqa: E731
+    TaskTracker = None
 
 # Env config validation
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
@@ -460,8 +462,9 @@ class TelegramBotInstance:
         self.active_sessions: dict[int, dict] = {}
         # Per-chat voice reply mode: "off" | "voice_only" | "all" (persisted in telegram_chat_bindings)
         self.voice_modes: dict[int, str] = {}
-        # Per-chat pending terminal-command edit (chat_id -> {"thread_id": ...})
-        self.pending_terminal_edits: dict[int, dict] = {}
+        # Per-chat pending tool/command edit (chat_id -> {"thread_id": ..., "tool_name": ..., "status_message_id": ...})
+        self.pending_tool_edits: dict[int, dict] = {}
+        self.pending_terminal_edits = self.pending_tool_edits
 
     async def get_voice_mode(self, chat_id: int) -> str:
         """Voice reply mode for this chat (cached, falls back to Supabase binding)."""
@@ -536,8 +539,13 @@ class TelegramBotInstance:
         self.application.add_handler(CommandHandler("start", self.start_command))
         self.application.add_handler(CommandHandler("status", self.status_command))
         self.application.add_handler(CommandHandler("workflows", self.start_command))  # alias
+        self.application.add_handler(CommandHandler("stop", self.stop_command))
+        self.application.add_handler(CommandHandler("cancel", self.stop_command))
+        self.application.add_handler(CommandHandler("new", self.new_command))
+        self.application.add_handler(CommandHandler("voice", self.voice_command))
+        self.application.add_handler(CommandHandler("help", self.help_command))
         self.application.add_handler(CallbackQueryHandler(self.handle_workflow_selection, pattern=r"^select_wf:"))
-        self.application.add_handler(CallbackQueryHandler(self.handle_terminal_approval, pattern=r"^term_(ok|no|edit):"))
+        self.application.add_handler(CallbackQueryHandler(self.handle_tool_approval, pattern=r"^(term|tool)_(ok|no|edit|always):"))
         self.application.add_handler(MessageHandler(
             (filters.TEXT | filters.PHOTO | filters.VOICE | filters.AUDIO | filters.VIDEO | filters.Document.ALL) & ~filters.COMMAND,
             self.handle_message
@@ -545,8 +553,26 @@ class TelegramBotInstance:
 
         await self.application.initialize()
         await self.application.start()
+
+        # Sync native Telegram bot commands for popover autocomplete
+        try:
+            bot_cmds = [
+                BotCommand("start", "Select or switch the active workflow"),
+                BotCommand("new", "Start a new conversation thread"),
+                BotCommand("stop", "Stop active agent execution"),
+                BotCommand("status", "Show the active workflow and thread"),
+                BotCommand("voice", "Configure voice replies (on/off/tts)"),
+                BotCommand("learn", "Learn a reusable skill from description"),
+                BotCommand("help", "List available commands"),
+            ]
+            await self.application.bot.set_my_commands(bot_cmds)
+            logger.info(f"Bot {self.bot_id[:8]} synced {len(bot_cmds)} commands with Telegram.")
+        except Exception as ce:
+            logger.warning(f"Failed to sync Telegram bot commands: {ce}")
+
         await self.application.updater.start_polling()
         logger.info(f"Bot {self.bot_id[:8]} started — multi-workflow mode ready.")
+
 
     async def stop(self):
         """Gracefully stop the polling loop and release resources."""
@@ -706,50 +732,120 @@ class TelegramBotInstance:
             parse_mode="Markdown"
         )
 
-    # ── Bang commands (!voice / !help / !status / !new) ─────────────────────────
-    # "!" is used instead of "/" so we never clash with native Telegram commands.
-    # Agent-kind commands (e.g. !learn) return False and fall through to the agent,
-    # where the graph's preprocess node rewrites them into full instructions.
+    # ── Slash commands (/stop, /new, /voice, /help, /status) ────────────────────
 
-    async def handle_bang_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
-        """Handle !-prefixed session commands. Returns True when fully handled."""
+    async def stop_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Stop and cancel any active streaming run for this chat."""
+        if not is_user_allowed(update.effective_user):
+            await update.message.reply_text("⛔ Access denied.")
+            return
+
+        chat_id = update.effective_chat.id
+        cancelled = False
+        if TaskTracker:
+            cancelled = await TaskTracker.cancel_run(str(chat_id))
+
+        if cancelled:
+            await update.message.reply_text("🛑 *Active execution stopped.*", parse_mode="Markdown")
+        else:
+            await update.message.reply_text("ℹ️ No active agent task is currently running.", parse_mode="Markdown")
+
+    async def new_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Start a new conversation thread with the active workflow."""
+        if not is_user_allowed(update.effective_user):
+            await update.message.reply_text("⛔ Access denied.")
+            return
+
+        chat_id = update.effective_chat.id
+        session = self.active_sessions.get(chat_id)
+        if not session:
+            await update.message.reply_text("No active workflow yet — use /start to pick one first.")
+            return
+
+        try:
+            thread = await langgraph_client.threads.create(
+                metadata={
+                    "workflow_id": session["workflow_id"],
+                    "user_id": self.user_id,
+                    "telegram_chat_id": str(chat_id)
+                }
+            )
+            session["thread_id"] = thread["thread_id"]
+            await save_thread_binding(chat_id, session["workflow_id"], thread["thread_id"])
+            await update.message.reply_text(f"🆕 Fresh conversation started with *{session['workflow_name']}*.", parse_mode="Markdown")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Couldn't start a new thread: {e}")
+
+    async def voice_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Configure voice reply mode (/voice on, /voice tts, /voice off)."""
+        if not is_user_allowed(update.effective_user):
+            await update.message.reply_text("⛔ Access denied.")
+            return
+
+        chat_id = update.effective_chat.id
+        args = context.args or []
+        arg_str = args[0] if args else ""
+        await self._execute_voice_mode(update, chat_id, arg_str)
+
+    async def _execute_voice_mode(self, update: Update, chat_id: int, args: str) -> bool:
+        mapping = {"on": "voice_only", "off": "off", "tts": "all"}
+        mode = mapping.get(args.lower().strip())
+        if not mode:
+            await update.message.reply_text(
+                "Usage:\n"
+                "• `/voice on` — speak replies to your voice messages 🎙️\n"
+                "• `/voice tts` — speak every reply 🔊\n"
+                "• `/voice off` — text only 💬",
+                parse_mode="Markdown"
+            )
+            return True
+        await self.save_voice_mode(chat_id, mode)
+        label = {
+            "voice_only": "ON — I'll speak replies to your voice messages 🎙️",
+            "off": "OFF — text only 💬",
+            "all": "TTS — I'll speak every reply 🔊",
+        }[mode]
+        await update.message.reply_text(f"Voice replies: *{label}*", parse_mode="Markdown")
+        return True
+
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Show available commands."""
+        if not is_user_allowed(update.effective_user):
+            await update.message.reply_text("⛔ Access denied.")
+            return
+
+        lines = cmd_help_lines() if cmd_help_lines else []
+        cmd_text = "\n".join(lines) if lines else "/start, /new, /stop, /status, /voice, /learn, /help"
+        await update.message.reply_text(
+            f"🤖 *Available Commands*\n\n{cmd_text}\n\n"
+            "Interactive buttons: Use the approval buttons for command approvals.",
+            parse_mode="Markdown"
+        )
+
+    async def handle_slash_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
+        """Handle /- and !-prefixed session commands. Returns True when fully handled."""
         if resolve_command is None:
             return True
         parsed = resolve_command(text)
         chat_id = update.effective_chat.id
         if not parsed:
-            await update.message.reply_text("❓ Unknown command. Try `!help`", parse_mode="Markdown")
+            await update.message.reply_text("❓ Unknown command. Try `/help`", parse_mode="Markdown")
             return True
         cmd, args = parsed
 
         if cmd.kind == "agent":
-            return False  # e.g. !learn — the agent handles it
+            return False  # e.g. /learn — the agent graph preprocess node handles it
+
+        if cmd.name in ("stop", "cancel", "abort"):
+            await self.stop_command(update, context)
+            return True
 
         if cmd.name == "voice":
-            mapping = {"on": "voice_only", "off": "off", "tts": "all"}
-            mode = mapping.get(args.lower())
-            if not mode:
-                await update.message.reply_text(
-                    "Usage: `!voice on` (speak replies to voice messages) · "
-                    "`!voice tts` (speak every reply) · `!voice off` (text only)",
-                    parse_mode="Markdown"
-                )
-                return True
-            await self.save_voice_mode(chat_id, mode)
-            label = {
-                "voice_only": "ON — I'll speak replies to your voice messages 🎙️",
-                "off": "OFF — text only",
-                "all": "TTS — I'll speak every reply 🔊",
-            }[mode]
-            await update.message.reply_text(f"Voice replies: *{label}*", parse_mode="Markdown")
+            await self._execute_voice_mode(update, chat_id, args)
             return True
 
         if cmd.name == "help":
-            await update.message.reply_text(
-                "🤖 *Commands*\n\n" + "\n".join(cmd_help_lines()) +
-                "\n\nNative commands: /start · /status · /workflows",
-                parse_mode="Markdown"
-            )
+            await self.help_command(update, context)
             return True
 
         if cmd.name == "status":
@@ -757,36 +853,23 @@ class TelegramBotInstance:
             return True
 
         if cmd.name == "new":
-            session = self.active_sessions.get(chat_id)
-            if not session:
-                await update.message.reply_text("No active workflow yet — use /start to pick one first.")
-                return True
-            try:
-                thread = await langgraph_client.threads.create(
-                    metadata={
-                        "workflow_id": session["workflow_id"],
-                        "user_id": self.user_id,
-                        "telegram_chat_id": str(chat_id)
-                    }
-                )
-                session["thread_id"] = thread["thread_id"]
-                await save_thread_binding(chat_id, session["workflow_id"], thread["thread_id"])
-                await update.message.reply_text(f"🆕 Fresh conversation started with *{session['workflow_name']}*.", parse_mode="Markdown")
-            except Exception as e:
-                await update.message.reply_text(f"❌ Couldn't start a new thread: {e}")
+            await self.new_command(update, context)
             return True
 
-        if cmd.name == "model":
-            await update.message.reply_text("Model changes live in the web UI (Settings → Workflows).")
+        if cmd.name in ("start", "workflows"):
+            await self.start_command(update, context)
             return True
 
-        await update.message.reply_text("❓ Unknown command. Try `!help`", parse_mode="Markdown")
+        await update.message.reply_text("❓ Unknown command. Try `/help`", parse_mode="Markdown")
         return True
+
+    handle_bang_command = handle_slash_command
+
 
     # ── Terminal command approval (human-in-the-loop) ──────────────────────────
 
     async def _pending_interrupt(self, thread_id: str) -> dict | None:
-        """Return the pending HITL interrupt payload (e.g. terminal approval), if any."""
+        """Return the pending HITL interrupt payload (e.g. tool/terminal approval), if any."""
         try:
             state = await langgraph_client.threads.get_state(thread_id)
         except Exception as e:
@@ -805,37 +888,174 @@ class TelegramBotInstance:
         return None
 
     async def _send_approval_prompt(self, bot, chat_id: int, thread_id: str, payload: dict):
+        """Universal Tool Approval card for Telegram with argument truncation, Always-Allow, and Edit."""
         import html as _html
+        import json as _json
         reqs = payload.get("action_requests") or payload.get("actionRequests") or []
+        if not reqs and (payload.get("name") or payload.get("tool_name")):
+            reqs = [payload]
         req = reqs[0] if reqs else {}
-        command = (req.get("args") or {}).get("command", "<?>")
-        desc = req.get("description") or "The agent wants to run a potentially risky command."
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Approve", callback_data=f"term_ok:{thread_id}"),
-             InlineKeyboardButton("❌ Deny", callback_data=f"term_no:{thread_id}")],
-            [InlineKeyboardButton("✏️ Edit command", callback_data=f"term_edit:{thread_id}")],
-        ])
-        await bot.send_message(
-            chat_id=chat_id,
-            text=(
-                "⚠️ <b>Command approval required</b>\n"
-                "The agent wants to run:\n"
-                f"<pre>{_html.escape(command)}</pre>\n"
-                f"{_html.escape(desc)}"
-            ),
-            parse_mode="HTML",
-            reply_markup=keyboard,
-        )
+        req_count = max(1, len(reqs))
+        tool_name = req.get("name") or req.get("tool_name") or "tool"
+        args = req.get("args") or req.get("arguments") or {}
+        desc = req.get("description") or f"Tool '{tool_name}' requires human approval before running."
 
-    async def handle_terminal_approval(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Inline-keyboard callback for terminal command approvals."""
+        # Cache approval info for this thread
+        if not hasattr(self, "pending_tool_approvals"):
+            self.pending_tool_approvals = {}
+        self.pending_tool_approvals[thread_id] = {
+            "tool_name": tool_name,
+            "args": args,
+            "desc": desc,
+            "req_count": req_count,
+        }
+
+        # Format arguments with safe truncation so message never exceeds Telegram 4096 char limit
+        args_lines = []
+        if isinstance(args, dict) and args:
+            for k, v in args.items():
+                if isinstance(v, str):
+                    if len(v) > 150:
+                        val_str = _html.escape(v[:150]) + f"… <i>({len(v)} chars)</i>"
+                    else:
+                        val_str = _html.escape(v)
+                elif isinstance(v, (int, float, bool)):
+                    val_str = str(v)
+                else:
+                    dumped = _json.dumps(v)
+                    if len(dumped) > 150:
+                        val_str = _html.escape(dumped[:150]) + f"… <i>({len(dumped)} chars)</i>"
+                    else:
+                        val_str = _html.escape(dumped)
+                args_lines.append(f"• <b>{_html.escape(str(k))}</b>: <code>{val_str}</code>")
+            formatted_args = "\n".join(args_lines)
+        else:
+            dumped = str(args)
+            if len(dumped) > 200:
+                dumped = _html.escape(dumped[:200]) + f"… <i>({len(dumped)} chars)</i>"
+            else:
+                dumped = _html.escape(dumped)
+            formatted_args = f"<code>{dumped}</code>"
+
+        is_batch = len(reqs) > 1
+
+        # Note: Telegram callback_data MUST be <= 64 bytes!
+        # "tool_alw:<36-char-uuid>" = 45 bytes (valid).
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ Allow", callback_data=f"tool_ok:{thread_id}"),
+                InlineKeyboardButton("❌ Deny", callback_data=f"tool_no:{thread_id}"),
+            ],
+            [
+                InlineKeyboardButton(f"🔓 Always Allow {tool_name[:18]}", callback_data=f"tool_alw:{thread_id}"),
+            ],
+            [
+                InlineKeyboardButton("✏️ Edit Arguments", callback_data=f"tool_edt:{thread_id}"),
+            ],
+        ])
+
+        header = "🛡️ <b>Tool Execution Permission Required</b>"
+        if is_batch:
+            header += f" <i>({len(reqs)} calls)</i>"
+
+        text = (
+            f"{header}\n\n"
+            f"🔧 <b>Tool:</b> <code>{_html.escape(tool_name)}</code>\n"
+            f"📝 <b>Details:</b> {_html.escape(desc)}\n\n"
+            f"📋 <b>Arguments:</b>\n{formatted_args}"
+        )
+        if len(text) > 3500:
+            text = text[:3400] + "\n\n… <i>(truncated)</i>"
+
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+        except Exception as e:
+            logger.warning(f"HTML approval send failed: {e}. Retrying with plain text.")
+            plain_args = _json.dumps(args, default=str)
+            if len(plain_args) > 500:
+                plain_args = plain_args[:500] + f"… ({len(plain_args)} chars)"
+            plain_text = f"🛡️ Tool Approval Required: {tool_name}\n\n{desc}\n\nArguments:\n{plain_args}"
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=plain_text[:3500],
+                    reply_markup=keyboard,
+                )
+            except Exception as e2:
+                logger.error(f"Failed to send plain text approval prompt: {e2}")
+
+    async def _persist_always_allow(self, tool_name: str):
+        """Persist permission_mode='always_allow' for a tool in Supabase & Redis."""
+        import json as _json
+        try:
+            url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+            key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
+            if not url or not key:
+                return
+            client = create_client(url, key)
+
+            # Check if MCP tool
+            mcp_res = client.table("mcp_tool_settings").select("id").eq("tool_key", tool_name).execute()
+            if mcp_res.data and len(mcp_res.data) > 0:
+                client.table("mcp_tool_settings").update({
+                    "permission_mode": "always_allow",
+                    "updated_at": "now()"
+                }).eq("tool_key", tool_name).execute()
+                perm_key = "mcp_tools_permission_modes"
+            else:
+                perm_key = "builtin_tools_permission_modes"
+
+            query = client.table("agent_settings").select("value").eq("key", perm_key)
+            if self.user_id:
+                query = query.eq("user_id", self.user_id)
+            current_res = query.maybe_single().execute()
+            current_val = current_res.data.get("value") if current_res and current_res.data else {}
+            perms = _json.loads(current_val) if isinstance(current_val, str) else (current_val or {})
+            perms[tool_name] = "always_allow"
+
+            upsert_payload = {
+                "key": perm_key,
+                "value": _json.dumps(perms),
+                "updated_at": "now()"
+            }
+            if self.user_id:
+                upsert_payload["user_id"] = self.user_id
+            client.table("agent_settings").upsert(upsert_payload, on_conflict="key,user_id").execute()
+            logger.info(f"Persisted 'always_allow' for tool '{tool_name}' (user: {self.user_id})")
+        except Exception as e:
+            logger.warning(f"Failed to persist always_allow for '{tool_name}': {e}")
+
+    async def handle_tool_approval(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Inline-keyboard callback for tool & terminal command approvals."""
         query = update.callback_query
         await query.answer()
         if not is_user_allowed(query.from_user):
             await query.edit_message_text("⛔ Access denied.")
             return
 
-        kind, thread_id = query.data.split(":", 1)
+        parts = query.data.split(":")
+        kind = parts[0]  # tool_ok, tool_no, tool_alw, tool_always, tool_edt, tool_edit, term_ok, term_no, term_edit
+        thread_id = parts[1] if len(parts) > 1 else ""
+        
+        # Look up cached tool name and batch request count
+        cached_info = getattr(self, "pending_tool_approvals", {}).get(thread_id, {})
+        tool_name = parts[2] if len(parts) > 2 else cached_info.get("tool_name", "tool")
+        req_count = cached_info.get("req_count", 1)
+        if req_count <= 1:
+            try:
+                pending_state = await self._pending_interrupt(thread_id)
+                if pending_state:
+                    state_reqs = pending_state.get("action_requests") or pending_state.get("actionRequests") or []
+                    if state_reqs:
+                        req_count = len(state_reqs)
+            except Exception:
+                pass
+        req_count = max(1, req_count)
         chat_id = query.message.chat_id
 
         # Only the chat that owns the pending interruption may decide
@@ -846,37 +1066,108 @@ class TelegramBotInstance:
 
         base_text = query.message.text_html or ""
 
-        if kind == "term_edit":
-            self.pending_terminal_edits[chat_id] = {
+        if kind in ("tool_edt", "tool_edit", "term_edit"):
+            self.pending_tool_edits[chat_id] = {
                 "thread_id": thread_id,
+                "tool_name": tool_name,
                 "status_message_id": query.message.message_id,
             }
             try:
-                await query.edit_message_text(base_text + "\n\n✏️ Reply with the corrected command:", parse_mode="HTML")
+                await query.edit_message_text(
+                    base_text + "\n\n✏️ <i>Reply with updated argument value or JSON:</i>",
+                    parse_mode="HTML"
+                )
             except Exception:
                 pass
             return
 
-        if kind == "term_ok":
+        if kind in ("tool_alw", "tool_always"):
             try:
-                await query.edit_message_text(base_text + "\n\n✅ <i>Approved — running…</i>", parse_mode="HTML")
+                await self._persist_always_allow(tool_name)
+                await query.edit_message_text(
+                    base_text + f"\n\n🔓 <i>Always Allowed for <b>{tool_name}</b> — executing…</i>",
+                    parse_mode="HTML"
+                )
+            except Exception as pe:
+                logger.warning(f"Failed to update message on always allow: {pe}")
+            await self._resume_and_continue(
+                context.bot, chat_id, thread_id,
+                {"decisions": [{"type": "approve"} for _ in range(req_count)]},
+                status_message_id=query.message.message_id,
+            )
+            return
+
+        if kind in ("tool_ok", "term_ok"):
+            try:
+                await query.edit_message_text(base_text + "\n\n✅ <i>Allowed — executing…</i>", parse_mode="HTML")
             except Exception:
                 pass
             await self._resume_and_continue(
                 context.bot, chat_id, thread_id,
-                {"decisions": [{"type": "approve"}]},
+                {"decisions": [{"type": "approve"} for _ in range(req_count)]},
                 status_message_id=query.message.message_id,
             )
-        else:  # term_no
+        else:  # tool_no, term_no
             try:
                 await query.edit_message_text(base_text + "\n\n❌ <i>Denied — the agent has been told.</i>", parse_mode="HTML")
             except Exception:
                 pass
             await self._resume_and_continue(
                 context.bot, chat_id, thread_id,
-                {"decisions": [{"type": "reject"}]},
+                {"decisions": [{"type": "reject", "message": "User denied tool execution via Telegram."} for _ in range(req_count)]},
                 status_message_id=query.message.message_id,
             )
+
+
+    handle_terminal_approval = handle_tool_approval  # backwards compatibility alias
+
+
+    async def _safe_edit_preview(
+        self, bot, chat_id: int, message_id: int | None, text: str,
+        edit_state: dict
+    ) -> bool:
+        """Rate-limit-safe message preview updater during streaming.
+        
+        Guarantees minimum 2.0s delay between edits, avoids duplicate edits,
+        and applies backoff on Telegram 429 rate limits or errors.
+        """
+        if message_id is None:
+            return False
+
+        now = time.time()
+        last_time = edit_state.get("time", 0.0)
+        last_text = edit_state.get("text", "")
+
+        # Throttle: at least 2.0s between calls
+        if now - last_time < 2.0:
+            return False
+
+        trimmed = text.strip()
+        if not trimmed or trimmed == last_text:
+            return False
+
+        # Set optimistic state immediately so fast incoming chunks don't trigger simultaneous edits
+        edit_state["time"] = now
+        edit_state["text"] = trimmed
+
+        try:
+            preview_text = extract_audio_markers(trimmed)[-1]
+            await bot.edit_message_text(
+                text=preview_text[:3900] + " ▉",
+                chat_id=chat_id,
+                message_id=message_id
+            )
+            return True
+        except Exception as e:
+            err_str = str(e).lower()
+            if "retry_after" in err_str or "too many requests" in err_str or "429" in err_str:
+                # Add backoff delay on 429 so we don't hammer Telegram
+                edit_state["time"] = now + 4.0
+            elif "not modified" in err_str:
+                edit_state["time"] = now
+            else:
+                edit_state["time"] = now + 2.0
+            return False
 
     async def _resume_and_continue(self, bot, chat_id: int, thread_id: str, resume_payload: dict, status_message_id: int | None = None):
         """Resume an interrupted run and process the continuation (same tail as a normal run)."""
@@ -892,8 +1183,7 @@ class TelegramBotInstance:
         }
         accumulated_text = ""
         active_messages: dict = {}
-        last_edit_time = 0.0
-        last_edit_text = ""
+        edit_state = {"time": 0.0, "text": ""}
         try:
             async for chunk in langgraph_client.runs.stream(
                 thread_id=thread_id,
@@ -917,19 +1207,7 @@ class TelegramBotInstance:
                             active_messages[msg_id] = content
                     accumulated_text = "".join(active_messages.values())
                     if accumulated_text.strip() and status_message_id is not None:
-                        now = time.time()
-                        if now - last_edit_time > 1.5 and accumulated_text.strip() != last_edit_text.strip():
-                            try:
-                                preview_text = extract_audio_markers(accumulated_text)[-1]
-                                await bot.edit_message_text(
-                                    text=preview_text[:3900] + " ▉",
-                                    chat_id=chat_id,
-                                    message_id=status_message_id
-                                )
-                                last_edit_text = accumulated_text
-                                last_edit_time = now
-                            except Exception:
-                                pass
+                        await self._safe_edit_preview(bot, chat_id, status_message_id, accumulated_text, edit_state)
         except Exception as e:
             logger.exception("Error resuming run after approval decision")
             await bot.send_message(chat_id=chat_id, text=f"❌ Failed to resume: {e}")
@@ -1110,22 +1388,39 @@ class TelegramBotInstance:
         user_text = update.message.text or update.message.caption or ""
         session = self.active_sessions.get(chat_id)
 
-        # Pending terminal-command edit: the next text message replaces the command
-        if chat_id in self.pending_terminal_edits and user_text.strip() and not user_text.strip().startswith("!"):
-            state = self.pending_terminal_edits.pop(chat_id)
+        # Pending tool/terminal-command edit: the next text message replaces the argument/command
+        if chat_id in self.pending_tool_edits and user_text.strip() and not user_text.strip().startswith(("/", "!")):
+            state = self.pending_tool_edits.pop(chat_id)
+            tool_name = state.get("tool_name", "terminal")
+            thread_id = state["thread_id"]
+            
+            # Parse user input as JSON or raw string
+            raw_input = user_text.strip()
+            try:
+                import json as _json
+                if raw_input.startswith("{") and raw_input.endswith("}"):
+                    edited_args = _json.loads(raw_input)
+                elif tool_name == "terminal":
+                    edited_args = {"command": raw_input}
+                else:
+                    edited_args = {"input": raw_input}
+            except Exception:
+                edited_args = {"command": raw_input} if tool_name == "terminal" else {"input": raw_input}
+            
             await self._resume_and_continue(
-                context.bot, chat_id, state["thread_id"],
-                {"decisions": [{"type": "edit", "edited_action": {"name": "terminal", "args": {"command": user_text.strip()}}}]},
+                context.bot, chat_id, thread_id,
+                {"decisions": [{"type": "edit", "edited_action": {"name": tool_name, "args": edited_args}}]},
                 status_message_id=state.get("status_message_id"),
             )
             return
 
-        # Bang commands (!help, !voice, !status, !new) — "!" avoids clashes with native
-        # Telegram "/" commands. Agent commands (!learn …) fall through to the agent.
-        if user_text.strip().startswith("!"):
-            handled = await self.handle_bang_command(update, context, user_text.strip())
+        # Slash and bang commands (/stop, /status, /voice, /new, /start, /help)
+        # Agent commands (/learn …) fall through to the agent graph preprocess node.
+        if user_text.strip().startswith(("/", "!")):
+            handled = await self.handle_slash_command(update, context, user_text.strip())
             if handled:
                 return
+
 
         if not session:
             # No workflow selected yet — prompt to pick one
@@ -1191,24 +1486,25 @@ class TelegramBotInstance:
                 file_bytes = bytes(file_bytes)
                 logger.info(f"Downloaded {len(file_bytes)} bytes.")
 
-                # Upload to Supabase Storage
-                import uuid
-                file_ext = filename.split(".")[-1].lower() if "." in filename else ""
-                unique_filename = f"{uuid.uuid4()}.{file_ext}" if file_ext else str(uuid.uuid4())
-                
-                logger.info(f"Uploading file {filename} to Supabase as {unique_filename}...")
+                # Upload to unified storage (R2-first, Supabase fallback)
+                from research_agent import storage_service
+
+                logger.info(f"Uploading file {filename} to unified storage...")
                 loop = asyncio.get_running_loop()
-                await loop.run_in_executor(
+                file_url = await loop.run_in_executor(
                     None,
-                    lambda: supabase.storage.from_("uploads").upload(
-                        path=unique_filename,
-                        file=file_bytes,
-                        file_options={"content-type": mimetype}
+                    lambda: storage_service.upload_file(
+                        data=file_bytes,
+                        filename=filename,
+                        mime_type=mimetype,
+                        category="uploads",
+                        thread_id=thread_id,
+                        user_id=self.user_id,
                     )
                 )
-                
-                file_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/public/uploads/{unique_filename}"
-                logger.info(f"Uploaded to Supabase: {file_url}")
+                if not file_url:
+                    raise RuntimeError("storage upload returned no URL (check R2/Supabase configuration)")
+                logger.info(f"Uploaded to storage: {file_url}")
                 
                 # Map to correct attachment dictionary
                 lower_name = filename.lower()
@@ -1283,9 +1579,12 @@ class TelegramBotInstance:
         }
 
         accumulated_text = ""
-        last_edit_text = ""
-        last_edit_time = 0.0
+        edit_state = {"time": 0.0, "text": ""}
         active_messages = {}
+
+        current_task = asyncio.current_task()
+        if TaskTracker and current_task:
+            await TaskTracker.register_run(str(chat_id), current_task, client=langgraph_client, thread_id=thread_id)
 
         try:
             try:
@@ -1312,20 +1611,8 @@ class TelegramBotInstance:
                                 active_messages[msg_id] = content
                         
                         accumulated_text = "".join(active_messages.values())
-                        if accumulated_text.strip():
-                            now = time.time()
-                            if now - last_edit_time > 1.5 and accumulated_text.strip() != last_edit_text.strip():
-                                try:
-                                    preview_text = extract_audio_markers(accumulated_text)[-1]
-                                    await context.bot.edit_message_text(
-                                        text=preview_text[:3900] + " ▉",
-                                        chat_id=chat_id,
-                                        message_id=status_message.message_id
-                                    )
-                                    last_edit_text = accumulated_text
-                                    last_edit_time = now
-                                except Exception:
-                                    pass
+                        if accumulated_text.strip() and status_message:
+                            await self._safe_edit_preview(context.bot, chat_id, status_message.message_id, accumulated_text, edit_state)
             except Exception as stream_err:
                 from langgraph_sdk.errors import NotFoundError
                 if isinstance(stream_err, NotFoundError) or "not found" in str(stream_err).lower():
@@ -1373,19 +1660,8 @@ class TelegramBotInstance:
                                     active_messages[msg_id] = content
                             
                             accumulated_text = "".join(active_messages.values())
-                            if accumulated_text.strip():
-                                now = time.time()
-                                if now - last_edit_time > 1.5 and accumulated_text.strip() != last_edit_text.strip():
-                                    try:
-                                        await context.bot.edit_message_text(
-                                            text=accumulated_text + " ▉",
-                                            chat_id=chat_id,
-                                            message_id=status_message.message_id
-                                        )
-                                        last_edit_text = accumulated_text
-                                        last_edit_time = now
-                                    except Exception:
-                                        pass
+                            if accumulated_text.strip() and status_message:
+                                await self._safe_edit_preview(context.bot, chat_id, status_message.message_id, accumulated_text, edit_state)
                 else:
                     raise stream_err
 
@@ -1393,6 +1669,17 @@ class TelegramBotInstance:
             # mirror appends AUDIO_URL markers after streaming finishes)
             await self._finish_run(context.bot, chat_id, thread_id, accumulated_text, status_message.message_id)
 
+        except asyncio.CancelledError:
+            logger.info(f"Stream cancelled for chat_id={chat_id}")
+            try:
+                await context.bot.edit_message_text(
+                    text="🛑 *Execution cancelled by user.*",
+                    chat_id=chat_id,
+                    message_id=status_message.message_id,
+                    parse_mode="Markdown"
+                )
+            except Exception:
+                pass
         except Exception as run_err:
             logger.exception("Error running agent via LangGraph client")
             error_msg = str(run_err)
@@ -1409,6 +1696,10 @@ class TelegramBotInstance:
                 )
             except Exception:
                 pass
+        finally:
+            if TaskTracker:
+                await TaskTracker.unregister_run(str(chat_id))
+
 
 
 # ── Bot Coordinator Manager ──────────────────────────────────────────────────

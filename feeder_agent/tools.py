@@ -15,36 +15,86 @@ def make_submit_tool() -> dict:
             "name": "submit_dedup_result",
             "description": (
                 "Submit the final deduplication decision. "
-                "Call this once after completing both Phase 1 and Phase 2."
+                "List all duplicate articles in `dropped` with reasons naming the kept article."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "kept_ids": {
-                        "type": "array",
-                        "items": {"type": "integer"},
-                        "description": "List of article IDs (1-based index from batch) to KEEP and pass to the pipeline.",
-                    },
                     "dropped": {
                         "type": "array",
-                        "description": "Articles being dropped with reasons.",
+                        "description": "List of duplicate articles to drop (must name what they duplicate).",
                         "items": {
                             "type": "object",
                             "properties": {
-                                "id": {"type": "integer", "description": "1-based article ID"},
-                                "reason": {"type": "string", "description": "Why this article is being dropped"},
+                                "id": {"type": "integer", "description": "1-based article ID from the current batch to drop"},
+                                "reason": {"type": "string", "description": "Why dropped — e.g. 'Same PIMS fire storyline as #2' or 'Already in DB'"},
+                            },
+                            "required": ["id", "reason"],
+                        },
+                    },
+                    "storylines": {
+                        "type": "array",
+                        "description": "Storyline clusters found across the batch.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "label": {"type": "string", "description": "Short storyline name, e.g. 'PIMS hospital fire'"},
+                                "kept_id": {"type": "integer", "description": "Batch ID kept as this storyline's main article"},
+                                "dropped_ids": {
+                                    "type": "array",
+                                    "items": {"type": "integer"},
+                                    "description": "Batch IDs dropped as duplicate members of this storyline",
+                                },
+                            },
+                            "required": ["label", "kept_id", "dropped_ids"],
+                        },
+                    },
+                    "summary": {
+                        "type": "string",
+                        "description": "1-2 sentence summary of deduplication decisions.",
+                    },
+                },
+                "required": ["dropped", "summary"],
+            },
+        }
+    }
+
+
+def make_verify_tool() -> dict:
+    """Returns the OpenAI-style tool definition for the Pass-2 verifier's
+    submit_verify_result call. Verifier authority is DROP-ONLY."""
+    return {
+        "type": "function",
+        "function": {
+            "name": "submit_verify_result",
+            "description": (
+                "Submit the verification decision. List ONLY the survivor IDs that "
+                "must still be dropped (duplicates missed by pass 1). Everything "
+                "not listed is approved automatically."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "dropped": {
+                        "type": "array",
+                        "description": "Survivor IDs to drop after all (duplicates pass 1 missed).",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "integer", "description": "1-based survivor ID"},
+                                "reason": {"type": "string", "description": "What it duplicates (survivor ID or DB title)"},
                             },
                             "required": ["id", "reason"],
                         },
                     },
                     "summary": {
                         "type": "string",
-                        "description": "1-2 sentence summary of the deduplication decisions made.",
+                        "description": "1-2 sentence summary of the verification.",
                     },
                 },
-                "required": ["kept_ids", "dropped", "summary"],
+                "required": ["dropped", "summary"],
             },
-        }
+        },
     }
 
 
@@ -57,8 +107,9 @@ def parse_tool_call(response_message: Any) -> dict | None:
     if not tool_calls:
         return None
 
+    ACCEPTED = {"submit_dedup_result", "submit_verify_result"}
     for tc in tool_calls:
-        if tc.function.name == "submit_dedup_result":
+        if tc.function.name in ACCEPTED:
             try:
                 return json.loads(tc.function.arguments)
             except json.JSONDecodeError as e:

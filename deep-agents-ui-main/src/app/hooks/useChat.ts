@@ -116,7 +116,7 @@ export function useChat({
             pollInterval = null;
           }
           await stream.joinStream(activeRun.run_id, undefined, {
-            streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"]
+            streamMode: ["values", "messages-tuple", "updates", "tasks", "custom"]
           });
         }
       } catch (err) {
@@ -147,7 +147,7 @@ export function useChat({
             messages: [...(prev.messages ?? []), newMessage],
           }),
           // "messages-tuple" enables token-by-token streaming as the model generates
-          streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"],
+          streamMode: ["values", "messages-tuple", "updates", "tasks", "custom"],
           config: {
             ...(activeAssistant?.config ?? {}),
             recursion_limit: 200,
@@ -188,14 +188,14 @@ export function useChat({
             : {}),
           config: runConfig,
           checkpoint: checkpoint,
-          streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"],
+          streamMode: ["values", "messages-tuple", "updates", "tasks", "custom"],
           streamSubgraphs: true,
           ...(isRerunningSubagent ? { interruptAfter: ["tools"] } : {}),
         });
       } else {
         stream.submit(
           { messages },
-          { config: runConfig, streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"], streamSubgraphs: true }
+          { config: runConfig, streamMode: ["values", "messages-tuple", "updates", "tasks", "custom"], streamSubgraphs: true }
         );
       }
     },
@@ -224,7 +224,7 @@ export function useChat({
             user_id: userId || undefined,
           },
         },
-        streamMode: ["values", "messages-tuple", "updates", "tasks", "tools", "custom"],
+        streamMode: ["values", "messages-tuple", "updates", "tasks", "custom"],
         streamSubgraphs: true,
         ...(hasTaskToolCall ? { interruptAfter: ["tools"] } : {}),
       });

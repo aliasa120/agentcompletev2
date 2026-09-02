@@ -9,6 +9,9 @@ import React, {
 } from "react";
 import {
   FileText,
+  FileImage,
+  FileAudio,
+  FileVideo,
   CheckCircle,
   Circle,
   Clock,
@@ -19,6 +22,32 @@ import type { TodoItem, FileItem } from "@/app/types/types";
 import { useChatContext } from "@/providers/ChatProvider";
 import { cn } from "@/lib/utils";
 import { FileViewDialog } from "@/app/components/FileViewDialog";
+import {
+  WorkspaceFileDialog,
+  type WorkspaceFile,
+} from "@/app/components/WorkspaceFileDialog";
+import { useWorkspaceFiles } from "@/app/hooks/useWorkspaceFiles";
+
+/** Normalize a state `files` value (string, or {content: string[]}) to text. */
+function stateFileContent(rawContent: unknown): string {
+  if (
+    typeof rawContent === "object" &&
+    rawContent !== null &&
+    "content" in rawContent
+  ) {
+    const contentArray = (rawContent as { content: unknown }).content;
+    if (Array.isArray(contentArray)) return contentArray.join("\n");
+    return String(contentArray || "");
+  }
+  return String(rawContent || "");
+}
+
+function workspaceFileIcon(mimeType: string) {
+  if (mimeType.startsWith("image/")) return FileImage;
+  if (mimeType.startsWith("audio/")) return FileAudio;
+  if (mimeType.startsWith("video/")) return FileVideo;
+  return FileText;
+}
 
 export function FilesPopover({
   files,
@@ -30,6 +59,9 @@ export function FilesPopover({
   editDisabled: boolean;
 }) {
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
+  const [selectedWorkspaceFile, setSelectedWorkspaceFile] =
+    useState<WorkspaceFile | null>(null);
+  const diskOnlyFiles = useWorkspaceFiles(files);
 
   const handleSaveFile = useCallback(
     async (fileName: string, content: string) => {
@@ -39,9 +71,11 @@ export function FilesPopover({
     [files, setFiles]
   );
 
+  const isEmpty = Object.keys(files).length === 0 && diskOnlyFiles.length === 0;
+
   return (
     <>
-      {Object.keys(files).length === 0 ? (
+      {isEmpty ? (
         <div className="flex h-full items-center justify-center p-4 text-center">
           <p className="text-xs text-muted-foreground">No files created yet</p>
         </div>
@@ -49,22 +83,7 @@ export function FilesPopover({
         <div className="grid grid-cols-[repeat(auto-fill,minmax(256px,1fr))] gap-2">
           {Object.keys(files).map((file) => {
             const filePath = String(file);
-            const rawContent = files[file];
-            let fileContent: string;
-            if (
-              typeof rawContent === "object" &&
-              rawContent !== null &&
-              "content" in rawContent
-            ) {
-              const contentArray = (rawContent as { content: unknown }).content;
-              if (Array.isArray(contentArray)) {
-                fileContent = contentArray.join("\n");
-              } else {
-                fileContent = String(contentArray || "");
-              }
-            } else {
-              fileContent = String(rawContent || "");
-            }
+            const fileContent = stateFileContent(files[file]);
 
             return (
               <button
@@ -96,6 +115,35 @@ export function FilesPopover({
               </button>
             );
           })}
+
+          {diskOnlyFiles.map((file) => {
+            const Icon = workspaceFileIcon(file.mimeType);
+            return (
+              <button
+                key={`ws:${file.path}`}
+                type="button"
+                onClick={() => setSelectedWorkspaceFile(file)}
+                title={`${file.path} — ${file.mimeType}`}
+                className="cursor-pointer space-y-1 truncate rounded-md border border-border px-2 py-3 shadow-sm transition-colors"
+                style={{
+                  backgroundColor: "var(--color-file-button)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor =
+                    "var(--color-file-button-hover)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor =
+                    "var(--color-file-button)";
+                }}
+              >
+                <Icon size={24} className="mx-auto text-muted-foreground" />
+                <span className="mx-auto block w-full truncate break-words text-center text-sm leading-relaxed text-foreground">
+                  {file.path}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -105,6 +153,13 @@ export function FilesPopover({
           onSaveFile={handleSaveFile}
           onClose={() => setSelectedFile(null)}
           editDisabled={editDisabled}
+        />
+      )}
+
+      {selectedWorkspaceFile && (
+        <WorkspaceFileDialog
+          file={selectedWorkspaceFile}
+          onClose={() => setSelectedWorkspaceFile(null)}
         />
       )}
     </>

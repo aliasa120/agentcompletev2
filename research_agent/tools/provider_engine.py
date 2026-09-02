@@ -1,4 +1,5 @@
-"""Core provider engine — retry, fallback, timeout, and error classification.
+# -*- coding: utf-8 -*-
+"""Core provider engine -- retry, fallback, timeout, and error classification.
 
 All unified tools (unified_search, unified_extract, unified_image) use this module
 to execute provider functions.
@@ -11,7 +12,7 @@ Retry strategy (Round-based flat delay):
     3. If BOTH fail in this round, wait `retry_delay_seconds` (default 15s).
 
   If all rounds are exhausted, return a graceful ProviderResult with failed=True
-  (never raises — prevents pipeline crashes).
+  (never raises  prevents pipeline crashes).
 
 Default retry counts:
   Search / Extract : 4 rounds (Primary -> Secondary -> wait 15s)
@@ -39,7 +40,7 @@ API KEYS ARE NEVER STORED IN SUPABASE. They live only in .env.
 Settings (provider/model selection, retry counts) are cached 60s.
 
 Enterprise pattern:
-  To add a new provider → add it to provider_registry.py + add env var → done.
+  To add a new provider  add it to provider_registry.py + add env var  done.
 """
 
 import asyncio
@@ -89,7 +90,7 @@ from .provider_registry import (
 
 logger = logging.getLogger("provider_engine")
 
-# ── Settings Cache ─────────────────────────────────────────────────────────────
+#  Settings Cache 
 
 import redis
 import json
@@ -123,7 +124,9 @@ def get_redis_client() -> Optional[Any]:
 
 
 def _fetch_settings_from_supabase(user_id: Optional[str] = None) -> dict[str, str]:
-    """Pull agent_settings from Supabase synchronously including client API keys."""
+    """Pull agent_settings from Supabase synchronously including client API keys.
+    Also syncs provider/model from agent_configs table (authoritative for agent card UI).
+    """
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -142,19 +145,56 @@ def _fetch_settings_from_supabase(user_id: Optional[str] = None) -> dict[str, st
             except Exception:
                 pass
 
-        # Fallback: if user_id is missing or user has 0 rows, load settings from the latest registered user
+        # Fallback: if user_id is missing or user has 0 rows, load settings from the user with most rows
         if not res:
             try:
-                resp_latest = client.table("agent_settings").select("user_id").not_.is_("user_id", "null").limit(1).execute()
-                if resp_latest.data and len(resp_latest.data) > 0:
-                    latest_uid = resp_latest.data[0].get("user_id")
+                resp_latest = (
+                    client.table("agent_settings")
+                    .select("user_id")
+                    .not_.is_("user_id", "null")
+                    .order("user_id")          # stable ordering
+                    .limit(100)
+                    .execute()
+                )
+                if resp_latest.data:
+                    # Pick the user_id that appears most frequently (most settings = main user)
+                    from collections import Counter
+                    uid_counts = Counter(r.get("user_id") for r in resp_latest.data if r.get("user_id"))
+                    latest_uid = uid_counts.most_common(1)[0][0] if uid_counts else None
                     if latest_uid:
+                        uid = latest_uid  # remember for agent_configs query below
                         resp2 = client.table("agent_settings").select("key, value").eq("user_id", str(latest_uid)).execute()
                         if resp2.data:
                             res = {row["key"]: row["value"] for row in resp2.data}
-                            logger.debug(f"[provider_engine] Settings fallback: loaded {len(res)} rows for latest user {latest_uid}")
+                            logger.debug(f"[provider_engine] Settings fallback: loaded {len(res)} rows for most-active user {latest_uid}")
             except Exception as err:
                 logger.warning(f"[provider_engine] Settings fallback error: {err}")
+
+        #  Sync agent_configs  agent_settings keys 
+        # The UI saves provider/model to agent_configs table.
+        # The backend reads {agent}_provider / {agent}_model from agent_settings.
+        # Bridge the gap by reading agent_configs and injecting into the settings dict.
+        if uid:
+            try:
+                ac_resp = (
+                    client.table("agent_configs")
+                    .select("model_key, provider, model")
+                    .eq("user_id", str(uid))
+                    .eq("enabled", True)
+                    .execute()
+                )
+                if ac_resp.data:
+                    for row in ac_resp.data:
+                        model_key = row.get("model_key", "")   # e.g. "main_agent"
+                        provider  = (row.get("provider") or "").strip()
+                        model     = (row.get("model") or "").strip()
+                        if model_key and provider and model:
+                            # agent_configs is the authoritative source  always overwrite
+                            res[f"{model_key}_provider"] = provider
+                            res[f"{model_key}_model"]    = model
+                    logger.debug(f"[provider_engine] agent_configs synced: {[r['model_key'] for r in ac_resp.data if r.get('model_key')]}")
+            except Exception as ac_err:
+                logger.warning(f"[provider_engine] agent_configs sync failed: {ac_err}")
 
         return res
     except Exception as e:
@@ -240,11 +280,12 @@ def get_settings(user_id: Optional[str] = None) -> dict[str, str]:
             if cached:
                 try:
                     data = json.loads(cached)
-                    if isinstance(data, dict) and data.get("openrouter_client_api_key"):
+                    # Accept cache if it is a non-empty dict (not gated on any single provider key)
+                    if isinstance(data, dict) and data:
                         return data
                 except Exception:
                     pass
-            
+
             fresh = run_in_thread(_fetch_settings_from_supabase, uid)
             if fresh:
                 try:
@@ -319,56 +360,53 @@ def get_retry_delay() -> int:
         return 15
 
 
-# ── Agent defaults ─────────────────────────────────────────────────────────────
+#  Agent defaults 
 
 _AGENT_DEFAULTS = {
     "main_agent":        {"provider": "openrouter", "model": "google/gemini-2.5-flash"},
     "analyzer":          {"provider": "openrouter", "model": "google/gemini-2.5-flash"},
     "feeder":            {"provider": "openrouter", "model": "google/gemini-2.5-flash"},
+    "feeder_verifier":   {"provider": "openrouter", "model": "google/gemini-2.5-flash"},
     "research_subagent": {"provider": "openrouter", "model": "google/gemini-2.5-flash"},
     "content_subagent":  {"provider": "openrouter", "model": "google/gemini-2.5-flash"},
 }
 
 
-# ── Per-Agent LLM Config ───────────────────────────────────────────────────────
+def resolve_provider_credentials(
+    provider: str,
+    model: str,
+    settings: Optional[dict[str, str]] = None,
+    user_id: Optional[str] = None
+) -> tuple[str, str, str]:
+    """Resolve (base_url, api_key, model) for ANY provider (built-in or custom)."""
+    if settings is None:
+        settings = get_settings(user_id)
 
-def get_llm_config(agent: str, user_id: Optional[str] = None) -> tuple[str, str, str]:
-    """Return (base_url, api_key, model) for the given agent.
+    provider_clean = (provider or "openrouter").strip().lower()
+    model_clean = (model or "google/gemini-2.5-flash").strip()
 
-    Resolution order:
-      1. Provider name → from Supabase agent_settings (e.g. "main_agent_provider")
-      2. Model name    → from Supabase agent_settings (e.g. "main_agent_model")
-      3. base_url      → from PROVIDER_REGISTRY
-      4. api_key       → agent_settings[agent_settings_key] for the user (no fallback)
+    # 1. Check custom_ai_providers (e.g. meta, custom hermes, etc.)
+    if provider_clean not in get_all_provider_names():
+        custom_raw = settings.get("custom_ai_providers")
+        if custom_raw:
+            try:
+                custom_list = json.loads(custom_raw) if isinstance(custom_raw, str) else custom_raw
+                for cp in custom_list:
+                    if cp.get("id") == provider_clean or cp.get("label", "").lower() == provider_clean:
+                        base_url = cp.get("base_url", "").rstrip("/")
+                        api_key = cp.get("api_key", "").strip()
+                        return base_url, api_key, model_clean
+            except Exception as cp_err:
+                logger.warning(f"[provider_engine] Failed to parse custom_ai_providers: {cp_err}")
+        provider_clean = "openrouter"
 
-    Falls back to hardcoded _AGENT_DEFAULTS if Supabase has nothing configured.
-
-    Args:
-      agent: One of "main_agent", "analyzer", "feeder",
-             "research_subagent", "content_subagent"
-      user_id: Optional UUID of the user.
-
-    Returns:
-      (base_url, api_key, model) ready to pass to ChatOpenAI / httpx
-    """
-    settings = get_settings(user_id)
-    defaults = _AGENT_DEFAULTS.get(agent, _AGENT_DEFAULTS["main_agent"])
-
-    provider = settings.get(f"{agent}_provider", defaults["provider"]).strip().lower()
-    model = settings.get(f"{agent}_model", defaults["model"]).strip()
-
-    # Fallback unregistered providers to openrouter direct
-    actual_provider = provider
-    if actual_provider not in get_all_provider_names():
-        actual_provider = "openrouter"
-
-    base_url = get_provider_base_url(actual_provider)
-    cfg = get_provider_config(actual_provider)
+    # 2. Built-in provider resolution
+    base_url = get_provider_base_url(provider_clean)
+    cfg = get_provider_config(provider_clean)
     needs_v1 = cfg and "base_url_env" in cfg
     if needs_v1 and not base_url.endswith("/v1"):
         base_url = base_url + "/v1"
 
-    # Resolve API key: check user's agent_settings first, fall back to process env vars
     agent_settings_key = cfg.get("agent_settings_key", "") if cfg else ""
     env_key = cfg.get("env_key", "") if cfg else ""
     if agent_settings_key:
@@ -378,15 +416,31 @@ def get_llm_config(agent: str, user_id: Optional[str] = None) -> tuple[str, str,
     else:
         api_key = ""
 
-    if not model:
-        model = defaults["model"]
+    if provider_clean == "openrouter" and model_clean.startswith("openrouter/"):
+        model_clean = model_clean[len("openrouter/"):]
 
-    if actual_provider == "openrouter" and model.startswith("openrouter/"):
-        model = model[len("openrouter/"):]
+    return base_url, api_key, model_clean
+
+
+def get_llm_config(agent: str, user_id: Optional[str] = None) -> tuple[str, str, str]:
+    """Return (base_url, api_key, model) for the given agent.
+
+    Resolution order:
+      1. Provider name -> from Supabase agent_settings / agent_configs
+      2. Model name    -> from Supabase agent_settings / agent_configs
+      3. base_url & api_key resolved via resolve_provider_credentials
+    """
+    settings = get_settings(user_id)
+    defaults = _AGENT_DEFAULTS.get(agent, _AGENT_DEFAULTS["main_agent"])
+
+    provider = (settings.get(f"{agent}_provider") or defaults["provider"]).strip().lower()
+    model = (settings.get(f"{agent}_model") or defaults["model"]).strip()
+
+    base_url, api_key, model = resolve_provider_credentials(provider, model, settings=settings, user_id=user_id)
 
     if not api_key:
         logger.warning(
-            f"[provider_engine] ⚠️ No API key found in user settings for provider '{actual_provider}'."
+            f"[provider_engine]  No API key found in user settings for provider '{provider}'."
         )
 
     logger.debug(
@@ -396,11 +450,11 @@ def get_llm_config(agent: str, user_id: Optional[str] = None) -> tuple[str, str,
     return base_url, api_key, model
 
 
-# ── Error Classification ───────────────────────────────────────────────────────
+#  Error Classification 
 
 class ErrorType(Enum):
-    RETRYABLE = "retryable"  # 429, 500, 502, 503, timeout — worth retrying
-    FATAL = "fatal"          # 401, 403, bad config — skip to fallback immediately
+    RETRYABLE = "retryable"  # 429, 500, 502, 503, timeout  worth retrying
+    FATAL = "fatal"          # 401, 403, bad config  skip to fallback immediately
 
 
 def classify_error(exception: Exception) -> ErrorType:
@@ -413,11 +467,11 @@ def classify_error(exception: Exception) -> ErrorType:
     if any(sig in msg for sig in fatal_signals):
         return ErrorType.FATAL
 
-    # Everything else: network blip, rate limit, server error — retry
+    # Everything else: network blip, rate limit, server error  retry
     return ErrorType.RETRYABLE
 
 
-# ── Result Container ───────────────────────────────────────────────────────────
+#  Result Container 
 
 @dataclass
 class ProviderResult:
@@ -428,7 +482,7 @@ class ProviderResult:
     failed: bool = False          # True when all providers exhausted
 
 
-# ── Core Execution Engine ──────────────────────────────────────────────────────
+#  Core Execution Engine 
 
 async def execute_with_fallback(
     primary_fn: Callable,
@@ -437,10 +491,10 @@ async def execute_with_fallback(
     secondary_name: str,
     max_retries: int,
     timeout_seconds: int = 30,
-    retry_delay_seconds: int | None = None,  # None → read from settings
+    retry_delay_seconds: Optional[int] = None,  # None -> read from settings
     **kwargs,
 ) -> ProviderResult:
-    """Run with round-based retries (Primary -> Secondary -> Wait 15s).
+    """Run with round-based retries (Primary -> Secondary -> Wait).
 
     IMPORTANT: This function NEVER raises. On total failure it returns a
     ProviderResult with failed=True and a descriptive error message in .data,
@@ -453,13 +507,13 @@ async def execute_with_fallback(
     errors: list[str] = []
 
     for round_ in range(1, max_retries + 1):
-        # ── 1. Primary Attempt ─────────────────────────────────────────────
+        #  1. Primary Attempt 
         total_attempts += 1
         primary_fatal = False
         try:
             logger.info(f"[{primary_name}] Round {round_}/{max_retries} (timeout={timeout_seconds}s)")
             result = await asyncio.wait_for(primary_fn(**kwargs), timeout=timeout_seconds)
-            logger.info(f"[{primary_name}] ✅ Success on round {round_}")
+            logger.info(f"[{primary_name}]  Success on round {round_}")
             return ProviderResult(
                 data=result,
                 provider_used=primary_name,
@@ -469,27 +523,27 @@ async def execute_with_fallback(
             )
         except asyncio.TimeoutError:
             msg = f"Round {round_} timed out after {timeout_seconds}s"
-            logger.warning(f"[{primary_name}] ⏱ {msg}")
+            logger.warning(f"[{primary_name}]  {msg}")
             errors.append(f"{primary_name}: {msg}")
         except Exception as e:
             error_type = classify_error(e)
             if error_type == ErrorType.FATAL:
-                logger.error(f"[{primary_name}] ⛔ Fatal config error on round {round_}: {e}")
+                logger.error(f"[{primary_name}]  Fatal config error on round {round_}: {e}")
                 errors.append(f"{primary_name} fatal: {e}")
                 primary_fatal = True
             else:
                 msg = f"Round {round_} failed: {e}"
-                logger.warning(f"[{primary_name}] ⚠️ {msg}")
+                logger.warning(f"[{primary_name}]  {msg}")
                 errors.append(f"{primary_name}: {msg}")
 
-        # ── 2. Secondary Attempt ───────────────────────────────────────────
+        #  2. Secondary Attempt 
         secondary_fatal = False
         if secondary_fn is not None:
             total_attempts += 1
             try:
                 logger.info(f"[{secondary_name}] Fallback round {round_}/{max_retries} (timeout={timeout_seconds}s)")
                 result = await asyncio.wait_for(secondary_fn(**kwargs), timeout=timeout_seconds)
-                logger.info(f"[{secondary_name}] ✅ Fallback success on round {round_}")
+                logger.info(f"[{secondary_name}]  Fallback success on round {round_}")
                 return ProviderResult(
                     data=result,
                     provider_used=secondary_name,
@@ -499,17 +553,17 @@ async def execute_with_fallback(
                 )
             except asyncio.TimeoutError:
                 msg = f"Fallback round {round_} timed out after {timeout_seconds}s"
-                logger.warning(f"[{secondary_name}] ⏱ {msg}")
+                logger.warning(f"[{secondary_name}]  {msg}")
                 errors.append(f"{secondary_name}: {msg}")
             except Exception as e:
                 error_type = classify_error(e)
                 if error_type == ErrorType.FATAL:
-                    logger.error(f"[{secondary_name}] ⛔ Fatal config error on round {round_}: {e}")
+                    logger.error(f"[{secondary_name}]  Fatal config error on round {round_}: {e}")
                     errors.append(f"{secondary_name} fatal: {e}")
                     secondary_fatal = True
                 else:
                     msg = f"Fallback round {round_} failed: {e}"
-                    logger.warning(f"[{secondary_name}] ⚠️ {msg}")
+                    logger.warning(f"[{secondary_name}]  {msg}")
                     errors.append(f"{secondary_name}: {msg}")
 
             if primary_fatal and secondary_fatal:
@@ -520,15 +574,15 @@ async def execute_with_fallback(
                 logger.error("[provider_engine] Primary returned FATAL error. No fallback configured. Aborting early.")
                 break
 
-        # ── 3. Delay Before Next Round ─────────────────────────────────────
+        #  3. Delay Before Next Round 
         if round_ < max_retries:
             logger.info(f"Both providers failed this round. Waiting {retry_delay_seconds}s before round {round_ + 1}...")
             await asyncio.sleep(retry_delay_seconds)
 
-    # ── All rounds exhausted — return graceful error (never raise) ─────────
+    #  All rounds exhausted  return graceful error (never raise) 
     summary = "; ".join(errors[-4:])  # last 4 errors for brevity
     error_msg = (
-        f"⚠️ All API attempts failed after {max_retries} full rounds. "
+        f" All API attempts failed after {max_retries} full rounds. "
         f"Last errors: {summary}. "
         "Please continue with the information you have already gathered or mark it Not Found. "
         "Skip this tool call and move to the next step."
@@ -543,7 +597,7 @@ async def execute_with_fallback(
     )
 
 
-# ── Numbered Provider Pipeline ──────────────────────────────────────────────
+#  Numbered Provider Pipeline 
 
 _providers_cache: dict[str, list[dict]] = {}
 _providers_cache_loaded_at: float = 0.0
@@ -627,7 +681,7 @@ async def load_mcp_tool_by_key(tool_key: str, user_id: Optional[str] = None) -> 
     1. Check the DB cache (available_tools column) for each active connection.
     2. If not found in cache, fall back to live discovery: probe every active
        manual HTTP connection directly, find the tool, then backfill the DB cache.
-    This makes the system self-healing — tools work even if available_tools is empty.
+    This makes the system self-healing  tools work even if available_tools is empty.
     """
     # Intercept memory tools (add_memory, replace_memory, remove_memory, honcho_*, search_conversation_history)
     from research_agent.tools.dynamic_router import TOOL_OBJECTS
@@ -640,7 +694,7 @@ async def load_mcp_tool_by_key(tool_key: str, user_id: Optional[str] = None) -> 
     if not user_id:
         user_id = active_user_id.get()
 
-    # ── Stage 1: DB-cache lookup (fast path) ──────────────────────────────────
+    #  Stage 1: DB-cache lookup (fast path) 
     for conn in connections:
         available = conn.get("available_tools") or []
         for t in available:
@@ -655,7 +709,7 @@ async def load_mcp_tool_by_key(tool_key: str, user_id: Optional[str] = None) -> 
                     from research_agent.tools.mcp_loader import load_manual_mcp_tool
                     return await load_manual_mcp_tool(conn.get("mcp_url"), tool_key, metadata=t if isinstance(t, dict) else None)
                 else:
-                    # Resolve Composio API key: explicit user_id → ContextVar → env fallback
+                    # Resolve Composio API key: explicit user_id  ContextVar  env fallback
                     composio_api_key = _get_user_composio_api_key(user_id)
                     if not composio_api_key:
                         composio_api_key = os.environ.get("COMPOSIO_API_KEY", "")
@@ -697,7 +751,7 @@ async def load_mcp_tool_by_key(tool_key: str, user_id: Optional[str] = None) -> 
                         except Exception:
                             pass
 
-    # ── Stage 2: Live-discovery fallback (self-healing) ───────────────────────
+    #  Stage 2: Live-discovery fallback (self-healing) 
     # No cached entry matched. Probe every active manual HTTP connection live.
     logger.info(
         f"[load_mcp_tool_by_key] '{tool_key}' not in DB cache. "
@@ -935,7 +989,7 @@ async def execute_unified_pipeline(
             else:
                 is_mcp = True
         else:
-            return f"❌ Tool '{key}' not found or connection offline"
+            return f" Tool '{key}' not found or connection offline"
 
     try:
         if is_builtin_tool:
@@ -953,7 +1007,7 @@ async def execute_unified_pipeline(
                 tool_args = {k: v for k, v in kwargs.items() if k not in ["config"]}
             
             result = await asyncio.wait_for(fn.ainvoke(tool_args), timeout=timeout_seconds)
-            logger.info(f"[pipeline] ✅ Builtin Tool '{key}' succeeded!")
+            logger.info(f"[pipeline]  Builtin Tool '{key}' succeeded!")
             return str(result)
             
         elif is_mcp:
@@ -974,7 +1028,7 @@ async def execute_unified_pipeline(
 
             result = await asyncio.wait_for(fn.ainvoke(tool_args), timeout=timeout_seconds)
             res_str = str(result)
-            logger.info(f"[pipeline] ✅ MCP Provider '{key}' succeeded!")
+            logger.info(f"[pipeline]  MCP Provider '{key}' succeeded!")
             return res_str
             
         else:
@@ -982,12 +1036,12 @@ async def execute_unified_pipeline(
             # Strip config from kwargs before calling preset functions
             preset_args = {k: v for k, v in kwargs.items() if k not in ["config"]}
             result = await asyncio.wait_for(fn(**preset_args), timeout=timeout_seconds)
-            logger.info(f"[pipeline] ✅ Preset Provider '{key}' succeeded!")
+            logger.info(f"[pipeline]  Preset Provider '{key}' succeeded!")
             return str(result)
 
     except Exception as e:
         msg = f"Provider '{key}' failed: {e}"
-        logger.warning(f"[pipeline] ⚠️ {msg}")
+        logger.warning(f"[pipeline]  {msg}")
         
         if fallback_on_error and (matched_idx + 1 < len(providers)):
             next_prov = providers[matched_idx + 1]
@@ -1005,13 +1059,13 @@ async def execute_unified_pipeline(
                 next_schema = "{query: str}"
 
             return (
-                f"❌ Provider '{key}' failed: {e}. "
+                f" Provider '{key}' failed: {e}. "
                 f"Next fallback provider is '{next_key}'. "
                 f"Please invoke this tool again with arguments matching the schema of '{next_key}': {next_schema}."
             )
         else:
             return (
-                f"❌ Provider '{key}' failed and no further fallback is available. "
+                f" Provider '{key}' failed and no further fallback is available. "
                 f"Error: {e}"
             )
 

@@ -111,6 +111,33 @@ export async function POST(req: Request) {
         });
       }
     }
+
+    // Stamp auto_publish_since the moment auto-publish is switched ON.
+    // cron_scheduler reads this key to bound its sweep; without it the first
+    // tick would treat the entire social_posts history as publishable.
+    const incomingAutoPublish = uniqueMap.get("social_auto_publish");
+    if (incomingAutoPublish && String(incomingAutoPublish.value).toLowerCase() === "true") {
+      const { data: prevRows } = await supabase
+        .from("agent_settings")
+        .select("key,value")
+        .eq("user_id", user.id)
+        .in("key", ["social_auto_publish", "auto_publish_since"]);
+      const prev: Record<string, string> = {};
+      for (const row of prevRows ?? []) prev[row.key] = row.value ?? "";
+
+      const wasEnabled = (prev.social_auto_publish || "").toLowerCase() === "true";
+      // Only stamp on the off -> on transition, or when the marker is missing,
+      // and never overwrite a value the caller sent explicitly.
+      if ((!wasEnabled || !prev.auto_publish_since) && !uniqueMap.has("auto_publish_since")) {
+        uniqueMap.set("auto_publish_since", {
+          user_id: user.id,
+          key: "auto_publish_since",
+          value: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      }
+    }
+
     const rowsWithUser = Array.from(uniqueMap.values());
     const { error } = await supabase.from("agent_settings").upsert(rowsWithUser, { onConflict: "user_id,key" });
     if (error) throw error;

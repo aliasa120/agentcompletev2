@@ -63,8 +63,13 @@ report/
 *.ps1
 foo.txt
 gen_graphs*.py
-test_*.txt
-test_*.py
+/test_*.txt
+/test_*.py
 agent_load.log
 .freebuff/
-
+.opencode/
+*.mp4
+*.csv
+*.docx
+*.ppt
+*.pptx

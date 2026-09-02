@@ -33,14 +33,18 @@ def reset_whitelist_cache():
     _whitelist_cache = None
 
 
-def layer_minus1_domain(article_domain: str, workflow_id: str = None) -> bool:
+def layer_minus1_domain(article_domain: str, workflow_id: str = None, allow_all: bool = False) -> bool:
     """Returns True if article domain is whitelisted for the given workflow_id 
-    (or if the whitelist for this workflow is empty).
+    (or if allow_all is True or if the whitelist for this workflow is empty).
     
     Args:
         article_domain: e.g. 'dawn.com', 'geo.tv'
         workflow_id: ID of the workflow the article belongs to
+        allow_all: If True, bypasses domain whitelist checks
     """
+    if allow_all:
+        return True
+
     whitelists = _load_whitelists()
     
     # Whitelisted domains for this workflow + global domains (workflow_id IS NULL)

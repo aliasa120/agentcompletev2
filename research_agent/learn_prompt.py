@@ -27,8 +27,8 @@ Body sections, in this order:
 3. `## Prerequisites` — tools or settings required (reference OUR tool names exactly)
 4. `## Procedure` — numbered step-by-step instructions the agent must follow.
    Reference the actual tools available in THIS system: unified_search, unified_extract,
-   youtube_transcript, think_tool, read_skill, manage_skill, text_to_speech, terminal, ask_permission,
-   fetch_images_brave, view_candidate_images, analyze_images_gemini, create_post_image,
+   youtube_transcript, think_tool, read_skill, manage_skill, text_to_speech, terminal,
+   fetch_images_brave, analyze_images_gemini, create_post_image,
    publish_to_wordpress, save_posts_to_supabase, get_design_guide, cronjob, omni_analyzer.
 5. `## Pitfalls` — mistakes to avoid, edge cases.
 6. `## Verification` — how the agent checks its own output before finishing.

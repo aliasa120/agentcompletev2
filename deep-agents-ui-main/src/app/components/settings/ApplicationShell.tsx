@@ -2,14 +2,16 @@
 
 import React from "react";
 import Link from "next/link";
+import useSWR from "swr";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { cn } from "@/lib/utils";
 import {
   Palette, Shield, Layers, AlarmClock, Wrench, Cpu, Route, Brain, Bot, Users,
   BookOpen, ImageIcon, ListChecks, Settings2, Database, Share2, LayoutGrid,
-  Zap, LogOut, ChevronDown, Menu, X,
+  Zap, LogOut, ChevronDown, Menu, X, SlidersHorizontal, Puzzle, Mic,
 } from "lucide-react";
 import { type SettingsSection } from "./SettingsSidebar";
+import { isPluginEnabled, type PluginInfo } from "@/lib/plugins";
 
 interface ApplicationShellProps {
   active: SettingsSection;
@@ -32,71 +34,80 @@ interface NavGroup {
   items: NavItem[];
 }
 
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: "Core",
-    items: [
-      { title: "Appearance", id: "appearance", icon: Palette },
-      { title: "ENV Keys", id: "env-keys", icon: Shield, badge: "NEW" },
-      { title: "Workflows", id: "workflows", icon: Layers },
-      { title: "Scheduled Tasks", id: "scheduled-tasks", icon: AlarmClock },
-      {
-        title: "Additional Features",
-        id: "additional-features",
-        icon: LayoutGrid,
-        subItems: [
-          { title: "Overview", id: "additional-features" },
-          { title: "Voice & TTS", id: "additional-features-voice" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Integrations",
-    items: [
-      {
-        title: "Tools & MCP",
-        id: "tools",
-        icon: Wrench,
-        subItems: [
-          { title: "All Tools", id: "tools" },
-          { title: "Composio Gateway", id: "tools-composio" },
-          { title: "Manual MCP", id: "tools-manual" },
-          { title: "Smithery AI", id: "tools-smithery" },
-          { title: "Zapier Platform", id: "tools-zapier" },
-        ],
-      },
-      { title: "Platforms Connection", id: "telegram-bots", icon: Share2 },
-    ],
-  },
-  {
-    label: "Models",
-    items: [
-      { title: "AI Providers", id: "providers", icon: Cpu },
-      { title: "Providers", id: "gateway", icon: Route },
-      { title: "Main Agents", id: "agents", icon: Bot },
-      { title: "Subagents", id: "subagents", icon: Users },
-      { title: "Skills Library", id: "skills", icon: BookOpen },
-    ],
-  },
-  {
-    label: "Content",
-    items: [
-      { title: "Brand Assets", id: "design-assets", icon: ImageIcon },
-      { title: "Queue & Schedule", id: "queue", icon: ListChecks },
-      { title: "API Configuration", id: "configuration", icon: Settings2 },
-      { title: "Feeder Dashboard", id: "feeder", icon: Database },
-      { title: "Memories", id: "memories", icon: Brain },
-    ],
-  },
-];
+function buildNavGroups(plugins: PluginInfo[]): NavGroup[] {
+  const pluginEnabled = (key: string) => isPluginEnabled(plugins, key);
+
+  const pluginSubItems: { title: string; id: SettingsSection }[] = [
+    { title: "Overview", id: "plugins" },
+    ...plugins.map((p) => ({
+      title: p.label,
+      id: `plugins-${p.plugin_key}` as SettingsSection,
+    })),
+  ];
+
+  return [
+    {
+      label: "Core",
+      items: [
+        { title: "User Preferences", id: "user-preferences", icon: SlidersHorizontal },
+        { title: "ENV Keys", id: "env-keys", icon: Shield, badge: "NEW" },
+        { title: "Workflows", id: "workflows", icon: Layers },
+        { title: "Scheduled Tasks", id: "scheduled-tasks", icon: AlarmClock },
+        { title: "Voice & TTS", id: "additional-features-voice", icon: Mic },
+        {
+          title: "Plugins",
+          id: "plugins",
+          icon: Puzzle,
+          subItems: pluginSubItems,
+        },
+      ],
+    },
+    {
+      label: "Integrations",
+      items: [
+        {
+          title: "Tools & MCP",
+          id: "tools",
+          icon: Wrench,
+          subItems: [
+            { title: "All Tools", id: "tools" },
+            { title: "Composio Gateway", id: "tools-composio" },
+            { title: "Manual MCP", id: "tools-manual" },
+            { title: "Smithery AI", id: "tools-smithery" },
+            { title: "Zapier Platform", id: "tools-zapier" },
+          ],
+        },
+        { title: "Platforms Connection", id: "telegram-bots", icon: Share2 },
+      ],
+    },
+    {
+      label: "Models",
+      items: [
+        { title: "AI Providers", id: "providers", icon: Cpu },
+        { title: "Providers", id: "gateway", icon: Route },
+        { title: "Main Agents", id: "agents", icon: Bot },
+        { title: "Subagents", id: "subagents", icon: Users },
+        { title: "Skills Library", id: "skills", icon: BookOpen },
+      ],
+    },
+    {
+      label: "Content",
+      items: [
+        { title: "Brand Assets", id: "design-assets", icon: ImageIcon },
+        { title: "Memories", id: "memories", icon: Brain },
+      ],
+    },
+  ];
+}
 
 /** Flattened lookup used for the topbar title. */
-const ALL_TABS: { title: string; id: SettingsSection }[] = NAV_GROUPS.flatMap((g) =>
-  g.items.flatMap((item) =>
-    item.subItems ? item.subItems : [{ title: item.title, id: item.id }],
-  ),
-);
+function flattenNavGroups(groups: NavGroup[]): { title: string; id: SettingsSection }[] {
+  return groups.flatMap((g) =>
+    g.items.flatMap((item) =>
+      item.subItems ? item.subItems : [{ title: item.title, id: item.id }],
+    ),
+  );
+}
 
 export const ApplicationShell = ({
   active,
@@ -106,7 +117,28 @@ export const ApplicationShell = ({
   children,
 }: ApplicationShellProps) => {
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
-  const activeTitle = ALL_TABS.find((t) => t.id === active)?.title ?? "Settings";
+  const { data: pluginData } = useSWR<{ plugins: PluginInfo[] }>(
+    "/api/plugins",
+    (url: string) =>
+      fetch(url)
+        .then((r) => (r.ok ? r.json() : { plugins: [] }))
+        .catch(() => ({ plugins: [] })),
+    { revalidateOnFocus: false }
+  );
+  const plugins = React.useMemo<PluginInfo[]>(
+    () =>
+      pluginData?.plugins ??
+      [
+        { plugin_key: "feeder", label: "Feeder", enabled: true } as PluginInfo,
+        { plugin_key: "posts", label: "Posts", enabled: true } as PluginInfo,
+      ],
+    [pluginData]
+  );
+  const navGroups = React.useMemo(() => buildNavGroups(plugins), [plugins]);
+  const tabs = React.useMemo(() => flattenNavGroups(navGroups), [navGroups]);
+
+  const normalizedActive = active === "appearance" ? "user-preferences" : active;
+  const activeTitle = tabs.find((t) => t.id === normalizedActive)?.title ?? "Settings";
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
@@ -118,7 +150,7 @@ export const ApplicationShell = ({
       />
       <div className="flex flex-1 min-h-0">
         {/* Desktop grouped menu */}
-        <DesktopNav active={active} onChange={onChange} onSignOut={onSignOut} />
+        <DesktopNav active={active} onChange={onChange} onSignOut={onSignOut} groups={navGroups} />
         {/* Content column */}
         <main className="flex-1 min-w-0 overflow-y-auto min-h-0">
           <div className="p-3 pt-4 md:p-6 md:pt-4 w-full">{children}</div>
@@ -132,6 +164,7 @@ export const ApplicationShell = ({
         active={active}
         onChange={onChange}
         onSignOut={onSignOut}
+        groups={navGroups}
       />
     </div>
   );
@@ -197,12 +230,14 @@ const Topbar = ({
 const NavSections = ({
   active,
   onChange,
+  groups,
 }: {
   active: SettingsSection;
   onChange: (s: SettingsSection) => void;
+  groups: NavGroup[];
 }) => (
   <div className="flex flex-col gap-0.5 w-full font-medium">
-    {NAV_GROUPS.map((group, gi) => (
+    {groups.map((group, gi) => (
       <div key={group.label} className={cn(gi > 0 && "mt-4")}>
         <span className="px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {group.label}
@@ -227,9 +262,11 @@ const NavItemButton = ({
   onChange: (s: SettingsSection) => void;
 }) => {
   const hasSubs = !!item.subItems;
-  const isActive = active === item.id;
+  const isActive =
+    active === item.id ||
+    (item.id === "user-preferences" && active === "appearance");
   const isGroupActive =
-    hasSubs && item.subItems!.some((s) => s.id === active);
+    hasSubs && item.subItems!.some((s) => s.id === active || (s.id === "user-preferences" && active === "appearance"));
   const [expanded, setExpanded] = React.useState<boolean>(isGroupActive);
 
   React.useEffect(() => {
@@ -311,15 +348,17 @@ const DesktopNav = ({
   active,
   onChange,
   onSignOut,
+  groups,
 }: {
   active: SettingsSection;
   onChange: (s: SettingsSection) => void;
   onSignOut: () => void;
+  groups: NavGroup[];
 }) => {
   return (
     <aside className="hidden md:flex h-full w-60 shrink-0 flex-col bg-sidebar">
       <nav className="flex-1 overflow-y-auto scrollbar-pretty px-1.5 py-3 min-h-0">
-        <NavSections active={active} onChange={onChange} />
+        <NavSections active={active} onChange={onChange} groups={groups} />
       </nav>
       <div className="shrink-0 border-t border-border/60 p-1.5">
         <button
@@ -342,12 +381,14 @@ const MobileNavDrawer = ({
   active,
   onChange,
   onSignOut,
+  groups,
 }: {
   open: boolean;
   onClose: () => void;
   active: SettingsSection;
   onChange: (s: SettingsSection) => void;
   onSignOut: () => void;
+  groups: NavGroup[];
 }) => {
   // Lock body scroll while the drawer is open
   React.useEffect(() => {
@@ -393,7 +434,7 @@ const MobileNavDrawer = ({
         </div>
         {/* Grouped menu */}
         <nav className="flex-1 overflow-y-auto scrollbar-pretty px-1.5 py-3 min-h-0">
-          <NavSections active={active} onChange={handleSelect} />
+          <NavSections active={active} onChange={handleSelect} groups={groups} />
         </nav>
         {/* Drawer footer */}
         <div className="shrink-0 border-t border-sidebar-border p-1.5">

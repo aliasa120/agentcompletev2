@@ -34,6 +34,7 @@ import { useChatContext } from "@/providers/ChatProvider";
 import { cn } from "@/lib/utils";
 import { useStickToBottom } from "use-stick-to-bottom";
 import { FilesPopover } from "@/app/components/TasksFilesSidebar";
+import { useWorkspaceFiles } from "@/app/hooks/useWorkspaceFiles";
 
 interface ChatInterfaceProps {
   assistant: Assistant | null;
@@ -368,7 +369,11 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant, onStar
   };
 
   const hasTasks = todos.length > 0;
-  const hasFiles = Object.keys(files).length > 0;
+  // Agent files can exist only on disk (binaries, large outputs), so the Files
+  // trigger must account for the workspace listing too — not just state files.
+  const diskOnlyFiles = useWorkspaceFiles(files);
+  const fileCount = Object.keys(files).length + diskOnlyFiles.length;
+  const hasFiles = fileCount > 0;
 
   // Parse out any action requests or review configs from the interrupt
   const actionRequestsMap: Map<string, ActionRequest> | null = useMemo(() => {
@@ -579,9 +584,9 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant, onStar
                           aria-expanded={metaOpen === "files"}
                         >
                           <FileIcon size={16} />
-                          Files (State)
+                          Files
                           <span className="h-4 min-w-4 rounded-full bg-primary px-0.5 text-center text-[10px] leading-[16px] text-primary-foreground">
-                            {Object.keys(files).length}
+                            {fileCount}
                           </span>
                         </button>
                       );
@@ -625,9 +630,9 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant, onStar
                         }
                         aria-expanded={metaOpen === "files"}
                       >
-                        Files (State)
+                        Files
                         <span className="h-4 min-w-4 rounded-full bg-primary px-0.5 text-center text-[10px] leading-[16px] text-primary-foreground">
-                          {Object.keys(files).length}
+                          {fileCount}
                         </span>
                       </button>
                     )}

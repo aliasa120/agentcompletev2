@@ -13,7 +13,6 @@ import {
   KeyRound, ChevronDown, ChevronUp, LogOut, User, Database, Settings, LayoutGrid,
   Sparkles, Trash2, Mic, Video, RotateCcw
 } from "lucide-react";
-import { getConfig, saveConfig } from "@/lib/config";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { cn } from "@/lib/utils";
 import { type SettingsSection } from "@/app/components/settings/SettingsSidebar";
@@ -28,8 +27,12 @@ import { MemoriesSection } from "@/app/components/settings/MemoriesSection";
 import { TelegramBotsSection } from "@/app/components/settings/TelegramBotsSection";
 import { ScheduledTasksSection } from "@/app/components/settings/ScheduledTasksSection";
 import { EnvKeysSection } from "@/app/components/settings/EnvKeysSection";
+import { UserPreferencesSection } from "@/app/components/settings/UserPreferencesSection";
 import { AppearanceSection } from "@/app/components/settings/AppearanceSection";
 import { VoiceSection } from "@/app/components/settings/VoiceSection";
+import { AIProvidersSection } from "@/app/components/settings/AIProvidersSection";
+import { PluginsSection } from "@/app/components/settings/PluginsSection";
+import { usePlugins, isPluginEnabled } from "@/lib/plugins";
 import { JanCard, CardItem } from "@/components/settings/JanCard";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -95,6 +98,14 @@ const AGENT_SETTING_KEYS = [
   "omni_prompt_document",
   "omni_prompt_audio",
   "omni_prompt_video",
+  // ── File Storage (Cloudflare R2) ──
+  "r2_account_id",
+  "r2_access_key_id",
+  "r2_secret_access_key",
+  "r2_bucket_name",
+  "r2_public_base_url",
+  "storage_retention_days",
+  "storage_auto_upload_files",
 ];
 
 const DEFAULT_OMNI_PROMPTS = {
@@ -160,7 +171,7 @@ const DEFAULTS: Record<string, string> = {
   auto_trigger_interval_minutes: "30",
   search_provider_primary: "linkup", search_provider_secondary: "parallel", search_max_retries: "3",
   extract_provider_primary: "tavily", extract_provider_secondary: "exa", extract_max_retries: "3",
-  image_provider_primary: "kie", image_provider_secondary: "gemini_flash", image_max_retries: "2",
+  image_provider_primary: "kie", image_provider_secondary: "grok_imagine", image_max_retries: "2",
   main_agent_provider: "openrouter", main_agent_model: "google/gemini-2.5-flash",
   analyzer_provider: "openrouter", analyzer_model: "google/gemini-2.5-flash",
   feeder_provider: "openrouter", feeder_model: "google/gemini-2.5-flash",
@@ -191,7 +202,7 @@ const EXTRACT_PROVIDERS = [
 ];
 const IMAGE_PROVIDERS = [
   { value: "kie", label: "KIE AI", badge: "Image-to-Image" },
-  { value: "gemini_flash", label: "Gemini 2.5 Flash", badge: "Chat Completion" },
+  { value: "grok_imagine", label: "Grok Imagine Image", badge: "xAI / Vercel" },
 ];
 
 // ── Status Badge ───────────────────────────────────────────────────────────────
@@ -290,7 +301,17 @@ export default function AgentSettingsPage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get("tab");
-      if (tab) {
+      if (tab === "queue") {
+        setSection("workflows");
+      } else if (tab === "configuration") {
+        setSection("env-keys");
+      } else if (tab === "appearance") {
+        setSection("user-preferences");
+      } else if (tab === "additional-features") {
+        setSection("additional-features-voice");
+      } else if (tab === "feeder") {
+        setSection("plugins-feeder" as any);
+      } else if (tab) {
         setSection(tab as any);
       }
     }
@@ -330,6 +351,11 @@ export default function AgentSettingsPage() {
   const { data: manualData, mutate: mutateManual } = useSWR("/api/mcp/manual", fetcher);
   const { data: toolSettingsData, mutate: mutateToolSettings } = useSWR("/api/mcp/tool-settings", fetcher);
 
+  // ── Plugin state (Feeder / Posts / ...) ──
+  const { plugins } = usePlugins();
+  const feederPluginEnabled = isPluginEnabled(plugins, "feeder");
+  const postsPluginEnabled = isPluginEnabled(plugins, "posts");
+
   const skills = useMemo(() => skillsData?.skills ?? [], [skillsData]);
   const mcpConnections = useMemo(() => [
     ...(composioData?.connections ?? []),
@@ -344,23 +370,6 @@ export default function AgentSettingsPage() {
     mutateManual();
     mutateToolSettings();
   }, [mutateSettings, mutateSkills, mutateComposio, mutateManual, mutateToolSettings]);
-
-  // ── Configuration settings logic ──
-  const [configUrl, setConfigUrl] = useState("");
-  const [configAssistantId, setConfigAssistantId] = useState("");
-  const [configApiKey, setConfigApiKey] = useState("");
-  const [configSaveStatus, setConfigSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-
-  useEffect(() => {
-    if (section === "configuration") {
-      const savedConfig = getConfig();
-      if (savedConfig) {
-        setConfigUrl(savedConfig.deploymentUrl);
-        setConfigAssistantId(savedConfig.assistantId);
-        setConfigApiKey(savedConfig.langsmithApiKey || "");
-      }
-    }
-  }, [section]);
 
   useEffect(() => {
     fetch("/api/provider-status")
@@ -435,30 +444,8 @@ export default function AgentSettingsPage() {
     }
   };
 
-  const saveConfiguration = () => {
-    if (!configUrl || !configAssistantId) {
-      alert("Please fill in all required fields");
-      return;
-    }
-    setConfigSaveStatus("saving");
-    try {
-      saveConfig({
-        deploymentUrl: configUrl,
-        assistantId: configAssistantId,
-        langsmithApiKey: configApiKey || undefined,
-      });
-      setConfigSaveStatus("saved");
-      setTimeout(() => setConfigSaveStatus("idle"), 3000);
-    } catch {
-      setConfigSaveStatus("error");
-    }
-  };
-
-  // ── Feeder Dashboard logic ──
+  // ── Feeder section: compact summary + link to the dedicated pages ──
   const [feederStats, setFeederStats] = useState({ pending: 0, processing: 0, done: 0, total: 0 });
-  const [feederPendingArticles, setFeederPendingArticles] = useState<any[]>([]);
-  const [feederIsFetching, setFeederIsFetching] = useState(false);
-  const [feederPipelineLog, setFeederPipelineLog] = useState<string>("");
 
   const loadFeederData = useCallback(async () => {
     try {
@@ -474,43 +461,10 @@ export default function AgentSettingsPage() {
         done: doneRes.count ?? 0,
         total: artRes.count ?? 0,
       });
-
-      const { data } = await supabase
-        .from("feeder_articles")
-        .select("id,title,source_domain,published_at,created_at,url")
-        .eq("status", "Pending")
-        .order("created_at", { ascending: true })
-        .limit(50);
-      setFeederPendingArticles(data ?? []);
     } catch (e) {
       console.error(e);
     }
   }, []);
-
-  const triggerFeederPipeline = async () => {
-    setFeederIsFetching(true);
-    setFeederPipelineLog("Running pipeline…");
-    try {
-      const res = await fetch("/api/feeder/run", { method: "POST" });
-      const data = await res.json();
-      if (data.success) {
-        setFeederPipelineLog(data.log || "Pipeline ran successfully.");
-      } else {
-        setFeederPipelineLog("Error: " + data.error);
-      }
-    } catch (e: any) {
-      setFeederPipelineLog("Error: " + e.message);
-    } finally {
-      setFeederIsFetching(false);
-      loadFeederData();
-    }
-  };
-
-  const clearFeederPending = async () => {
-    if (!confirm("Delete all Pending articles?")) return;
-    await supabase.from("feeder_articles").delete().eq("status", "Pending");
-    loadFeederData();
-  };
 
   useEffect(() => {
     if (section === "feeder") {
@@ -518,179 +472,49 @@ export default function AgentSettingsPage() {
     }
   }, [section, loadFeederData]);
 
-  const ConfigurationSection = () => (
+  const FeederDashboardSection = () => (
     <div className="space-y-4">
-      <JanCard title="API Configuration"
-        header={
-          <p className="text-sm text-muted-foreground leading-relaxed -mt-2 mb-4">
-            Configure your LangGraph deployment settings. These settings are saved in your browser's local storage.
-          </p>
-        }
-      >
-        <CardItem column className="mt-0" title="Deployment URL">
-          <Input
-            id="configUrl"
-            placeholder="https://<deployment-url>"
-            value={configUrl}
-            onChange={(e) => setConfigUrl(e.target.value)}
-            className="h-10 text-sm w-full"
-          />
-        </CardItem>
-        <CardItem column title="Assistant ID">
-          <Input
-            id="configAssistantId"
-            placeholder="<assistant-id>"
-            value={configAssistantId}
-            onChange={(e) => setConfigAssistantId(e.target.value)}
-            className="h-10 text-sm w-full"
-          />
-        </CardItem>
-        <CardItem column title={<>LangSmith API Key <span className="text-muted-foreground font-normal">(Optional)</span></>}>
-          <Input
-            id="configApiKey"
-            type="password"
-            placeholder="lsv2_pt_..."
-            value={configApiKey}
-            onChange={(e) => setConfigApiKey(e.target.value)}
-            className="h-10 text-sm w-full"
-          />
-        </CardItem>
+      <JanCard>
         <CardItem
-          title="Persist configuration"
-          description="Saved to browser local storage"
+          align="start"
+          className="flex-col sm:flex-row gap-3"
+          title="Feeder"
+          description="RSS feeds, scheduling, filters, and the article queue live on the dedicated Feeder pages."
           actions={
-            <div className="flex items-center gap-3">
-              {configSaveStatus === "saved" && <span className="text-xs font-semibold text-emerald-500 animate-pulse">Saved successfully!</span>}
-              <Button onClick={saveConfiguration} disabled={configSaveStatus === "saving"} className="bg-primary text-primary-foreground">
-                {configSaveStatus === "saving" ? "Saving..." : "Save Configuration"}
-              </Button>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/feeder">
+                <Button size="sm" className="text-xs flex items-center gap-1.5">
+                  <Database className="h-3.5 w-3.5" />
+                  Open Feeder Dashboard
+                </Button>
+              </Link>
+              <Link href="/feeder/settings">
+                <Button variant="outline" size="sm" className="text-xs">
+                  Feeder Settings
+                </Button>
+              </Link>
             </div>
           }
         />
       </JanCard>
+
+      {/* Stats row */}
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+        {[
+          { label: "Pending", value: feederStats.pending, color: "text-amber-500", sub: "In queue" },
+          { label: "Processing", value: feederStats.processing, color: "text-primary", sub: "With agent" },
+          { label: "Done", value: feederStats.done, color: "text-emerald-600", sub: "Completed" },
+          { label: "Total", value: feederStats.total, color: "text-muted-foreground", sub: "All articles" },
+        ].map(({ label, value, color, sub }) => (
+          <div key={label} className="rounded-xl border border-border/40 bg-card p-4 flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground font-semibold">{label}</span>
+            <span className={`text-2xl font-bold ${color}`}>{value}</span>
+            <span className="text-[10px] text-muted-foreground">{sub}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
-
-  const FeederDashboardSection = () => {
-    const formatPKT = (iso: string | null): string => {
-      if (!iso) return "—";
-      const d = new Date(iso);
-      return d.toLocaleString("en-PK", {
-        timeZone: "Asia/Karachi",
-        month: "short", day: "numeric",
-        hour: "2-digit", minute: "2-digit",
-        hour12: false,
-      });
-    };
-
-    return (
-      <div className="space-y-4">
-        <JanCard>
-          <CardItem
-            align="start"
-            className="flex-col sm:flex-row gap-3"
-            title="Feeder Dashboard"
-            description="Run the feeder pipeline and monitor the article queue"
-            actions={
-              <div className="flex flex-wrap gap-2">
-                <Link href="/feeder">
-                  <Button variant="outline" size="sm" className="text-xs flex items-center gap-1.5 hover:bg-accent/40 transition-colors">
-                    <Database className="h-3.5 w-3.5" />
-                    Go to Feeder Page
-                  </Button>
-                </Link>
-                <Button
-                  onClick={triggerFeederPipeline}
-                  disabled={feederIsFetching}
-                  size="sm"
-                  className="bg-primary text-primary-foreground text-xs"
-                >
-                  {feederIsFetching ? "Running..." : "Run Feeder"}
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={clearFeederPending}
-                  disabled={feederIsFetching}
-                  className="text-xs"
-                >
-                  Clear Pending
-                </Button>
-                <Button variant="outline" size="sm" onClick={loadFeederData} className="text-xs">
-                  Refresh
-                </Button>
-              </div>
-            }
-          />
-        </JanCard>
-
-        {/* Stats row */}
-        <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-          {[
-            { label: "Pending", value: feederStats.pending, color: "text-amber-500", bg: "bg-amber-50 dark:bg-amber-950/20", sub: "In queue" },
-            { label: "Processing", value: feederStats.processing, color: "text-primary", bg: "bg-primary/10", sub: "With agent" },
-            { label: "Done", value: feederStats.done, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/20", sub: "Completed" },
-            { label: "Total", value: feederStats.total, color: "text-muted-foreground", bg: "bg-muted", sub: "All articles" },
-          ].map(({ label, value, color, bg, sub }) => (
-            <div key={label} className="rounded-xl border border-border/40 bg-card p-4 flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground font-semibold">{label}</span>
-              <span className={`text-2xl font-bold ${color}`}>{value}</span>
-              <span className="text-[10px] text-muted-foreground">{sub}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Pipeline log */}
-        {feederPipelineLog && (
-          <JanCard title="Last Pipeline Output">
-            <pre className="text-xs whitespace-pre-wrap text-foreground font-mono max-h-48 overflow-auto bg-muted/20 p-3 rounded-lg border border-border/40">
-              {feederPipelineLog}
-            </pre>
-          </JanCard>
-        )}
-
-        {/* Pending articles list */}
-        <JanCard
-          className="p-0 overflow-hidden"
-          header={
-            <div className="p-4 border-b border-border/40 bg-muted/10 flex items-center justify-between">
-              <span className="font-medium text-sm text-foreground font-studio">Pending Articles</span>
-              <span className="text-xs text-muted-foreground">{feederStats.pending} ready · FIFO order</span>
-            </div>
-          }
-        >
-          <div className="divide-y divide-border/40 max-h-[380px] overflow-auto">
-            {feederPendingArticles.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">
-                No pending articles. Run the feeder pipeline to fetch new ones.
-              </div>
-            ) : (
-              feederPendingArticles.map((art, i) => (
-                <div key={art.id} className="flex items-start gap-3 p-3 hover:bg-muted/40 transition-colors">
-                  <span className="text-xs text-muted-foreground w-5 shrink-0 mt-0.5">{i + 1}</span>
-                  <div className="flex-1 min-w-0">
-                    <a
-                      href={art.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-foreground hover:text-primary hover:underline line-clamp-2 transition-colors"
-                    >
-                      {art.title}
-                    </a>
-                    <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
-                      <span>{art.source_domain}</span>
-                      <span>·</span>
-                      <span>{formatPKT(art.published_at || art.created_at)}</span>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </JanCard>
-      </div>
-    );
-  };
 
   // Load session
   useEffect(() => {
@@ -881,158 +705,6 @@ export default function AgentSettingsPage() {
     }
     loadQueue();
   };
-
-
-
-  // ── Queue section (from old page) ────────────────────────────────────────────
-  const QueueSection = () => (
-    <div className="space-y-4">
-      {/* Queue Config */}
-      <JanCard title="Queue Configuration">
-          <CardItem
-            column
-            title="Batch Size"
-            description="How many pending articles process per run"
-          >
-            <div className="flex gap-1.5 w-full">
-              {["1","2","3","4","5","6"].map(n => (
-                <button key={n} onClick={() => setSetting("queue_batch_size", n)}
-                  className={`flex-1 h-9 rounded-lg border text-sm font-semibold transition-all
-                    ${settings.queue_batch_size === n ? "bg-primary text-primary-foreground border-primary shadow-sm shadow-primary/20" : "bg-muted border-border hover:bg-accent"}`}>
-                  {n}
-                </button>
-              ))}
-            </div>
-          </CardItem>
-          <CardItem
-            title={
-              <span className="flex items-center gap-2">
-                <AlarmClock className="h-4 w-4 text-primary shrink-0" />
-                Auto-trigger
-              </span>
-            }
-            description="Run agent automatically on schedule"
-            actions={
-              <button onClick={() => setSetting("auto_trigger_enabled", settings.auto_trigger_enabled === "true" ? "false" : "true")}
-                className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${settings.auto_trigger_enabled === "true" ? "bg-primary" : "bg-muted-foreground/30"}`}>
-                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${settings.auto_trigger_enabled === "true" ? "left-6" : "left-1"}`} />
-              </button>
-            }
-          />
-          {settings.auto_trigger_enabled === "true" && (
-            <CardItem column title="Interval (minutes)">
-              {(() => {
-                const presets = ["15", "30", "60", "120", "240"];
-                const isCustom = !presets.includes(settings.auto_trigger_interval_minutes);
-                return (
-                  <div className="space-y-1.5 w-full">
-                    <select
-                      value={isCustom ? "custom" : settings.auto_trigger_interval_minutes}
-                      onChange={e => {
-                        const val = e.target.value;
-                        if (val === "custom") {
-                          setSetting("auto_trigger_interval_minutes", "5");
-                        } else {
-                          setSetting("auto_trigger_interval_minutes", val);
-                        }
-                      }}
-                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                      <option value="15">Every 15 minutes</option>
-                      <option value="30">Every 30 minutes</option>
-                      <option value="60">Every 1 hour</option>
-                      <option value="120">Every 2 hours</option>
-                      <option value="240">Every 4 hours</option>
-                      <option value="custom">Custom...</option>
-                    </select>
-                    {isCustom && (
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <Input
-                          type="number"
-                          min={1}
-                          value={settings.auto_trigger_interval_minutes}
-                          onChange={e => setSetting("auto_trigger_interval_minutes", e.target.value)}
-                          className="h-9 text-sm font-semibold w-24"
-                        />
-                        <span className="text-xs text-muted-foreground font-semibold">minutes</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </CardItem>
-          )}
-          <CardItem
-            title="Persist queue settings"
-            description={saveStatus === "saved" ? "Saved ✓" : "Applies to all workflows using this queue"}
-            actions={
-              <Button onClick={saveSettings} disabled={saveStatus === "saving" || !isDirty} className="font-semibold text-xs px-6">
-                {saveStatus === "saving" ? "Saving…" : isDirty ? "Save Changes" : "No Changes"}
-              </Button>
-            }
-          />
-      </JanCard>
-
-      {/* Queue Preview */}
-      <JanCard
-        className="p-0 overflow-hidden"
-        header={
-          <div className="p-4 border-b border-border/40 flex flex-wrap items-center gap-2">
-            <Activity className="h-4 w-4 text-primary shrink-0" />
-            <h3 className="font-medium text-sm text-foreground font-studio">Current Queue</h3>
-            <span className="ml-auto text-xs text-muted-foreground">Next {batchSize} pending articles</span>
-            <Button onClick={resetStuckArticles} size="sm" variant="outline" className="ml-1 sm:ml-2 h-8 text-xs">Reset Stuck</Button>
-            <Button onClick={fireAgent} size="sm" className="h-8 text-xs" disabled={queue.length === 0}>
-              <Play className="mr-1.5 h-3.5 w-3.5" />
-              Start Agent ({Math.min(queue.length, batchSize)})
-            </Button>
-          </div>
-        }
-      >
-        <div className="divide-y divide-border/40">
-          {queue.length === 0 && (
-            <div className="p-6 text-center text-muted-foreground text-sm">No pending articles. Run the feeder to populate the queue.</div>
-          )}
-          {queue.slice(0, batchSize).map((art, i) => (
-            <div key={art.id} className="p-4 flex items-start gap-3">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">{i + 1}</div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm truncate">{art.title}</p>
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{art.description}</p>
-                <p className="text-xs text-muted-foreground mt-1">{art.source_domain} · {new Date(art.created_at).toLocaleString()}</p>
-              </div>
-              <StatusBadge status={art.status} />
-            </div>
-          ))}
-        </div>
-      </JanCard>
-
-      {/* Recent Articles */}
-      <JanCard
-        className="p-0 overflow-hidden"
-        header={
-          <div className="p-4 border-b border-border/40 flex items-center gap-2">
-            <List className="h-4 w-4 text-muted-foreground" />
-            <h3 className="font-medium text-sm text-foreground font-studio">Recent Articles</h3>
-            <span className="ml-auto text-xs text-muted-foreground">Last 30</span>
-          </div>
-        }
-      >
-        <div className="divide-y divide-border/40 max-h-80 overflow-auto">
-          {allArticles.length === 0 && <div className="p-6 text-center text-muted-foreground text-sm">No articles yet.</div>}
-          {allArticles.map(art => (
-            <div key={art.id} className="p-3 flex items-center gap-3">
-              <StatusBadge status={art.status} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{art.title}</p>
-                <p className="text-xs text-muted-foreground">{art.source_domain} · {new Date(art.created_at).toLocaleString()}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </JanCard>
-    </div>
-  );
 
   const fetchGatewayModels = async () => {
     setLoadingModels(true);
@@ -1299,17 +971,30 @@ export default function AgentSettingsPage() {
   };
 
   const renderSection = () => {
+    if (section === "plugins") {
+      return <PluginsSection />;
+    }
+    if (typeof section === "string" && section.startsWith("plugins-")) {
+      return <PluginsSection pluginKey={section.slice("plugins-".length)} />;
+    }
     switch (section) {
-      case "appearance": return <AppearanceSection />;
-      case "env-keys":   return <EnvKeysSection />;
-      case "workflows": return <WorkflowsSection />;
+      case "user-preferences":
+      case "appearance": return <UserPreferencesSection />;
+      case "env-keys":   return (
+        <EnvKeysSection
+          hiddenGroupIds={postsPluginEnabled ? [] : ["wordpress", "social"]}
+        />
+      );
+      case "workflows": return <WorkflowsSection feederPluginEnabled={feederPluginEnabled} />;
       case "tools":     return <ToolsSection initialTab="tools" onRefresh={refreshSettingsAndTools} />;
       case "tools-composio": return <ToolsSection initialTab="composio" onRefresh={refreshSettingsAndTools} />;
       case "tools-manual": return <ToolsSection initialTab="manual" onRefresh={refreshSettingsAndTools} />;
       case "tools-zapier": return <ToolsSection initialTab="zapier" onRefresh={refreshSettingsAndTools} />;
       case "tools-smithery": return <ToolsSection initialTab="smithery" onRefresh={refreshSettingsAndTools} />;
-      case "omni-settings": return renderGatewayPanel("");
-      case "providers": return (
+      case "omni-settings": return <AIProvidersSection />;
+      case "providers":     return <AIProvidersSection />;
+      case "fallback-system":
+      case "gateway":       return (
         <ProviderOrderingSection
           globalSettings={settings}
           setGlobalSetting={setSetting}
@@ -1317,14 +1002,12 @@ export default function AgentSettingsPage() {
           saveStatus={saveStatus}
         />
       );
-      case "agents":    return <AgentsSection agentType="main" skills={skills} mcpConnections={mcpConnections} toolSettings={toolSettings} />;
-      case "subagents": return <AgentsSection agentType="subagent" skills={skills} mcpConnections={mcpConnections} toolSettings={toolSettings} />;
-      case "skills":    return <SkillsSection />;
+      case "agents":        return <AgentsSection agentType="main" skills={skills} mcpConnections={mcpConnections} toolSettings={toolSettings} />;
+      case "subagents":     return <AgentsSection agentType="subagent" skills={skills} mcpConnections={mcpConnections} toolSettings={toolSettings} />;
+      case "skills":        return <SkillsSection />;
       case "design-assets": return <DesignAssetsSection />;
-      case "queue":     return <QueueSection />;
-      case "configuration": return <ConfigurationSection />;
-      case "feeder": return <FeederDashboardSection />;
-      case "memories": return (
+      case "feeder":        return <FeederDashboardSection />;
+      case "memories":      return (
         <MemoriesSection
           globalSettings={settings}
           setGlobalSetting={setSetting}
@@ -1334,10 +1017,9 @@ export default function AgentSettingsPage() {
       );
       case "telegram-bots": return <TelegramBotsSection />;
       case "scheduled-tasks": return <ScheduledTasksSection />;
-      case "gateway": return renderGatewayPanel("");
-      case "additional-features": return <AdditionalFeaturesSection />;
+      case "additional-features":
       case "additional-features-voice": return <VoiceSection />;
-      default:          return null;
+      default:              return null;
     }
   };
 
@@ -1358,34 +1040,40 @@ export default function AgentSettingsPage() {
   );
 }
 
-function AdditionalFeaturesSection() {
+function DisabledPluginNotice({
+  pluginKey,
+  pluginLabel,
+}: {
+  pluginKey: string;
+  pluginLabel: string;
+}) {
+  const { setEnabled } = usePlugins();
+  const [saving, setSaving] = React.useState(false);
   return (
-    <div className="space-y-4">
-      <JanCard title="Additional Features"
-        header={
-          <p className="text-sm text-muted-foreground -mt-2 mb-4">
-            Access additional modules and custom content creation tools.
-          </p>
+    <JanCard title={`${pluginLabel} plugin is disabled`}>
+      <CardItem
+        align="start"
+        className="flex-col sm:flex-row items-start sm:items-center gap-3"
+        title={`${pluginLabel} settings are hidden`}
+        description={`Enable the ${pluginLabel} plugin to access its settings, pages, and agent tools.`}
+        actions={
+          <Button
+            size="sm"
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await setEnabled(pluginKey, true);
+              } finally {
+                setSaving(false);
+              }
+            }}
+            className="shrink-0 gap-1.5 text-xs font-semibold"
+          >
+            {saving ? "Enabling..." : `Enable ${pluginLabel}`}
+          </Button>
         }
-      >
-        <CardItem
-          className="flex-col sm:flex-row items-start sm:items-center gap-3"
-          title={
-            <span className="flex items-center gap-2">
-              <LayoutGrid className="h-4 w-4 text-primary" />
-              Posts Editor & Publisher
-            </span>
-          }
-          description="Manage generated articles, edit drafts, and publish them to WordPress or download them."
-          actions={
-            <Link href="/posts">
-              <Button className="shrink-0 gap-1.5 text-xs font-semibold">
-                Open Posts Editor
-              </Button>
-            </Link>
-          }
-        />
-      </JanCard>
-    </div>
+      />
+    </JanCard>
   );
 }

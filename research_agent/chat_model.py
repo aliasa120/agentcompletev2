@@ -1,5 +1,12 @@
 """ResilientChatModel — Enterprise rate-limit-aware LLM wrapper with dynamic configuration,
-reasoning token preservation, memory injection, and preflight multimodal normalization.
+reasoning token preservation, memory injection, and reactive multimodal fallback.
+
+Multimodal strategy (two tiers, no proactive capability routing):
+1. Encode attachments as base64 and send them inline with the message to the
+   selected model directly.
+2. If the provider rejects the payload (e.g. 400 "image not supported"), retry
+   the same request through the Omni transduction layer, which converts the
+   attachment into structured text notes.
 """
 
 import os
@@ -322,12 +329,23 @@ class ResilientChatModel(ChatOpenAI):
 
                 if not getattr(original_create, "_is_wrapped_reasoning", False):
                     def wrapped_create_sync(*args, **kwargs):
-                        if "openrouter.ai" in getattr(self, "openai_api_base", ""):
+                        base_url_str = getattr(self, "openai_api_base", "")
+                        if "openrouter.ai" in base_url_str:
                             extra_body = kwargs.get("extra_body") or {}
                             extra_body["include_reasoning"] = True
                             kwargs["extra_body"] = extra_body
 
-                        response = original_create(*args, **kwargs)
+                        try:
+                            response = original_create(*args, **kwargs)
+                        except Exception as req_err:
+                            print(f"[ResilientChatModel] [ERROR] Sync Request failed to {base_url_str}: {req_err}")
+                            if hasattr(req_err, "response"):
+                                try:
+                                    print(f"[ResilientChatModel] [ERROR] Status: {getattr(req_err.response, 'status_code', 'N/A')}, Body: {getattr(req_err.response, 'text', '')}")
+                                except Exception:
+                                    pass
+                            raise req_err
+
                         if kwargs.get("stream"):
                             def chunk_generator():
                                 for chunk in response:
@@ -353,12 +371,35 @@ class ResilientChatModel(ChatOpenAI):
 
                 if not getattr(original_create, "_is_wrapped_reasoning", False):
                     async def wrapped_create_async(*args, **kwargs):
-                        if "openrouter.ai" in getattr(self, "openai_api_base", ""):
+                        base_url_str = getattr(self, "openai_api_base", "")
+                        if "openrouter.ai" in base_url_str:
                             extra_body = kwargs.get("extra_body") or {}
                             extra_body["include_reasoning"] = True
                             kwargs["extra_body"] = extra_body
 
-                        response = await original_create(*args, **kwargs)
+                        try:
+                            response = await original_create(*args, **kwargs)
+                        except Exception as req_err:
+                            err_str = str(req_err).lower()
+                            # ── Reactive Fallback: Self-healing on 400 unsupported media type ──
+                            if "unsupported media type" in err_str or ("400" in err_str and any(w in err_str for w in ["media", "video", "audio", "image", "content"])):
+                                print(f"[ResilientChatModel] [REACTIVE HEAL] Provider rejected media payload: {req_err}. Transducing via Omni layer and retrying...")
+                                try:
+                                    healed_kwargs = await _aheal_unsupported_media(kwargs, getattr(self, "user_id", None))
+                                    response = await original_create(*args, **healed_kwargs)
+                                    print(f"[ResilientChatModel] [REACTIVE HEAL] ✅ Retry succeeded seamlessly!")
+                                except Exception as heal_err:
+                                    print(f"[ResilientChatModel] [REACTIVE HEAL] Retry failed: {heal_err}")
+                                    raise req_err
+                            else:
+                                print(f"[ResilientChatModel] [ERROR] Request failed to {base_url_str}: {req_err}")
+                                if hasattr(req_err, "response"):
+                                    try:
+                                        print(f"[ResilientChatModel] [ERROR] Status: {getattr(req_err.response, 'status_code', 'N/A')}, Body: {getattr(req_err.response, 'text', '')}")
+                                    except Exception:
+                                        pass
+                                raise req_err
+
                         if kwargs.get("stream"):
                             async def chunk_generator():
                                 async for chunk in response:
@@ -382,10 +423,7 @@ class ResilientChatModel(ChatOpenAI):
         """Read (base_url, api_key, model) from agent_configs row by self.agent_config_id."""
         try:
             from supabase import create_client, ClientOptions
-            from research_agent.tools.provider_engine import (
-                get_provider_base_url, get_provider_api_key, get_provider_config,
-                get_all_provider_names, get_settings
-            )
+            from research_agent.tools.provider_engine import resolve_provider_credentials, get_settings
 
             url = os.environ.get("SUPABASE_URL", "").rstrip("/")
             key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
@@ -405,33 +443,11 @@ class ResilientChatModel(ChatOpenAI):
             object.__setattr__(self, "user_id", user_id)
 
             db_settings = get_settings(user_id)
-            actual_provider = provider
-            if actual_provider not in get_all_provider_names():
-                actual_provider = "openrouter"
+            base_url, api_key, model_name = resolve_provider_credentials(
+                provider, model_name, settings=db_settings, user_id=user_id
+            )
 
-            base_url = get_provider_base_url(actual_provider)
-            cfg = get_provider_config(actual_provider)
-            if cfg and "base_url_env" in cfg and not base_url.endswith("/v1"):
-                base_url = base_url + "/v1"
-
-            if actual_provider == "openrouter":
-                api_key = db_settings.get("openrouter_client_api_key", "").strip()
-                if not api_key:
-                    api_key = get_provider_api_key("openrouter")
-            elif actual_provider == "gemini":
-                api_key = db_settings.get("gemini_client_api_key", "").strip()
-                if not api_key:
-                    api_key = get_provider_api_key("gemini")
-            else:
-                api_key = get_provider_api_key(actual_provider)
-
-            if not model_name:
-                model_name = "google/gemini-2.5-flash"
-
-            if actual_provider == "openrouter" and model_name.startswith("openrouter/"):
-                model_name = model_name[len("openrouter/"):]
-
-            print(f"[ResilientChatModel] [INFO] agent_configs reload: provider={actual_provider}, model={model_name}")
+            print(f"[ResilientChatModel] [INFO] agent_configs reload: provider={provider}, model={model_name}, base_url={base_url}")
             return base_url, api_key, model_name
 
         except Exception as e:
@@ -450,22 +466,40 @@ class ResilientChatModel(ChatOpenAI):
             return current_base_url, current_api_key, current_model
 
     def _filter_messages_by_capability(self, messages: list) -> list:
-        """Synchronously normalize multimodal blocks in messages via Omni preflight."""
+        """Synchronously normalize multimodal blocks in messages via Hybrid Proactive Capability Filter."""
         if getattr(self, "is_omni_call", False):
             return messages
 
         from research_agent.preflight import (
             get_model_capabilities, get_extraction_prompts,
-            run_omni_gemini_direct, run_omni_gateway, make_system_note
+            run_omni_gemini_direct, run_omni_gateway, make_system_note,
+            url_to_base64_data_uri, is_document_block, convert_document_to_markdown,
+            collect_attachment_url, append_attachment_links
         )
         from research_agent.tools.provider_engine import get_settings, active_user_id
 
         raw_model = getattr(self, "model_name", None) or getattr(self, "model", "unknown-model")
         model_name = str(raw_model).lower()
+        base_url = str(getattr(self, "openai_api_base", None) or getattr(self, "base_url", "")).lower()
 
-        provider = "openrouter"
-        if "/" in raw_model:
-            provider = raw_model.split("/")[0]
+        provider = getattr(self, "provider", None)
+        if not provider:
+            if "meta.ai" in base_url:
+                provider = "meta"
+            elif "together" in base_url:
+                provider = "together"
+            elif "openrouter" in base_url:
+                provider = "openrouter"
+            elif "generativelanguage.googleapis.com" in base_url:
+                provider = "gemini"
+            elif "groq.com" in base_url:
+                provider = "groq"
+            elif "cerebras" in base_url:
+                provider = "cerebras"
+            elif "/" in raw_model:
+                provider = raw_model.split("/")[0]
+            else:
+                provider = "openrouter"
 
         user_id = getattr(self, "user_id", None) or active_user_id.get()
         caps = get_model_capabilities(provider, raw_model, user_id=user_id)
@@ -475,88 +509,177 @@ class ResilientChatModel(ChatOpenAI):
         supports_pdf = caps.get("pdf", False)
 
         db_settings = get_settings(user_id)
-        omni_provider = db_settings.get("omni_provider", "openrouter").strip().lower()
-        omni_model = db_settings.get("omni_model", "google/gemini-2.5-flash").strip()
+        omni_provider = db_settings.get("omni_provider", "gemini").strip().lower()
+        omni_model = db_settings.get("omni_model", "gemini-2.5-flash").strip()
         prompts = get_extraction_prompts(user_id)
 
         cleaned_messages = []
         for msg in messages:
-            if not hasattr(msg, "content") or not isinstance(msg.content, list):
-                cleaned_messages.append(msg)
+            new_msg = msg
+            # Sanitize tool call names across all providers
+            if hasattr(new_msg, "tool_calls") and new_msg.tool_calls:
+                cleaned_tcs = []
+                for tc in new_msg.tool_calls:
+                    tc_d = dict(tc)
+                    if "name" in tc_d and ":" in tc_d["name"]:
+                        tc_d["name"] = tc_d["name"].split(":")[-1]
+                    cleaned_tcs.append(tc_d)
+                if hasattr(new_msg, "model_copy"):
+                    new_msg = new_msg.model_copy(update={"tool_calls": cleaned_tcs})
+                elif hasattr(new_msg, "copy"):
+                    new_msg = new_msg.copy(update={"tool_calls": cleaned_tcs})
+
+            if not hasattr(new_msg, "content") or not isinstance(new_msg.content, list):
+                cleaned_messages.append(new_msg)
                 continue
 
             new_content = []
-            for block in msg.content:
+            # Capture public storage URLs BEFORE normalization rewrites media
+            # blocks to inline base64 (capable models), so the agent can still
+            # pass the real URL to tools that require one (social savers, etc).
+            attachment_links: list = []
+            for block in new_msg.content:
+                collect_attachment_url(block, attachment_links)
+
+            for block in new_msg.content:
                 if not isinstance(block, dict):
                     new_content.append(block)
                     continue
 
-                block_type = block.get("type")
+                block_type = block.get("type", "")
+                block_mime = (block.get("mediaType") or block.get("mimeType") or "").lower()
+
                 if block_type == "text":
                     new_content.append(block)
-                elif block_type == "image_url":
-                    url = block.get("image_url", {}).get("url", "")
-                    url_lower = url.lower()
-                    is_pdf = url.startswith("data:application/pdf") or url_lower.endswith(".pdf") or "mimetype=application/pdf" in url_lower
-                    is_audio = url.startswith("data:audio/") or url_lower.endswith((".mp3", ".wav", ".ogg", ".m4a", ".aac")) or "audio" in url_lower
-                    is_video = url.startswith("data:video/") or url_lower.endswith((".mp4", ".webm", ".mov", ".avi")) or "video" in url_lower
-                    is_image = url.startswith("data:image/") or url_lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")) or (not url.startswith("data:") and not is_pdf and not is_audio and not is_video)
 
-                    if is_image:
-                        if supports_image:
-                            new_content.append(block)
-                        else:
-                            analysis = run_omni_gemini_direct(prompts["image"], block, user_id) if omni_provider == "gemini" else run_omni_gateway(prompts["image"], block, user_id)
-                            new_content.append(make_system_note(block, url, omni_model, analysis))
-                    elif is_pdf:
-                        if "claude" in model_name:
-                            base64_data = url.split(",")[1] if "," in url else url
-                            new_content.append({
-                                "type": "document",
-                                "source": {"type": "base64", "media_type": "application/pdf", "data": base64_data}
-                            })
-                        elif supports_pdf:
-                            new_content.append(block)
+                elif is_document_block(block):
+                    doc_md = convert_document_to_markdown(block, user_id)
+                    if doc_md:
+                        new_content.append({"type": "text", "text": doc_md})
+                    else:
+                        # Fallback for scanned PDF / unparsed documents
+                        url = block.get("data", "") or block.get("url", "") or block.get("image_url", {}).get("url", "") or block.get("image", "")
+                        url_lower = url.lower()
+                        is_pdf = url.startswith("data:application/pdf") or url_lower.endswith(".pdf") or "pdf" in block_mime or block.get("mimeType") == "application/pdf"
+                        if is_pdf:
+                            if "claude" in model_name:
+                                if url.startswith("http://") or url.startswith("https://"):
+                                    url = url_to_base64_data_uri(url)
+                                base64_data = url.split(",")[1] if "," in url else url
+                                new_content.append({
+                                    "type": "document",
+                                    "source": {"type": "base64", "media_type": "application/pdf", "data": base64_data}
+                                })
+                            elif supports_pdf:
+                                if url.startswith("http://") or url.startswith("https://"):
+                                    url = url_to_base64_data_uri(url)
+                                new_content.append({"type": "image_url", "image_url": {"url": url}})
+                            else:
+                                analysis = run_omni_gemini_direct(prompts["document"], block, user_id) if omni_provider == "gemini" else run_omni_gateway(prompts["document"], block, user_id)
+                                new_content.append(make_system_note(block, url, omni_model, analysis))
                         else:
                             analysis = run_omni_gemini_direct(prompts["document"], block, user_id) if omni_provider == "gemini" else run_omni_gateway(prompts["document"], block, user_id)
                             new_content.append(make_system_note(block, url, omni_model, analysis))
-                    elif is_audio:
+
+                elif block_type in ("image_url", "image"):
+                    url = block.get("image_url", {}).get("url", "") if block_type == "image_url" else block.get("image", "")
+                    url_lower = url.lower()
+                    is_audio = url.startswith("data:audio/") or url_lower.endswith((".mp3", ".wav", ".ogg", ".m4a", ".aac")) or "audio" in block_mime
+                    is_video = url.startswith("data:video/") or url_lower.endswith((".mp4", ".webm", ".mov", ".avi")) or "video" in block_mime
+
+                    if is_audio:
                         if supports_audio:
-                            new_content.append(block)
+                            if url.startswith("http://") or url.startswith("https://"):
+                                url = url_to_base64_data_uri(url)
+                            b64 = url.split(",")[1] if "," in url else url
+                            fmt = "mp3" if "mp3" in url_lower else "wav"
+                            new_content.append({"type": "input_audio", "input_audio": {"data": b64, "format": fmt}})
                         else:
                             analysis = run_omni_gemini_direct(prompts["audio"], block, user_id) if omni_provider == "gemini" else run_omni_gateway(prompts["audio"], block, user_id)
                             new_content.append(make_system_note(block, url, omni_model, analysis))
                     elif is_video:
                         if supports_video:
-                            new_content.append(block)
+                            if url.startswith("http://") or url.startswith("https://"):
+                                url = url_to_base64_data_uri(url)
+                            new_content.append({"type": "image_url", "image_url": {"url": url}})
                         else:
                             analysis = run_omni_gemini_direct(prompts["video"], block, user_id) if omni_provider == "gemini" else run_omni_gateway(prompts["video"], block, user_id)
                             new_content.append(make_system_note(block, url, omni_model, analysis))
                     else:
-                        new_content.append(block)
+                        # Image block
+                        if supports_image:
+                            if url.startswith("http://") or url.startswith("https://"):
+                                url = url_to_base64_data_uri(url)
+                            new_content.append({"type": "image_url", "image_url": {"url": url}})
+                        else:
+                            analysis = run_omni_gemini_direct(prompts["image"], block, user_id) if omni_provider == "gemini" else run_omni_gateway(prompts["image"], block, user_id)
+                            new_content.append(make_system_note(block, url, omni_model, analysis))
 
-                elif block_type == "audio":
+                elif block_type in ("audio", "input_audio"):
+                    url = block.get("audio", "") or block.get("input_audio", {}).get("data", "")
                     if supports_audio:
-                        new_content.append(block)
+                        if url.startswith("http://") or url.startswith("https://"):
+                            url = url_to_base64_data_uri(url)
+                        b64 = url.split(",")[1] if "," in url else url
+                        fmt = "mp3" if "mp3" in url.lower() else "wav"
+                        new_content.append({"type": "input_audio", "input_audio": {"data": b64, "format": fmt}})
                     else:
                         analysis = run_omni_gemini_direct(prompts["audio"], block, user_id) if omni_provider == "gemini" else run_omni_gateway(prompts["audio"], block, user_id)
-                        new_content.append(make_system_note(block, block.get("audio", ""), omni_model, analysis))
-                elif block_type == "video":
+                        new_content.append(make_system_note(block, url, omni_model, analysis))
+
+                elif block_type in ("video", "video_url"):
+                    url = block.get("video", "") or block.get("video_url", {}).get("url", "")
                     if supports_video:
-                        new_content.append(block)
+                        if url.startswith("http://") or url.startswith("https://"):
+                            url = url_to_base64_data_uri(url)
+                        new_content.append({"type": "image_url", "image_url": {"url": url}})
                     else:
                         analysis = run_omni_gemini_direct(prompts["video"], block, user_id) if omni_provider == "gemini" else run_omni_gateway(prompts["video"], block, user_id)
-                        new_content.append(make_system_note(block, block.get("video", ""), omni_model, analysis))
-                elif block_type == "file":
-                    url = block.get("data", "")
-                    if url.lower().endswith(".pdf") or block.get("mimeType") == "application/pdf":
-                        if supports_pdf:
-                            new_content.append(block)
+                        new_content.append(make_system_note(block, url, omni_model, analysis))
+
+                elif block_type in ("file", "document"):
+                    url = block.get("data", "") or block.get("url", "")
+                    url_lower = url.lower()
+                    is_audio = url.startswith("data:audio/") or url_lower.endswith((".mp3", ".wav", ".ogg", ".m4a", ".aac")) or "audio" in block_mime
+                    is_video = url.startswith("data:video/") or url_lower.endswith((".mp4", ".webm", ".mov", ".avi")) or "video" in block_mime
+                    is_image = "image" in block_mime or url_lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif"))
+
+                    if is_audio:
+                        if supports_audio:
+                            if url.startswith("http://") or url.startswith("https://"):
+                                url = url_to_base64_data_uri(url)
+                            b64 = url.split(",")[1] if "," in url else url
+                            fmt = "mp3" if "mp3" in url_lower else "wav"
+                            new_content.append({"type": "input_audio", "input_audio": {"data": b64, "format": fmt}})
                         else:
-                            analysis = run_omni_gemini_direct(prompts["document"], block, user_id) if omni_provider == "gemini" else run_omni_gateway(prompts["document"], block, user_id)
+                            analysis = run_omni_gemini_direct(prompts["audio"], block, user_id) if omni_provider == "gemini" else run_omni_gateway(prompts["audio"], block, user_id)
+                            new_content.append(make_system_note(block, url, omni_model, analysis))
+                    elif is_video:
+                        if supports_video:
+                            if url.startswith("http://") or url.startswith("https://"):
+                                url = url_to_base64_data_uri(url)
+                            new_content.append({"type": "image_url", "image_url": {"url": url}})
+                        else:
+                            analysis = run_omni_gemini_direct(prompts["video"], block, user_id) if omni_provider == "gemini" else run_omni_gateway(prompts["video"], block, user_id)
+                            new_content.append(make_system_note(block, url, omni_model, analysis))
+                    elif is_image:
+                        if supports_image:
+                            if url.startswith("http://") or url.startswith("https://"):
+                                url = url_to_base64_data_uri(url)
+                            new_content.append({"type": "image_url", "image_url": {"url": url}})
+                        else:
+                            analysis = run_omni_gemini_direct(prompts["image"], block, user_id) if omni_provider == "gemini" else run_omni_gateway(prompts["image"], block, user_id)
                             new_content.append(make_system_note(block, url, omni_model, analysis))
                     else:
                         new_content.append(block)
+                else:
+                    new_content.append(block)
+
+            # Re-attach the public storage URLs of every attachment so the agent
+            # can hand them to tools that require a public URL, regardless of
+            # whether the model consumed the media natively or via Omni.
+            append_attachment_links(new_content, attachment_links)
+
             has_media = any(isinstance(b, dict) and b.get("type") in ("image_url", "input_audio", "audio", "video", "document") for b in new_content)
             if not has_media and new_content:
                 text_chunks = []
@@ -571,57 +694,295 @@ class ResilientChatModel(ChatOpenAI):
             else:
                 final_content = new_content
 
-            if hasattr(msg, "model_copy"):
-                new_msg = msg.model_copy(update={"content": final_content})
-            elif hasattr(msg, "copy"):
-                new_msg = msg.copy(update={"content": final_content})
-            else:
-                new_msg = msg
+            if hasattr(new_msg, "model_copy"):
+                new_msg = new_msg.model_copy(update={"content": final_content})
+            elif hasattr(new_msg, "copy"):
+                new_msg = new_msg.copy(update={"content": final_content})
             cleaned_messages.append(new_msg)
         return cleaned_messages
 
     async def _filter_messages_by_capability_async(self, messages: list) -> list:
-        """Asynchronously normalize multimodal blocks in messages via Omni preflight."""
+        """Asynchronously normalize multimodal blocks in messages via Hybrid Proactive Capability Filter."""
         if getattr(self, "is_omni_call", False):
             return messages
 
         from research_agent.preflight import (
             get_model_capabilities, get_extraction_prompts,
-            run_omni_gemini_direct_async, run_omni_gateway_async, make_system_note
+            run_omni_gemini_direct_async, run_omni_gateway_async, make_system_note,
+            url_to_base64_data_uri, is_document_block, convert_document_to_markdown_async,
+            collect_attachment_url, append_attachment_links
         )
         from research_agent.tools.provider_engine import get_settings, active_user_id
 
         raw_model = getattr(self, "model_name", None) or getattr(self, "model", "unknown-model")
         model_name = str(raw_model).lower()
+        base_url = str(getattr(self, "openai_api_base", None) or getattr(self, "base_url", "")).lower()
 
-        provider = "openrouter"
-        if "/" in raw_model:
-            provider = raw_model.split("/")[0]
+        provider = getattr(self, "provider", None)
+        if not provider:
+            if "meta.ai" in base_url:
+                provider = "meta"
+            elif "together" in base_url:
+                provider = "together"
+            elif "openrouter" in base_url:
+                provider = "openrouter"
+            elif "generativelanguage.googleapis.com" in base_url:
+                provider = "gemini"
+            elif "groq.com" in base_url:
+                provider = "groq"
+            elif "cerebras" in base_url:
+                provider = "cerebras"
+            elif "/" in raw_model:
+                provider = raw_model.split("/")[0]
+            else:
+                provider = "openrouter"
 
         user_id = getattr(self, "user_id", None) or active_user_id.get()
-
-        def _resolve_caps_and_settings():
-            c = get_model_capabilities(provider, raw_model, user_id=user_id)
-            s = get_settings(user_id)
-            p = get_extraction_prompts(user_id)
-            return c, s, p
-
-        caps, db_settings, prompts = await asyncio.to_thread(_resolve_caps_and_settings)
+        caps = get_model_capabilities(provider, raw_model, user_id=user_id)
         supports_image = caps.get("vision", False)
         supports_audio = caps.get("audioInput", False)
         supports_video = caps.get("videoInput", False)
         supports_pdf = caps.get("pdf", False)
 
-        omni_provider = db_settings.get("omni_provider", "openrouter").strip().lower()
-        omni_model = db_settings.get("omni_model", "google/gemini-2.5-flash").strip()
+        db_settings = get_settings(user_id)
+        omni_provider = db_settings.get("omni_provider", "gemini").strip().lower()
+        omni_model = db_settings.get("omni_model", "gemini-2.5-flash").strip()
+        prompts = get_extraction_prompts(user_id)
 
         cleaned_messages = []
         for msg in messages:
-            if not hasattr(msg, "content") or not isinstance(msg.content, list):
-                cleaned_messages.append(msg)
+            new_msg = msg
+            # Sanitize tool call names across all providers
+            if hasattr(new_msg, "tool_calls") and new_msg.tool_calls:
+                cleaned_tcs = []
+                for tc in new_msg.tool_calls:
+                    tc_d = dict(tc)
+                    if "name" in tc_d and ":" in tc_d["name"]:
+                        tc_d["name"] = tc_d["name"].split(":")[-1]
+                    cleaned_tcs.append(tc_d)
+                if hasattr(new_msg, "model_copy"):
+                    new_msg = new_msg.model_copy(update={"tool_calls": cleaned_tcs})
+                elif hasattr(new_msg, "copy"):
+                    new_msg = new_msg.copy(update={"tool_calls": cleaned_tcs})
+
+            if not hasattr(new_msg, "content") or not isinstance(new_msg.content, list):
+                cleaned_messages.append(new_msg)
                 continue
 
             new_content = []
+            # Capture public storage URLs BEFORE normalization rewrites media
+            # blocks to inline base64 (capable models), so the agent can still
+            # pass the real URL to tools that require one (social savers, etc).
+            attachment_links: list = []
+            for block in new_msg.content:
+                collect_attachment_url(block, attachment_links)
+
+            for block in new_msg.content:
+                if not isinstance(block, dict):
+                    new_content.append(block)
+                    continue
+
+                block_type = block.get("type", "")
+                block_mime = (block.get("mediaType") or block.get("mimeType") or "").lower()
+
+                if block_type == "text":
+                    new_content.append(block)
+
+                elif is_document_block(block):
+                    doc_md = await convert_document_to_markdown_async(block, user_id)
+                    if doc_md:
+                        new_content.append({"type": "text", "text": doc_md})
+                    else:
+                        # Fallback for scanned PDF / unparsed documents
+                        url = block.get("data", "") or block.get("url", "") or block.get("image_url", {}).get("url", "") or block.get("image", "")
+                        url_lower = url.lower()
+                        is_pdf = url.startswith("data:application/pdf") or url_lower.endswith(".pdf") or "pdf" in block_mime or block.get("mimeType") == "application/pdf"
+                        if is_pdf:
+                            if "claude" in model_name:
+                                if url.startswith("http://") or url.startswith("https://"):
+                                    url = url_to_base64_data_uri(url)
+                                base64_data = url.split(",")[1] if "," in url else url
+                                new_content.append({
+                                    "type": "document",
+                                    "source": {"type": "base64", "media_type": "application/pdf", "data": base64_data}
+                                })
+                            elif supports_pdf:
+                                if url.startswith("http://") or url.startswith("https://"):
+                                    url = url_to_base64_data_uri(url)
+                                new_content.append({"type": "image_url", "image_url": {"url": url}})
+                            else:
+                                analysis = await run_omni_gemini_direct_async(prompts["document"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["document"], block, user_id)
+                                new_content.append(make_system_note(block, url, omni_model, analysis))
+                        else:
+                            analysis = await run_omni_gemini_direct_async(prompts["document"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["document"], block, user_id)
+                            new_content.append(make_system_note(block, url, omni_model, analysis))
+
+                elif block_type in ("image_url", "image"):
+                    url = block.get("image_url", {}).get("url", "") if block_type == "image_url" else block.get("image", "")
+                    url_lower = url.lower()
+                    is_audio = url.startswith("data:audio/") or url_lower.endswith((".mp3", ".wav", ".ogg", ".m4a", ".aac")) or "audio" in block_mime
+                    is_video = url.startswith("data:video/") or url_lower.endswith((".mp4", ".webm", ".mov", ".avi")) or "video" in block_mime
+
+                    if is_audio:
+                        if supports_audio:
+                            if url.startswith("http://") or url.startswith("https://"):
+                                url = url_to_base64_data_uri(url)
+                            b64 = url.split(",")[1] if "," in url else url
+                            fmt = "mp3" if "mp3" in url_lower else "wav"
+                            new_content.append({"type": "input_audio", "input_audio": {"data": b64, "format": fmt}})
+                        else:
+                            analysis = await run_omni_gemini_direct_async(prompts["audio"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["audio"], block, user_id)
+                            new_content.append(make_system_note(block, url, omni_model, analysis))
+                    elif is_video:
+                        if supports_video:
+                            if url.startswith("http://") or url.startswith("https://"):
+                                url = url_to_base64_data_uri(url)
+                            new_content.append({"type": "image_url", "image_url": {"url": url}})
+                        else:
+                            analysis = await run_omni_gemini_direct_async(prompts["video"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["video"], block, user_id)
+                            new_content.append(make_system_note(block, url, omni_model, analysis))
+                    else:
+                        # Image block
+                        if supports_image:
+                            if url.startswith("http://") or url.startswith("https://"):
+                                url = url_to_base64_data_uri(url)
+                            new_content.append({"type": "image_url", "image_url": {"url": url}})
+                        else:
+                            analysis = await run_omni_gemini_direct_async(prompts["image"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["image"], block, user_id)
+                            new_content.append(make_system_note(block, url, omni_model, analysis))
+
+                elif block_type in ("audio", "input_audio"):
+                    url = block.get("audio", "") or block.get("input_audio", {}).get("data", "")
+                    if supports_audio:
+                        if url.startswith("http://") or url.startswith("https://"):
+                            url = url_to_base64_data_uri(url)
+                        b64 = url.split(",")[1] if "," in url else url
+                        fmt = "mp3" if "mp3" in url.lower() else "wav"
+                        new_content.append({"type": "input_audio", "input_audio": {"data": b64, "format": fmt}})
+                    else:
+                        analysis = await run_omni_gemini_direct_async(prompts["audio"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["audio"], block, user_id)
+                        new_content.append(make_system_note(block, url, omni_model, analysis))
+
+                elif block_type in ("video", "video_url"):
+                    url = block.get("video", "") or block.get("video_url", {}).get("url", "")
+                    if supports_video:
+                        if url.startswith("http://") or url.startswith("https://"):
+                            url = url_to_base64_data_uri(url)
+                        new_content.append({"type": "image_url", "image_url": {"url": url}})
+                    else:
+                        analysis = await run_omni_gemini_direct_async(prompts["video"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["video"], block, user_id)
+                        new_content.append(make_system_note(block, url, omni_model, analysis))
+
+                elif block_type in ("file", "document"):
+                    url = block.get("data", "") or block.get("url", "")
+                    url_lower = url.lower()
+                    is_audio = url.startswith("data:audio/") or url_lower.endswith((".mp3", ".wav", ".ogg", ".m4a", ".aac")) or "audio" in block_mime
+                    is_video = url.startswith("data:video/") or url_lower.endswith((".mp4", ".webm", ".mov", ".avi")) or "video" in block_mime
+                    is_image = "image" in block_mime or url_lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif"))
+
+                    if is_audio:
+                        if supports_audio:
+                            if url.startswith("http://") or url.startswith("https://"):
+                                url = url_to_base64_data_uri(url)
+                            b64 = url.split(",")[1] if "," in url else url
+                            fmt = "mp3" if "mp3" in url_lower else "wav"
+                            new_content.append({"type": "input_audio", "input_audio": {"data": b64, "format": fmt}})
+                        else:
+                            analysis = await run_omni_gemini_direct_async(prompts["audio"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["audio"], block, user_id)
+                            new_content.append(make_system_note(block, url, omni_model, analysis))
+                    elif is_video:
+                        if supports_video:
+                            if url.startswith("http://") or url.startswith("https://"):
+                                url = url_to_base64_data_uri(url)
+                            new_content.append({"type": "image_url", "image_url": {"url": url}})
+                        else:
+                            analysis = await run_omni_gemini_direct_async(prompts["video"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["video"], block, user_id)
+                            new_content.append(make_system_note(block, url, omni_model, analysis))
+                    elif is_image:
+                        if supports_image:
+                            if url.startswith("http://") or url.startswith("https://"):
+                                url = url_to_base64_data_uri(url)
+                            new_content.append({"type": "image_url", "image_url": {"url": url}})
+                        else:
+                            analysis = await run_omni_gemini_direct_async(prompts["image"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["image"], block, user_id)
+                            new_content.append(make_system_note(block, url, omni_model, analysis))
+                    else:
+                        new_content.append(block)
+                else:
+                    new_content.append(block)
+
+            # Re-attach the public storage URLs of every attachment so the agent
+            # can hand them to tools that require a public URL, regardless of
+            # whether the model consumed the media natively or via Omni.
+            append_attachment_links(new_content, attachment_links)
+
+            has_media = any(isinstance(b, dict) and b.get("type") in ("image_url", "input_audio", "audio", "video", "document") for b in new_content)
+            if not has_media and new_content:
+                text_chunks = []
+                for b in new_content:
+                    if isinstance(b, str):
+                        text_chunks.append(b)
+                    elif isinstance(b, dict) and b.get("type") == "text":
+                        t_val = b.get("text", "")
+                        if t_val:
+                            text_chunks.append(t_val)
+                final_content = "\n\n".join(text_chunks) if text_chunks else ""
+            else:
+                final_content = new_content
+
+            if hasattr(new_msg, "model_copy"):
+                new_msg = new_msg.model_copy(update={"content": final_content})
+            elif hasattr(new_msg, "copy"):
+                new_msg = new_msg.copy(update={"content": final_content})
+            cleaned_messages.append(new_msg)
+        return cleaned_messages
+
+    async def _force_omni_transduction_async(self, messages: list) -> list:
+        """Force Omni transduction on all media blocks (reactive fallback after direct attempt fails)."""
+        from research_agent.preflight import (
+            get_extraction_prompts, run_omni_gemini_direct_async,
+            run_omni_gateway_async, make_system_note,
+            collect_attachment_url, append_attachment_links
+        )
+        from research_agent.tools.provider_engine import get_settings, active_user_id
+
+        user_id = getattr(self, "user_id", None) or active_user_id.get()
+        db_settings = get_settings(user_id)
+        prompts = get_extraction_prompts(user_id)
+        omni_provider = db_settings.get("omni_provider", "openrouter").strip().lower()
+        omni_model = db_settings.get("omni_model", "gemini-2.5-flash").strip()
+
+        def _prompt_key_for_url(url: str) -> str:
+            url_lower = url.lower()
+            if url.startswith("data:application/pdf") or url_lower.endswith(".pdf"):
+                return "document"
+            if url.startswith("data:audio/") or url_lower.endswith((".mp3", ".wav", ".ogg", ".m4a", ".aac")):
+                return "audio"
+            if url.startswith("data:video/") or url_lower.endswith((".mp4", ".webm", ".mov", ".avi")):
+                return "video"
+            return "image"
+
+        def _note_url(url: str) -> str:
+            if url.startswith(("http://", "https://")):
+                return url
+            if url.startswith("data:"):
+                mime = url.split(";")[0].replace("data:", "") if ";" in url else "unknown"
+                return f"<inline {mime} attachment>"
+            return url or "<attachment>"
+
+        transduced = []
+        for msg in messages:
+            if not hasattr(msg, "content") or not isinstance(msg.content, list):
+                transduced.append(msg)
+                continue
+
+            new_content = []
+            # Preserve public storage URLs so the agent can still pass them to
+            # tools that require a public URL after Omni transduction.
+            attachment_links: list = []
+            for block in msg.content:
+                collect_attachment_url(block, attachment_links)
+
             for block in msg.content:
                 if not isinstance(block, dict):
                     new_content.append(block)
@@ -632,80 +993,39 @@ class ResilientChatModel(ChatOpenAI):
                     new_content.append(block)
                 elif block_type == "image_url":
                     url = block.get("image_url", {}).get("url", "")
-                    url_lower = url.lower()
-                    is_pdf = url.startswith("data:application/pdf") or url_lower.endswith(".pdf") or "mimetype=application/pdf" in url_lower
-                    is_audio = url.startswith("data:audio/") or url_lower.endswith((".mp3", ".wav", ".ogg", ".m4a", ".aac")) or "audio" in url_lower
-                    is_video = url.startswith("data:video/") or url_lower.endswith((".mp4", ".webm", ".mov", ".avi")) or "video" in url_lower
-                    is_image = url.startswith("data:image/") or url_lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")) or (not url.startswith("data:") and not is_pdf and not is_audio and not is_video)
-
-                    if is_image:
-                        if supports_image:
-                            new_content.append(block)
-                        else:
-                            analysis = await run_omni_gemini_direct_async(prompts["image"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["image"], block, user_id)
-                            new_content.append(make_system_note(block, url, omni_model, analysis))
-                    elif is_pdf:
-                        if "claude" in model_name:
-                            base64_data = url.split(",")[1] if "," in url else url
-                            new_content.append({
-                                "type": "document",
-                                "source": {"type": "base64", "media_type": "application/pdf", "data": base64_data}
-                            })
-                        elif supports_pdf:
-                            new_content.append(block)
-                        else:
-                            analysis = await run_omni_gemini_direct_async(prompts["document"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["document"], block, user_id)
-                            new_content.append(make_system_note(block, url, omni_model, analysis))
-                    elif is_audio:
-                        if supports_audio:
-                            new_content.append(block)
-                        else:
-                            analysis = await run_omni_gemini_direct_async(prompts["audio"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["audio"], block, user_id)
-                            new_content.append(make_system_note(block, url, omni_model, analysis))
-                    elif is_video:
-                        if supports_video:
-                            new_content.append(block)
-                        else:
-                            analysis = await run_omni_gemini_direct_async(prompts["video"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["video"], block, user_id)
-                            new_content.append(make_system_note(block, url, omni_model, analysis))
-                    else:
-                        new_content.append(block)
-
-                elif block_type == "audio":
-                    if supports_audio:
-                        new_content.append(block)
-                    else:
-                        analysis = await run_omni_gemini_direct_async(prompts["audio"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["audio"], block, user_id)
-                        new_content.append(make_system_note(block, block.get("audio", ""), omni_model, analysis))
+                    prompt_key = _prompt_key_for_url(url)
+                    analysis = await run_omni_gemini_direct_async(prompts[prompt_key], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts[prompt_key], block, user_id)
+                    new_content.append(make_system_note(block, _note_url(url), omni_model, analysis))
+                elif block_type in ("audio", "input_audio"):
+                    url = block.get("audio", "") or block.get("input_audio", {}).get("data", "")
+                    analysis = await run_omni_gemini_direct_async(prompts["audio"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["audio"], block, user_id)
+                    new_content.append(make_system_note(block, _note_url(url), omni_model, analysis))
                 elif block_type == "video":
-                    if supports_video:
-                        new_content.append(block)
+                    url = block.get("video", "")
+                    analysis = await run_omni_gemini_direct_async(prompts["video"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["video"], block, user_id)
+                    new_content.append(make_system_note(block, _note_url(url), omni_model, analysis))
+                elif is_document_block(block):
+                    doc_md = await convert_document_to_markdown_async(block, user_id)
+                    if doc_md:
+                        new_content.append({"type": "text", "text": doc_md})
                     else:
-                        analysis = await run_omni_gemini_direct_async(prompts["video"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["video"], block, user_id)
-                        new_content.append(make_system_note(block, block.get("video", ""), omni_model, analysis))
-                elif block_type == "file":
-                    url = block.get("data", "")
-                    if url.lower().endswith(".pdf") or block.get("mimeType") == "application/pdf":
-                        if supports_pdf:
-                            new_content.append(block)
-                        else:
-                            analysis = await run_omni_gemini_direct_async(prompts["document"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["document"], block, user_id)
-                            new_content.append(make_system_note(block, url, omni_model, analysis))
-                    else:
-                        new_content.append(block)
-            has_media = any(isinstance(b, dict) and b.get("type") in ("image_url", "input_audio", "audio", "video", "document") for b in new_content)
-            if not has_media and new_content:
-                text_chunks = []
-                for b in new_content:
-                    if isinstance(b, str):
-                        text_chunks.append(b)
-                    elif isinstance(b, dict) and b.get("type") == "text":
-                        t_val = b.get("text", "")
-                        if t_val:
-                            text_chunks.append(t_val)
-                final_content = "\n\n".join(text_chunks) if text_chunks else ""
-            else:
-                final_content = new_content
+                        url = block.get("data", "") or block.get("url", "")
+                        analysis = await run_omni_gemini_direct_async(prompts["document"], block, user_id) if omni_provider == "gemini" else await run_omni_gateway_async(prompts["document"], block, user_id)
+                        new_content.append(make_system_note(block, _note_url(url), omni_model, analysis))
+                else:
+                    new_content.append(block)
+
+            append_attachment_links(new_content, attachment_links)
+
+            text_chunks = []
+            for b in new_content:
+                if isinstance(b, str):
+                    text_chunks.append(b)
+                elif isinstance(b, dict) and b.get("type") == "text":
+                    t_val = b.get("text", "")
+                    if t_val:
+                        text_chunks.append(t_val)
+            final_content = "\n\n".join(text_chunks) if text_chunks else ""
 
             if hasattr(msg, "model_copy"):
                 new_msg = msg.model_copy(update={"content": final_content})
@@ -713,8 +1033,14 @@ class ResilientChatModel(ChatOpenAI):
                 new_msg = msg.copy(update={"content": final_content})
             else:
                 new_msg = msg
-            cleaned_messages.append(new_msg)
-        return cleaned_messages
+            transduced.append(new_msg)
+        return transduced
+
+    def _force_omni_transduction_sync(self, messages: list) -> list:
+        """Sync fallback for forced Omni transduction."""
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            return executor.submit(asyncio.run, self._force_omni_transduction_async(messages)).result()
 
     def _filter_input(self, input_val):
         if isinstance(input_val, list):
@@ -723,11 +1049,11 @@ class ResilientChatModel(ChatOpenAI):
             return self._filter_messages_by_capability(input_val.to_messages())
         return input_val
 
-    async def _filter_input_async(self, input_val):
+    def _filter_input_async(self, input_val):
         if isinstance(input_val, list):
-            return await self._filter_messages_by_capability_async(input_val)
+            return self._filter_messages_by_capability_async(input_val)
         elif hasattr(input_val, "to_messages"):
-            return await self._filter_messages_by_capability_async(input_val.to_messages())
+            return self._filter_messages_by_capability_async(input_val.to_messages())
         return input_val
 
     def _is_fatal_error(self, e: Exception) -> bool:
@@ -737,6 +1063,48 @@ class ResilientChatModel(ChatOpenAI):
     def _is_rate_limit(self, e: Exception) -> bool:
         msg = str(e).lower()
         return "429" in msg or "rate limit" in msg or "too many requests" in msg or "rate_limit" in msg
+
+    def _is_thought_signature_error(self, e: Exception) -> bool:
+        msg = str(e).lower()
+        return any(k in msg for k in ["thought_signature", "thought signature", "thinking_signature", "missing a thought", "functioncall parts"])
+
+    def _is_multimodal_rejection(self, e: Exception) -> bool:
+        """Detect if provider rejected request due to unsupported image/audio/video/PDF payload."""
+        msg = str(e).lower()
+        if self._is_thought_signature_error(e):
+            return False
+        markers = [
+            "image_url", "multimodal", "unsupported content", "invalid content type",
+            "audio not supported", "file not supported", "unable to download image",
+            "data uri", "unrecognized content part", "does not support image",
+            "does not support vision", "only supported on vision", "expected a string",
+            "unsupported modality", "modality", "image is not supported",
+            "no endpoints found", "support image input", "content part",
+            "does not support audio", "does not support video", "does not support pdf",
+            "invalid image", "invalid audio", "invalid video", "invalid file"
+        ]
+        return any(m in msg for m in markers)
+
+    def _sanitize_tool_history_for_gemini(self, messages: list) -> list:
+        """Removes or converts raw tool_calls from previous turns that lack Gemini thought signatures."""
+        from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, FunctionMessage
+        sanitized = []
+        for msg in messages:
+            if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+                tool_descs = []
+                for tc in msg.tool_calls:
+                    t_name = tc.get("name", "tool").split(":")[-1]
+                    t_args = tc.get("args", {})
+                    tool_descs.append(f"[Executed Tool: {t_name} with parameters: {t_args}]")
+                summary = "\n".join(tool_descs)
+                c = msg.content if isinstance(msg.content, str) and msg.content else summary
+                sanitized.append(AIMessage(content=c, id=getattr(msg, "id", None)))
+            elif isinstance(msg, (ToolMessage, FunctionMessage)):
+                t_name = (getattr(msg, "name", None) or "tool").split(":")[-1]
+                sanitized.append(HumanMessage(content=f"[Tool Result for '{t_name}']:\n{msg.content}", id=getattr(msg, "id", None)))
+            else:
+                sanitized.append(msg)
+        return sanitized
 
     def _get_backoff_delay(self, attempt: int) -> float:
         base_delay = _LLM_BASE_DELAY * (2 ** (attempt - 1))
@@ -762,6 +1130,37 @@ class ResilientChatModel(ChatOpenAI):
                 if stream_started:
                     print(f"[LLM] [WARN] Stream failed AFTER first token on attempt {attempt}: {e}")
                     raise
+
+                # Gemini Thought Signature Remediation
+                if self._is_thought_signature_error(e):
+                    print(f"[ResilientChatModel] Gemini thought_signature mismatch detected ({e}). Sanitizing tool history context...")
+                    try:
+                        sanitized = self._sanitize_tool_history_for_gemini(args[0])
+                        args_list = list(args)
+                        args_list[0] = sanitized
+                        args = tuple(args_list)
+                        async for chunk in super().astream(*args, **kwargs):
+                            yield chunk
+                        return
+                    except Exception as san_err:
+                        print(f"[ResilientChatModel] Gemini thought_signature recovery failed: {san_err}")
+                        raise san_err
+
+                # Tier 2 Reactive Multimodal Fallback (direct inline failed → transduce via Omni)
+                if not getattr(self, "is_omni_call", False) and self._is_multimodal_rejection(e):
+                    print(f"[ResilientChatModel] Multimodal rejection caught from provider API ({e}). Falling back to Omni transduction...")
+                    try:
+                        fallback_messages = await self._force_omni_transduction_async(args[0])
+                        args_list = list(args)
+                        args_list[0] = fallback_messages
+                        args = tuple(args_list)
+                        async for chunk in super().astream(*args, **kwargs):
+                            yield chunk
+                        return
+                    except Exception as fallback_err:
+                        print(f"[ResilientChatModel] Omni Preflight fallback stream failed: {fallback_err}")
+                        raise fallback_err
+
                 if self._is_fatal_error(e):
                     raise
                 if attempt == _LLM_MAX_ATTEMPTS:
@@ -783,6 +1182,32 @@ class ResilientChatModel(ChatOpenAI):
             try:
                 return await super().ainvoke(*args, **kwargs)
             except Exception as e:
+                # Gemini Thought Signature Remediation
+                if self._is_thought_signature_error(e):
+                    print(f"[ResilientChatModel] Gemini thought_signature mismatch detected ({e}). Sanitizing tool history context...")
+                    try:
+                        sanitized = self._sanitize_tool_history_for_gemini(args[0])
+                        args_list = list(args)
+                        args_list[0] = sanitized
+                        args = tuple(args_list)
+                        return await super().ainvoke(*args, **kwargs)
+                    except Exception as san_err:
+                        print(f"[ResilientChatModel] Gemini thought_signature recovery failed: {san_err}")
+                        raise san_err
+
+                # Tier 2 Reactive Multimodal Fallback (direct inline failed → transduce via Omni)
+                if not getattr(self, "is_omni_call", False) and self._is_multimodal_rejection(e):
+                    print(f"[ResilientChatModel] Multimodal rejection caught from provider API ({e}). Falling back to Omni transduction...")
+                    try:
+                        fallback_messages = await self._force_omni_transduction_async(args[0])
+                        args_list = list(args)
+                        args_list[0] = fallback_messages
+                        args = tuple(args_list)
+                        return await super().ainvoke(*args, **kwargs)
+                    except Exception as fallback_err:
+                        print(f"[ResilientChatModel] Omni Preflight fallback ainvoke failed: {fallback_err}")
+                        raise fallback_err
+
                 if self._is_fatal_error(e):
                     raise
                 if attempt == _LLM_MAX_ATTEMPTS:
@@ -804,6 +1229,32 @@ class ResilientChatModel(ChatOpenAI):
             try:
                 return super().invoke(*args, **kwargs)
             except Exception as e:
+                # Gemini Thought Signature Remediation
+                if self._is_thought_signature_error(e):
+                    print(f"[ResilientChatModel] Gemini thought_signature mismatch detected ({e}). Sanitizing tool history context...")
+                    try:
+                        sanitized = self._sanitize_tool_history_for_gemini(args[0])
+                        args_list = list(args)
+                        args_list[0] = sanitized
+                        args = tuple(args_list)
+                        return super().invoke(*args, **kwargs)
+                    except Exception as san_err:
+                        print(f"[ResilientChatModel] Gemini thought_signature recovery failed: {san_err}")
+                        raise san_err
+
+                # Tier 2 Reactive Multimodal Fallback (direct inline failed → transduce via Omni)
+                if not getattr(self, "is_omni_call", False) and self._is_multimodal_rejection(e):
+                    print(f"[ResilientChatModel] Multimodal rejection caught from provider API ({e}). Falling back to Omni transduction...")
+                    try:
+                        fallback_messages = self._force_omni_transduction_sync(args[0])
+                        args_list = list(args)
+                        args_list[0] = fallback_messages
+                        args = tuple(args_list)
+                        return super().invoke(*args, **kwargs)
+                    except Exception as fallback_err:
+                        print(f"[ResilientChatModel] Omni Preflight fallback invoke failed: {fallback_err}")
+                        raise fallback_err
+
                 if self._is_fatal_error(e):
                     raise
                 if attempt == _LLM_MAX_ATTEMPTS:
@@ -812,3 +1263,4 @@ class ResilientChatModel(ChatOpenAI):
                     time.sleep(_LLM_RATE_LIMIT_DELAY)
                 else:
                     time.sleep(self._get_backoff_delay(attempt))
+

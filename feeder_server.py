@@ -7,6 +7,7 @@ Feeder HTTP server — HTTP-only, no internal scheduler.
 """
 import json
 import os
+import sys
 import subprocess
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
@@ -16,18 +17,38 @@ load_dotenv()
 
 
 # ---------------------------------------------------------------------------
+# Plugin gate: refuse to run the feeder pipeline when the feeder plugin is
+# disabled. Mirrors the semantics in research_agent/plugins.py.
+# ---------------------------------------------------------------------------
+def _feeder_plugin_enabled() -> bool:
+    try:
+        from research_agent.plugins import enabled_plugins_from_db
+        return "feeder" in enabled_plugins_from_db()
+    except Exception:
+        return True
+
+
+# ---------------------------------------------------------------------------
 # Internal helper: run the feeder pipeline as a subprocess
 # ---------------------------------------------------------------------------
-def _run_pipeline(workflow_id: str = None) -> dict:
+def _run_pipeline(workflow_id: str = None, user_id: str = None) -> dict:
+    if not _feeder_plugin_enabled():
+        return {
+            "success": False,
+            "error": "The Feeder plugin is disabled; enable it under Plugins.",
+        }
     try:
-        args = ["python", "-m", "feeder.pipeline"]
+        args = [sys.executable, "-m", "feeder.pipeline"]
         if workflow_id:
             args.extend(["--workflow-id", workflow_id])
-            
+        if user_id:
+            args.extend(["--user-id", user_id])
         result = subprocess.run(
             args,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=300,
             env={
                 **os.environ,
@@ -56,14 +77,16 @@ class FeederHandler(BaseHTTPRequestHandler):
             content_length = int(self.headers.get("Content-Length", 0))
             post_data = self.rfile.read(content_length) if content_length > 0 else b""
             workflow_id = None
+            user_id = None
             if post_data:
                 try:
                     payload = json.loads(post_data.decode("utf-8"))
                     workflow_id = payload.get("workflow_id")
+                    user_id = payload.get("user_id")
                 except Exception as e:
                     print(f"Error parsing POST payload in Feeder: {e}")
-            
-            response = _run_pipeline(workflow_id)
+
+            response = _run_pipeline(workflow_id, user_id)
             status = 200 if response["success"] else 500
             body = json.dumps(response).encode("utf-8")
             self.send_response(status)

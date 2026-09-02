@@ -156,7 +156,7 @@ def create_tables():
     tables_to_create = []
     for table in ["workflows", "agent_configs", "agent_tool_assignments",
                   "mcp_connections", "skills_library", "design_assets", "telegram_chat_bindings", "telegram_bots",
-                  "agent_scheduled_tasks"]:
+                  "agent_scheduled_tasks", "plugins", "user_plugin_settings"]:
         exists = _table_exists(table)
         status = "✅ exists" if exists else "❌ missing"
         print(f"  {table}: {status}")
@@ -229,6 +229,9 @@ CREATE TABLE IF NOT EXISTS workflows (
   feeder_enabled  BOOLEAN DEFAULT true,
   feeder_interval_minutes INTEGER DEFAULT 30,
   feeder_last_trigger_at TIMESTAMPTZ,
+  feeder_max_age_minutes INTEGER DEFAULT 60,
+  feeder_max_articles_per_run INTEGER DEFAULT 100,
+  feeder_cluster_threshold INTEGER DEFAULT 70,
   is_active       BOOLEAN DEFAULT true,
   created_at      TIMESTAMPTZ DEFAULT now(),
   updated_at      TIMESTAMPTZ DEFAULT now(),
@@ -355,6 +358,9 @@ CREATE TABLE IF NOT EXISTS agent_scheduled_tasks (
   origin              JSONB DEFAULT '{}',
   enabled_toolsets    JSONB DEFAULT '[]',
   workdir             TEXT,
+  timezone            TEXT,
+  mount_chat          TEXT,
+  context_summary     TEXT,
   last_run_at         TIMESTAMPTZ,
   last_run_logs       TEXT,
   last_status         TEXT,
@@ -363,6 +369,10 @@ CREATE TABLE IF NOT EXISTS agent_scheduled_tasks (
   created_at          TIMESTAMPTZ DEFAULT now(),
   updated_at          TIMESTAMPTZ DEFAULT now()
 );
+-- Enhancements: per-task timezone + chat context mounting (idempotent for existing installs)
+ALTER TABLE agent_scheduled_tasks ADD COLUMN IF NOT EXISTS timezone        TEXT;
+ALTER TABLE agent_scheduled_tasks ADD COLUMN IF NOT EXISTS mount_chat      TEXT;
+ALTER TABLE agent_scheduled_tasks ADD COLUMN IF NOT EXISTS context_summary TEXT;
 
 -- ── RLS: Enable RLS on all tables for workspace isolation ──
 ALTER TABLE workflows              ENABLE ROW LEVEL SECURITY;
@@ -434,7 +444,47 @@ CREATE INDEX IF NOT EXISTS idx_mcp_connections_status
 CREATE INDEX IF NOT EXISTS idx_agent_scheduled_tasks_next_run
   ON agent_scheduled_tasks(next_run_at) WHERE enabled = true;
 
+-- ── thread_files: Unified file registry for portable storage (R2 + Supabase) ──
+-- Tracks every file the system stores (user attachments + agent-generated files)
+-- so any deployment (web VPS, PC build) can resolve files via Supabase + R2 links.
+
+CREATE TABLE IF NOT EXISTS public.thread_files (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID NOT NULL,
+  thread_id       TEXT,
+  filename        TEXT NOT NULL,
+  storage_backend TEXT NOT NULL DEFAULT 'r2',       -- 'r2' | 'supabase'
+  storage_key     TEXT NOT NULL,                    -- R2 object key / Supabase storage path
+  public_url      TEXT,
+  size_bytes      BIGINT,
+  mime_type       TEXT,
+  category        TEXT NOT NULL DEFAULT 'general',  -- uploads | terminal | tts | images | kie-targets | heredoc
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at      TIMESTAMPTZ,                      -- NULL = keep forever
+  UNIQUE(storage_backend, storage_key)
+);
+
+ALTER TABLE public.thread_files ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS user_thread_files_policy ON public.thread_files;
+CREATE POLICY user_thread_files_policy ON public.thread_files
+  FOR ALL TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_thread_files_expires_at
+  ON public.thread_files(expires_at) WHERE expires_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_thread_files_thread
+  ON public.thread_files(thread_id);
+CREATE INDEX IF NOT EXISTS idx_thread_files_user
+  ON public.thread_files(user_id);
+
 -- ── manage_scheduled_tasks_admin RPC ─────────────────────────
+-- Drop any older overload first (CREATE OR REPLACE with a new arg list creates an overload, not a replacement)
+DROP FUNCTION IF EXISTS public.manage_scheduled_tasks_admin(
+  TEXT, UUID, UUID, TEXT, TEXT, JSONB, TEXT, TEXT, TEXT, TEXT, BOOLEAN,
+  JSONB, JSONB, TEXT, INTEGER, BOOLEAN, TEXT, TEXT, JSONB, TEXT, TIMESTAMPTZ, JSONB
+);
 CREATE OR REPLACE FUNCTION public.manage_scheduled_tasks_admin(
   p_action TEXT,
   p_user_id UUID,
@@ -457,6 +507,10 @@ CREATE OR REPLACE FUNCTION public.manage_scheduled_tasks_admin(
   p_enabled_toolsets JSONB DEFAULT NULL,
   p_workdir TEXT DEFAULT NULL,
   p_next_run_at TIMESTAMPTZ DEFAULT NULL,
+  p_timezone TEXT DEFAULT NULL,
+  p_mount_chat TEXT DEFAULT NULL,
+  p_context_summary TEXT DEFAULT NULL,
+  p_origin JSONB DEFAULT NULL,
   p_updates JSONB DEFAULT NULL
 )
 RETURNS JSON
@@ -471,11 +525,13 @@ BEGIN
     INSERT INTO public.agent_scheduled_tasks (
       user_id, name, prompt, skills, model, provider, base_url, script, no_agent,
       context_from, schedule, schedule_display, repeat_times, enabled, state,
-      deliver, enabled_toolsets, workdir, next_run_at
+      deliver, enabled_toolsets, workdir, next_run_at,
+      timezone, mount_chat, context_summary, origin
     ) VALUES (
       p_user_id, p_name, p_prompt, COALESCE(p_skills, '[]'::jsonb), p_model, p_provider, p_base_url, p_script, COALESCE(p_no_agent, false),
       COALESCE(p_context_from, '[]'::jsonb), p_schedule, p_schedule_display, p_repeat_times, COALESCE(p_enabled, true), COALESCE(p_state, 'scheduled'),
-      p_deliver, COALESCE(p_enabled_toolsets, '[]'::jsonb), p_workdir, p_next_run_at
+      p_deliver, COALESCE(p_enabled_toolsets, '[]'::jsonb), p_workdir, p_next_run_at,
+      p_timezone, p_mount_chat, p_context_summary, COALESCE(p_origin, '{}'::jsonb)
     )
     RETURNING * INTO v_row;
     
@@ -483,7 +539,7 @@ BEGIN
     
   ELSIF p_action = 'list' THEN
     SELECT json_agg(t) INTO v_result FROM (
-      SELECT id, name, schedule_display, enabled, state, next_run_at, last_run_at, last_status
+      SELECT id, name, schedule_display, enabled, state, next_run_at, last_run_at, last_status, timezone
       FROM public.agent_scheduled_tasks
       WHERE user_id IS NOT DISTINCT FROM p_user_id
       ORDER BY created_at DESC
@@ -536,6 +592,10 @@ BEGIN
       deliver = CASE WHEN p_updates ? 'deliver' THEN (p_updates->>'deliver') ELSE deliver END,
       enabled_toolsets = CASE WHEN p_updates ? 'enabled_toolsets' THEN (p_updates->'enabled_toolsets') ELSE enabled_toolsets END,
       workdir = CASE WHEN p_updates ? 'workdir' THEN (p_updates->>'workdir') ELSE workdir END,
+      timezone = CASE WHEN p_updates ? 'timezone' THEN (p_updates->>'timezone') ELSE timezone END,
+      mount_chat = CASE WHEN p_updates ? 'mount_chat' THEN (p_updates->>'mount_chat') ELSE mount_chat END,
+      context_summary = CASE WHEN p_updates ? 'context_summary' THEN (p_updates->>'context_summary') ELSE context_summary END,
+      origin = CASE WHEN p_updates ? 'origin' THEN (p_updates->'origin') ELSE origin END,
       next_run_at = CASE WHEN p_updates ? 'next_run_at' THEN (p_updates->>'next_run_at')::timestamptz ELSE next_run_at END,
       paused_at = CASE WHEN p_updates ? 'paused_at' THEN (p_updates->>'paused_at')::timestamptz ELSE paused_at END,
       updated_at = now()
@@ -552,6 +612,45 @@ BEGIN
   END IF;
 END;
 $$;
+
+-- ── plugins / user_plugin_settings ──────────────────────────
+CREATE TABLE IF NOT EXISTS public.plugins (
+  plugin_key      TEXT PRIMARY KEY,
+  label           TEXT NOT NULL,
+  description     TEXT,
+  icon            TEXT,
+  page_route      TEXT,
+  settings_route  TEXT,
+  sort_order      INTEGER NOT NULL DEFAULT 0,
+  default_enabled BOOLEAN NOT NULL DEFAULT true,
+  tool_keys       TEXT[] NOT NULL DEFAULT '{}',
+  created_at      TIMESTAMPTZ DEFAULT now(),
+  updated_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.user_plugin_settings (
+  user_id    UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  plugin_key TEXT NOT NULL REFERENCES public.plugins(plugin_key) ON DELETE CASCADE,
+  enabled    BOOLEAN NOT NULL DEFAULT true,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (user_id, plugin_key)
+);
+
+ALTER TABLE public.plugins ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_plugin_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS plugins_select_all ON public.plugins;
+CREATE POLICY plugins_select_all ON public.plugins FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS user_plugin_settings_user_policy ON public.user_plugin_settings;
+CREATE POLICY user_plugin_settings_user_policy ON public.user_plugin_settings
+  FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+INSERT INTO public.plugins (plugin_key, label, description, icon, page_route, settings_route, sort_order, default_enabled, tool_keys)
+VALUES
+  ('posts', 'Posts', 'Post editor, publisher and WordPress / social media integration', 'FileText', '/posts', '/posts/settings', 1, true, ARRAY['save_posts_to_supabase','get_wordpress_categories','publish_to_wordpress']),
+  ('feeder', 'Feeder', 'RSS ingestion and article deduplication pipeline', 'Rss', '/feeder', '/feeder/settings', 2, true, ARRAY[]::text[])
+ON CONFLICT (plugin_key) DO NOTHING;
 
 SELECT 'Migration complete ✅' AS status;
 """
@@ -693,7 +792,6 @@ def seed_tool_assignments():
             ("builtin", "unified_extract",        "URL Extractor"),
             ("builtin", "think_tool",             "Think Tool"),
             ("builtin", "fetch_images_brave",     "Brave Image Search"),
-            ("builtin", "view_candidate_images",  "View Candidate Images"),
             ("builtin", "analyze_images_gemini",  "Image Analyzer"),
             ("builtin", "create_post_image",      "Image Generator"),
             ("builtin", "save_posts_to_supabase", "Save to Database"),
@@ -707,6 +805,7 @@ def seed_tool_assignments():
             ("builtin", "cronjob",                "Cron Scheduler"),
             ("builtin", "text_to_speech",         "Text to Speech"),
             ("builtin", "terminal",               "Terminal (approval-gated)"),
+            ("builtin", "upload_to_storage",      "Upload to Storage"),
         ],
         "Research Subagent": [
             ("builtin", "unified_search",   "Web Search"),
@@ -717,7 +816,6 @@ def seed_tool_assignments():
         "Content Subagent": [
             ("builtin", "read_skill",            "Read Skill"),
             ("builtin", "fetch_images_brave",    "Brave Image Search"),
-            ("builtin", "view_candidate_images", "View Candidate Images"),
             ("builtin", "analyze_images_gemini", "Image Analyzer"),
             ("builtin", "create_post_image",     "Image Generator"),
             ("builtin", "get_design_guide",      "Design Guide"),
@@ -826,6 +924,49 @@ def seed_skills():
             print(f"  ❌ {sk['skill_key']}: {e}")
 
 
+def seed_plugins():
+    """Seed the plugin catalog (posts, feeder)."""
+    print("\n" + "=" * 60)
+    print("  STEP 6: Seed Plugin Catalog")
+    print("=" * 60)
+
+    plugins = [
+        {
+            "plugin_key": "posts",
+            "label": "Posts",
+            "description": "Post editor, publisher and WordPress / social media integration",
+            "icon": "FileText",
+            "page_route": "/posts",
+            "settings_route": "/posts/settings",
+            "sort_order": 1,
+            "default_enabled": True,
+            "tool_keys": ["save_posts_to_supabase", "get_wordpress_categories", "publish_to_wordpress"],
+        },
+        {
+            "plugin_key": "feeder",
+            "label": "Feeder",
+            "description": "RSS ingestion and article deduplication pipeline",
+            "icon": "Rss",
+            "page_route": "/feeder",
+            "settings_route": "/feeder/settings",
+            "sort_order": 2,
+            "default_enabled": True,
+            "tool_keys": [],
+        },
+    ]
+
+    for plugin in plugins:
+        try:
+            existing = supabase.table("plugins").select("plugin_key").eq("plugin_key", plugin["plugin_key"]).execute()
+            if existing.data:
+                print(f"  ⏭️  {plugin['plugin_key']}: already exists — skipping")
+            else:
+                supabase.table("plugins").insert(plugin).execute()
+                print(f"  ✅ {plugin['plugin_key']}: seeded")
+        except Exception as e:
+            print(f"  ❌ {plugin['plugin_key']}: {e}")
+
+
 def seed_design_assets():
     """Seed design asset metadata (ref images)."""
     print("\n" + "=" * 60)
@@ -887,6 +1028,7 @@ def main():
         seed_agent_configs()
         seed_tool_assignments()
         seed_skills()
+        seed_plugins()
         seed_design_assets()
         print_env_reminder()
         print("\n" + "=" * 60)

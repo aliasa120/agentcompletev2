@@ -3,9 +3,14 @@
 from .analyze_images_gemini import analyze_images_gemini
 from .fetch_images_brave import fetch_images_brave
 from .get_design_guide import get_design_guide
-from .save_to_supabase import save_posts_to_supabase
+from .save_wordpress_post import save_wordpress_post, save_posts_to_supabase
+from .social_saver_tools import (
+    save_instagram_post,
+    save_facebook_post,
+    save_youtube_video,
+    save_social_bundle,
+)
 from .think import think_tool
-from .view_candidate_images import view_candidate_images
 
 # Unified orchestrator tools (use these in agent.py — not the raw providers below)
 from .unified_search import unified_search
@@ -48,10 +53,11 @@ from .dynamic_router import list_tools, load_tools, unload_unused_tools, build_t
 # ── Voice & OS access ──────────────────────────────────────────────────────
 from .text_to_speech import text_to_speech
 from .terminal_tool import terminal
-from .ask_permission import ask_permission
+
+# ── Unified storage ────────────────────────────────────────────────────────
+from .upload_to_storage import upload_to_storage
 
 __all__ = [
-    "ask_permission",
     # ── Unified tools (exposed to agent) ─────────────────────────────────────
     "unified_search",
     "unified_extract",
@@ -78,9 +84,13 @@ __all__ = [
     # ── Support tools ─────────────────────────────────────────────────────────
     "think_tool",
     "fetch_images_brave",
-    "view_candidate_images",
     "analyze_images_gemini",
+    "save_wordpress_post",
     "save_posts_to_supabase",
+    "save_instagram_post",
+    "save_facebook_post",
+    "save_youtube_video",
+    "save_social_bundle",
     "get_design_guide",
     # ── Blog + WordPress tools ─────────────────────────────────────────────────
     "read_skill",
@@ -101,4 +111,6 @@ __all__ = [
     # ── Voice & OS access ──────────────────────────────────────────────────────
     "text_to_speech",
     "terminal",
+    # ── Unified storage ────────────────────────────────────────────────────────
+    "upload_to_storage",
 ]

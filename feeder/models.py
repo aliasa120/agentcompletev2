@@ -10,6 +10,10 @@ class FeederArticle(BaseModel):
     published_parsed: Optional[datetime] = None
     domain: str = ""
 
+    # Other headlines Google News grouped into the same editorial cluster
+    # (parsed out of the RSS summary HTML). Free same-story signal for dedup.
+    sibling_titles: list[str] = []
+
     # Tracking fields added as it moves through layers
     hash: str = ""
     fingerprint: str = ""

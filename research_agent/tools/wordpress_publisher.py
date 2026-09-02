@@ -22,6 +22,12 @@ from .provider_engine import get_settings
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _wp_site_url() -> str:
+    """Return the WP site URL from user settings or environment."""
+    from .provider_engine import get_user_api_key
+    return get_user_api_key("wp_site_url", "WP_SITE_URL").rstrip("/")
+
+
 def _wp_auth() -> tuple[str, str]:
     """Return (username, app_password) from user settings or environment."""
     from .provider_engine import get_user_api_key
@@ -33,8 +39,7 @@ def _wp_auth() -> tuple[str, str]:
 
 def _wp_base() -> str:
     """Return the WP REST API base URL from user settings or environment."""
-    from .provider_engine import get_user_api_key
-    site = get_user_api_key("wp_site_url", "WP_SITE_URL").rstrip("/")
+    site = _wp_site_url()
     return f"{site}/wp-json/wp/v2"
 
 
@@ -272,13 +277,13 @@ def get_wordpress_categories() -> str:
     Returns:
         Formatted list of WordPress categories with IDs, or an error message.
     """
-    site_url = os.environ.get("WP_SITE_URL", "").rstrip("/")
+    site_url = _wp_site_url()
     if not site_url:
-        return "⚠️ WP_SITE_URL not set in environment. Cannot fetch categories."
+        return "⚠️ WP_SITE_URL not set in Settings or environment. Cannot fetch categories."
 
     username, app_password = _wp_auth()
     if not username or not app_password:
-        return "⚠️ WP_USERNAME or WP_APP_PASSWORD not set. Cannot authenticate."
+        return "⚠️ WP_USERNAME or WP_APP_PASSWORD not set in Settings or environment. Cannot authenticate."
 
     try:
         resp = requests.get(
@@ -294,20 +299,19 @@ def get_wordpress_categories() -> str:
             return "⚠️ No categories found in WordPress."
 
         lines = [
-            "WordPress Categories (use the ID when calling publish_to_wordpress):\n",
+            "Live WordPress Categories from your site:\n",
             f"{'ID':<6} {'Name':<20} {'Slug':<20} {'Posts':<8}",
-            "─" * 56,
+            "-" * 56,
         ]
+        slug_list = []
         for cat in categories:
+            slug_list.append(cat['slug'])
             lines.append(
                 f"{cat['id']:<6} {cat['name']:<20} {cat['slug']:<20} {cat.get('count', 0):<8}"
             )
 
         lines.append(
-            "\n📌 Match the news topic to the most relevant category ID above."
-        )
-        lines.append(
-            "Available slugs: pakistan, sports, business, latest-news, uncategorized"
+            f"\nAvailable Categories on your site: {', '.join(slug_list)}"
         )
         return "\n".join(lines)
 
@@ -346,13 +350,13 @@ def publish_to_wordpress(
         JSON-like result string with post_id, post_url, edit_url, and status.
         Or an error message if publishing failed.
     """
-    site_url = os.environ.get("WP_SITE_URL", "").rstrip("/")
+    site_url = _wp_site_url()
     if not site_url:
-        return "⚠️ WP_SITE_URL not set in environment. Cannot publish."
+        return "⚠️ WP_SITE_URL not set in Settings or environment. Cannot publish."
 
     username, app_password = _wp_auth()
     if not username or not app_password:
-        return "⚠️ WP_USERNAME or WP_APP_PASSWORD not set. Cannot authenticate."
+        return "⚠️ WP_USERNAME or WP_APP_PASSWORD not set in Settings or environment. Cannot authenticate."
 
     if not blog_post_markdown or not blog_post_markdown.strip():
         return "⚠️ blog_post_markdown is empty. Nothing to publish."

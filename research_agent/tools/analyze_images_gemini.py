@@ -113,6 +113,7 @@ The editing_prompt MUST be a valid JSON object with these keys:
         "headline": "<<CRITICAL RULE>> The headline MUST be derived ONLY from the BLOG TITLE provided in the [BLOG TITLE] field above. DO NOT use the image content. DO NOT use a random fact from the blog body. Your ONLY job here is to transform the exact blog title into a SHORT (max 8-10 words), PUNCHY, CATCHY visual headline that preserves the core meaning of the title. Example: if title is 'Pakistan's Engineered Stability: Economic Gains and Political Risks in 2026', write something like 'Pakistan's Engineered Stability: Gains, Risks & 2026'. Stay faithful to the title.",
         "sub_headline": "<1-sentence supporting detail, max 12 words, taken directly from the blog post body — NOT from image content>"
     },
+    "aspect_ratio": "1:1",
     "watermarks_and_logos": {
         "logo": "THE ECHO wordmark with globe/soundwave icon — top header bar, centered, white",
         "footer": "theecho.news.tv — bottom of image, small white text",
@@ -401,14 +402,14 @@ def analyze_images_gemini(image_urls: list[str]) -> str:
         f"\n✅ CHOSEN IMAGE:",
         f"   URL: {chosen_url}",
         f"   Reason: {reason}",
-        "\n📝 EDITING PROMPT (pass this to create_post_image_gemini):",
+        "\n📝 EDITING PROMPT (pass this to create_post_image):",
         "─" * 60,
         editing_prompt,
         "─" * 60,
-        "\n✅ NEXT STEP: Call create_post_image_gemini with:",
+        "\n✅ NEXT STEP: Call create_post_image with:",
         f'   image_url="{chosen_url}"',
-        '   headline_text="<first ~8 words from your X post>"',
         '   editing_prompt="<the editing prompt above>"',
+        '   aspect_ratio="1:1"',
     ]
 
     return "\n".join(output_lines)

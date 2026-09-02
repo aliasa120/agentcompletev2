@@ -6,6 +6,7 @@ import {
   ListTodo, Play, Settings2, ShieldCheck, HelpCircle,
   Link as LinkIcon, Unlink, RefreshCw, RotateCcw, Sparkles
 } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -117,7 +118,7 @@ function DelayedNumberInput({ value, onChange, min, max, ...props }: DelayedNumb
   );
 }
 
-export function WorkflowsSection() {
+export function WorkflowsSection({ feederPluginEnabled = true }: { feederPluginEnabled?: boolean }) {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,8 +134,6 @@ export function WorkflowsSection() {
   // New Workflow Form
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
-  const [newInterval, setNewInterval] = useState(30);
-  const [newBatchSize, setNewBatchSize] = useState(2);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -160,14 +159,6 @@ export function WorkflowsSection() {
 
   const handleCreateWorkflow = async () => {
     if (!newName.trim()) return;
-    if (newInterval < 1) {
-      alert("Interval must be at least 1 minute.");
-      return;
-    }
-    if (newBatchSize < 1) {
-      alert("Batch size must be at least 1.");
-      return;
-    }
     setCreating(true);
     try {
       const res = await fetch("/api/workflows", {
@@ -176,9 +167,9 @@ export function WorkflowsSection() {
         body: JSON.stringify({
           name: newName,
           description: newDescription,
-          interval_minutes: newInterval,
-          batch_size: newBatchSize,
-          enabled: true,
+          interval_minutes: 60,
+          batch_size: 2,
+          enabled: false,
           is_active: true
         })
       });
@@ -186,8 +177,6 @@ export function WorkflowsSection() {
         const data = await res.json();
         setNewName("");
         setNewDescription("");
-        setNewInterval(30);
-        setNewBatchSize(2);
         setShowCreateForm(false);
         await fetchData();
         if (data.workflow?.id) {
@@ -298,6 +287,7 @@ export function WorkflowsSection() {
         onUpdate={handleUpdateWorkflow}
         onDelete={handleDeleteWorkflow}
         onAssignAgent={handleAssignAgent}
+        feederPluginEnabled={feederPluginEnabled}
       />
     );
   }
@@ -365,86 +355,35 @@ export function WorkflowsSection() {
 
       {showCreateForm && (
         <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-        <JanCard title="New Workflow Pipeline">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-            <CardItem column className="mt-0" title="Workflow Name">
-              <Input
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                placeholder="e.g. Finance Agent System"
-                className="h-9 text-xs bg-background w-full"
-              />
-            </CardItem>
-            <CardItem column className="mt-0" title="Description">
-              <Input
-                value={newDescription}
-                onChange={e => setNewDescription(e.target.value)}
-                placeholder="Brief description of this workflow's role"
-                className="h-9 text-xs bg-background w-full"
-              />
-            </CardItem>
-            <CardItem column title="Scrape/Trigger Interval" description="How often the agent pipeline runs">
-              {(() => {
-                const presets = [15, 30, 60, 120, 240];
-                const isCustom = !presets.includes(newInterval);
-                return (
-                  <div className="space-y-1.5">
-                    <select
-                      value={isCustom ? "custom" : newInterval}
-                      onChange={e => {
-                        const val = e.target.value;
-                        if (val === "custom") {
-                          setNewInterval(5);
-                        } else {
-                          setNewInterval(Number(val));
-                        }
-                      }}
-                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                      <option value={15}>Every 15 minutes</option>
-                      <option value={30}>Every 30 minutes</option>
-                      <option value={60}>Every 1 hour</option>
-                      <option value={120}>Every 2 hours</option>
-                      <option value={240}>Every 4 hours</option>
-                      <option value="custom">Custom...</option>
-                    </select>
-                    {isCustom && (
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <Input
-                          type="number"
-                          min={1}
-                          value={newInterval}
-                          onChange={e => setNewInterval(Number(e.target.value))}
-                          className="h-8 text-xs bg-background w-20"
-                        />
-                        <span className="text-xs text-muted-foreground font-semibold">minutes</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </CardItem>
-            <CardItem column title="Batch Size (Pending Articles)" description="How many queued articles run per trigger (1–10)">
-              <Input
-                type="number"
-                min={1}
-                max={10}
-                value={newBatchSize}
-                onChange={e => setNewBatchSize(Number(e.target.value))}
-                className="h-9 text-xs bg-background w-full"
-              />
-            </CardItem>
-          </div>
-          <div className="flex gap-2 mt-4">
-            <Button size="sm" onClick={handleCreateWorkflow} disabled={creating || !newName.trim()} className="gap-1.5 h-8 text-xs font-semibold">
-              {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-              Create
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowCreateForm(false)} className="h-8 text-xs">
-              Cancel
-            </Button>
-          </div>
-        </JanCard>
+          <JanCard title="New Workflow Pipeline">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+              <CardItem column className="mt-0" title="Workflow Name">
+                <Input
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  placeholder="e.g. Finance Agent System"
+                  className="h-9 text-xs bg-background w-full"
+                />
+              </CardItem>
+              <CardItem column className="mt-0" title="Description">
+                <Input
+                  value={newDescription}
+                  onChange={e => setNewDescription(e.target.value)}
+                  placeholder="Brief description of this workflow's role"
+                  className="h-9 text-xs bg-background w-full"
+                />
+              </CardItem>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <Button size="sm" onClick={handleCreateWorkflow} disabled={creating || !newName.trim()} className="gap-1.5 h-8 text-xs font-semibold">
+                {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                Create
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowCreateForm(false)} className="h-8 text-xs">
+                Cancel
+              </Button>
+            </div>
+          </JanCard>
         </div>
       )}
 
@@ -487,16 +426,12 @@ export function WorkflowsSection() {
                   
                   {/* Meta stats */}
                   <div className="flex items-center text-xs text-muted-foreground flex-wrap gap-1 mt-1.5 font-mono">
-                    <span>{wf.interval_minutes}m interval</span>
-                    <span className="mx-1 text-muted-foreground/30">•</span>
-                    <span>Batch: {wf.batch_size}</span>
-                    <span className="mx-1 text-muted-foreground/30">•</span>
-                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold ${
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-sans font-semibold ${
                       hasMain 
                         ? "bg-primary/5 text-primary border border-primary/25" 
                         : "bg-destructive/5 text-destructive border border-destructive/25"
                     }`}>
-                      {wfAgents.length} Agents {!hasMain && "⚠️"}
+                      {wfAgents.length} Agents Connected {!hasMain && "⚠️"}
                     </span>
                   </div>
                 </div>
@@ -550,6 +485,7 @@ interface WorkflowEditorProps {
   onUpdate: (id: string, updates: Partial<Workflow>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onAssignAgent: (agentId: string, workflowId: string, action: "link" | "unlink") => Promise<void>;
+  feederPluginEnabled?: boolean;
 }
 
 function WorkflowEditor({
@@ -559,38 +495,24 @@ function WorkflowEditor({
   onUpdate,
   onDelete,
   onAssignAgent,
+  feederPluginEnabled = true,
 }: WorkflowEditorProps) {
   const [name, setName] = useState(workflow.name);
   const [description, setDescription] = useState(workflow.description);
-  const [batchSize, setBatchSize] = useState(workflow.batch_size);
-  const [interval, setInterval] = useState(workflow.interval_minutes);
-  const [feederInterval, setFeederInterval] = useState(workflow.feeder_interval_minutes ?? 30);
   const [isActive, setIsActive] = useState(workflow.is_active);
-  const [enabled, setEnabled] = useState(workflow.enabled);
-  const [feederEnabled, setFeederEnabled] = useState(workflow.feeder_enabled);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  
+
   useEffect(() => {
     setName(workflow.name);
     setDescription(workflow.description);
-    setBatchSize(workflow.batch_size);
-    setInterval(workflow.interval_minutes);
-    setFeederInterval(workflow.feeder_interval_minutes ?? 30);
     setIsActive(workflow.is_active);
-    setEnabled(workflow.enabled);
-    setFeederEnabled(workflow.feeder_enabled);
   }, [workflow]);
 
-  const isDirty = 
+  const isDirty =
     name !== workflow.name ||
     description !== workflow.description ||
-    batchSize !== workflow.batch_size ||
-    interval !== workflow.interval_minutes ||
-    feederInterval !== (workflow.feeder_interval_minutes ?? 30) ||
-    isActive !== workflow.is_active ||
-    enabled !== workflow.enabled ||
-    feederEnabled !== workflow.feeder_enabled;
+    isActive !== workflow.is_active;
 
   const handleSave = async () => {
     setSaving(true);
@@ -598,12 +520,7 @@ function WorkflowEditor({
       await onUpdate(workflow.id, {
         name,
         description,
-        batch_size: batchSize,
-        interval_minutes: interval,
-        feeder_interval_minutes: feederInterval,
         is_active: isActive,
-        enabled,
-        feeder_enabled: feederEnabled,
       });
     } finally {
       setSaving(false);
@@ -613,12 +530,7 @@ function WorkflowEditor({
   const handleReset = () => {
     setName(workflow.name);
     setDescription(workflow.description);
-    setBatchSize(workflow.batch_size);
-    setInterval(workflow.interval_minutes);
-    setFeederInterval(workflow.feeder_interval_minutes ?? 30);
     setIsActive(workflow.is_active);
-    setEnabled(workflow.enabled);
-    setFeederEnabled(workflow.feeder_enabled);
   };
 
   const handleDelete = async () => {
@@ -697,231 +609,133 @@ function WorkflowEditor({
       </div>
 
       {/* Main settings grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="space-y-6">
         
-        {/* Left column - core settings */}
-        <div className="lg:col-span-2 space-y-6">
-          
-          {/* Card 1: Core Configuration */}
-          <JanCard title="Workflow Definition">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-              <CardItem column className="mt-0" title="Workflow Name">
-                <Input
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="Enter workflow name..."
-                  className="h-9 text-xs bg-background w-full"
-                />
-              </CardItem>
-              <CardItem column className="mt-0 md:border-border/40" title="Batch Size (Pending Articles)" description="Queued articles per run">
-                <Input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={batchSize}
-                  onChange={e => setBatchSize(Number(e.target.value))}
-                  className="h-9 text-xs bg-background w-full"
-                />
-              </CardItem>
-            </div>
-
-            <CardItem column title="Description">
+        {/* Card 1: Core Configuration */}
+        <JanCard title="Workflow Definition">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            <CardItem column className="mt-0" title="Workflow Name">
               <Input
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="Enter description..."
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Enter workflow name..."
                 className="h-9 text-xs bg-background w-full"
               />
             </CardItem>
-          </JanCard>
-
-          {/* Card 2: Associated Agents & Linkers */}
-          <JanCard
-            title="Connected Agents"
-            header={!hasMain ? (
-              <div className="-mt-2 mb-4">
-                <span className="text-[10px] text-destructive bg-destructive/5 border border-destructive/20 rounded-full px-2 py-0.5 font-semibold inline-flex items-center gap-1">
-                  ⚠️ No Main Agent Assigned (Pipeline will not run)
-                </span>
-              </div>
-            ) : undefined}
-          >
-            
-            {/* Linked agents */}
-            <div className="space-y-3">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                Linked to this workflow ({wfAgents.length})
-              </span>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {wfAgents.map(agent => (
-                  <div key={agent.id} className="flex items-center justify-between border rounded-lg p-2.5 bg-muted/10">
-                    <div>
-                      <span className="font-semibold block text-xs text-foreground leading-none">{agent.name}</span>
-                      <span className={`text-[9px] uppercase font-semibold mt-1.5 inline-block border px-1.5 py-0.5 rounded leading-none ${
-                        agent.agent_type === "main" 
-                          ? "bg-primary/10 text-primary border-primary/20" 
-                          : "bg-muted text-muted-foreground border-border"
-                      }`}>
-                        {agent.agent_type}
-                      </span>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onAssignAgent(agent.id, workflow.id, "unlink")}
-                      className="h-7 px-2 text-[10px] text-destructive hover:bg-destructive/10"
-                    >
-                      <Unlink className="h-3 w-3 mr-1" /> Unlink
-                    </Button>
-                  </div>
-                ))}
-                {wfAgents.length === 0 && (
-                  <p className="text-xs text-muted-foreground italic col-span-2 py-2">No agents linked to this workflow.</p>
-                )}
-              </div>
-            </div>
-
-            {/* Unlinked agents */}
-            <div className="space-y-3 border-t pt-4">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                Assign Available Agents ({availableAgents.length})
-              </span>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto">
-                {availableAgents.map(agent => (
-                  <div key={agent.id} className="flex items-center justify-between border rounded-lg p-2.5 bg-background">
-                    <div>
-                      <span className="font-semibold block text-xs text-foreground leading-none">{agent.name}</span>
-                      <span className="text-[9px] text-muted-foreground uppercase font-semibold mt-1.5 inline-block bg-muted/65 px-1.5 py-0.5 rounded leading-none">
-                        {agent.agent_type}
-                      </span>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onAssignAgent(agent.id, workflow.id, "link")}
-                      className="h-7 px-2.5 text-[10px] gap-1"
-                    >
-                      <LinkIcon className="h-3 w-3" /> Link
-                    </Button>
-                  </div>
-                ))}
-                {availableAgents.length === 0 && (
-                  <p className="text-xs text-muted-foreground italic col-span-2 py-2">All agents are linked to this workflow.</p>
-                )}
-              </div>
-            </div>
-          </JanCard>
-        </div>
-
-        {/* Right column - Schedulers */}
-        <div className="space-y-6">
-          
-          {/* Card 3: Scheduler Controls */}
-          <JanCard title="Status & Activation">
             <CardItem
-              title="Workflow Pipeline"
-              description="Main trigger control"
+              className="mt-0"
+              title="Workflow Pipeline Active"
+              description="Main active state for this workflow"
               actions={<Switch checked={isActive} onCheckedChange={setIsActive} />}
             />
-            <CardItem
-              title="Agent Scheduler"
-              description="Agent runner state"
-              actions={<Switch checked={enabled} onCheckedChange={setEnabled} />}
-            />
-            <CardItem
-              title="Feeder Scheduler"
-              description="Articles feeder runner"
-              actions={<Switch checked={feederEnabled} onCheckedChange={setFeederEnabled} />}
-            />
-          </JanCard>
+          </div>
 
-          {/* Card 4: Run Intervals */}
-          <JanCard title="Run Schedules">
-            <CardItem column className="mt-0" title="Agent Execution Interval" description="How often the agent pipeline triggers">
-              {(() => {
-                const presets = [15, 30, 60, 120, 240];
-                const isCustom = !presets.includes(interval);
-                return (
-                  <div className="space-y-1.5">
-                    <select
-                      value={isCustom ? "custom" : interval}
-                      onChange={e => {
-                        const val = e.target.value;
-                        if (val === "custom") {
-                          setInterval(5);
-                        } else {
-                          setInterval(Number(val));
-                        }
-                      }}
-                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                      <option value={15}>Every 15 minutes</option>
-                      <option value={30}>Every 30 minutes</option>
-                      <option value={60}>Every 1 hour</option>
-                      <option value={120}>Every 2 hours</option>
-                      <option value={240}>Every 4 hours</option>
-                      <option value="custom">Custom...</option>
-                    </select>
-                    {isCustom && (
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <Input
-                          type="number"
-                          min={1}
-                          value={interval}
-                          onChange={e => setInterval(Number(e.target.value))}
-                          className="h-8 text-xs bg-background w-20"
-                        />
-                        <span className="text-xs text-muted-foreground font-semibold">minutes</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </CardItem>
+          <CardItem column title="Description">
+            <Input
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Enter description..."
+              className="h-9 text-xs bg-background w-full"
+            />
+          </CardItem>
+        </JanCard>
 
-            <CardItem column title="Feeder Execution Interval" description="How often the feeder scrapes new articles">
-              {(() => {
-                const presets = [10, 15, 30, 60, 120, 240];
-                const isCustom = !presets.includes(feederInterval);
-                return (
-                  <div className="space-y-1.5">
-                    <select
-                      value={isCustom ? "custom" : feederInterval}
-                      onChange={e => {
-                        const val = e.target.value;
-                        if (val === "custom") {
-                          setFeederInterval(5);
-                        } else {
-                          setFeederInterval(Number(val));
-                        }
-                      }}
-                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                      <option value={10}>Every 10 minutes</option>
-                      <option value={15}>Every 15 minutes</option>
-                      <option value={30}>Every 30 minutes</option>
-                      <option value={60}>Every 1 hour</option>
-                      <option value={120}>Every 2 hours</option>
-                      <option value={240}>Every 4 hours</option>
-                      <option value="custom">Custom...</option>
-                    </select>
-                    {isCustom && (
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <Input
-                          type="number"
-                          min={1}
-                          value={feederInterval}
-                          onChange={e => setFeederInterval(Number(e.target.value))}
-                          className="h-8 text-xs bg-background w-20"
-                        />
-                        <span className="text-xs text-muted-foreground font-semibold">minutes</span>
-                      </div>
-                    )}
+        {/* Card 2: Associated Agents & Linkers */}
+        <JanCard
+          title="Connected Agents"
+          header={!hasMain ? (
+            <div className="-mt-2 mb-4">
+              <span className="text-[10px] text-destructive bg-destructive/5 border border-destructive/20 rounded-full px-2 py-0.5 font-semibold inline-flex items-center gap-1">
+                ⚠️ No Main Agent Assigned (Pipeline will not run)
+              </span>
+            </div>
+          ) : undefined}
+        >
+          {/* Linked agents */}
+          <div className="space-y-3">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              Linked to this workflow ({wfAgents.length})
+            </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {wfAgents.map(agent => (
+                <div key={agent.id} className="flex items-center justify-between border rounded-lg p-2.5 bg-muted/10">
+                  <div>
+                    <span className="font-semibold block text-xs text-foreground leading-none">{agent.name}</span>
+                    <span className={`text-[9px] uppercase font-semibold mt-1.5 inline-block border px-1.5 py-0.5 rounded leading-none ${
+                      agent.agent_type === "main" 
+                        ? "bg-primary/10 text-primary border-primary/20" 
+                        : "bg-muted text-muted-foreground border-border"
+                    }`}>
+                      {agent.agent_type}
+                    </span>
                   </div>
-                );
-              })()}
-            </CardItem>
-          </JanCard>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onAssignAgent(agent.id, workflow.id, "unlink")}
+                    className="h-7 px-2 text-[10px] text-destructive hover:bg-destructive/10"
+                  >
+                    <Unlink className="h-3 w-3 mr-1" /> Unlink
+                  </Button>
+                </div>
+              ))}
+              {wfAgents.length === 0 && (
+                <p className="text-xs text-muted-foreground italic col-span-2 py-2">No agents linked to this workflow.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Unlinked agents */}
+          <div className="space-y-3 border-t pt-4">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              Assign Available Agents ({availableAgents.length})
+            </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto">
+              {availableAgents.map(agent => (
+                <div key={agent.id} className="flex items-center justify-between border rounded-lg p-2.5 bg-background">
+                  <div>
+                    <span className="font-semibold block text-xs text-foreground leading-none">{agent.name}</span>
+                    <span className="text-[9px] text-muted-foreground uppercase font-semibold mt-1.5 inline-block bg-muted/65 px-1.5 py-0.5 rounded leading-none">
+                      {agent.agent_type}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onAssignAgent(agent.id, workflow.id, "link")}
+                    className="h-7 px-2.5 text-[10px] gap-1"
+                  >
+                    <LinkIcon className="h-3 w-3" /> Link
+                  </Button>
+                </div>
+              ))}
+              {availableAgents.length === 0 && (
+                <p className="text-xs text-muted-foreground italic col-span-2 py-2">All agents are linked to this workflow.</p>
+              )}
+            </div>
+          </div>
+        </JanCard>
+
+        {/* Plugin Shortcuts Card */}
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+          <div className="space-y-0.5">
+            <p className="text-xs font-semibold text-foreground">Plugin Automations & Schedules</p>
+            <p className="text-xs text-muted-foreground">
+              Configure Feeder RSS scraping schedules in <strong>Feeder Plugin</strong>, and Agent post generation schedules & batch size in <strong>Posts Plugin</strong>.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link href="/agent-settings?tab=plugins-feeder">
+              <Button variant="outline" size="sm" className="h-8 text-xs font-semibold">
+                Feeder Schedule →
+              </Button>
+            </Link>
+            <Link href="/agent-settings?tab=plugins-posts">
+              <Button variant="outline" size="sm" className="h-8 text-xs font-semibold">
+                Posts Schedule →
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
     </div>

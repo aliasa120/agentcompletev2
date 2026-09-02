@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/shared/dropdown-menu";
 import { JanCard, CardItem } from "@/components/settings/JanCard";
+import { usePlugins, disabledPluginToolKeys } from "@/lib/plugins";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -83,14 +84,17 @@ const BUILTIN_TOOLS = [
   { tool_key: "honcho_conclude",          tool_label: "Honcho Conclude",      category: "Memory" },
   { tool_key: "think_tool",             tool_label: "Think Tool",            category: "Reasoning" },
   { tool_key: "fetch_images_brave",      tool_label: "Brave Image Search",   category: "Images" },
-  { tool_key: "view_candidate_images",   tool_label: "View Candidate Images", category: "Images" },
   { tool_key: "create_post_image",       tool_label: "Image Generator",      category: "Images" },
   { tool_key: "read_skill",             tool_label: "Read Skill",            category: "Skills" },
   { tool_key: "list_skills",            tool_label: "List Skills",           category: "Skills" },
   { tool_key: "manage_skill",           tool_label: "Manage Skill",          category: "Skills" },
-  { tool_key: "save_posts_to_supabase", tool_label: "Save to Database",      category: "Output" },
-  { tool_key: "get_wordpress_categories", tool_label: "WP Categories",       category: "Output" },
-  { tool_key: "publish_to_wordpress",   tool_label: "Publish to WordPress",  category: "Output" },
+  { tool_key: "save_wordpress_post",    tool_label: "Save WordPress Article", category: "Plugin: Posts" },
+  { tool_key: "save_youtube_video",     tool_label: "Save YouTube Video",   category: "Plugin: Posts" },
+  { tool_key: "save_instagram_post",    tool_label: "Save Instagram Reel/Post", category: "Plugin: Posts" },
+  { tool_key: "save_facebook_post",     tool_label: "Save Facebook Post",   category: "Plugin: Posts" },
+  { tool_key: "save_social_bundle",     tool_label: "Save Social Bundle",   category: "Plugin: Posts" },
+  { tool_key: "get_wordpress_categories", tool_label: "WP Categories",       category: "Plugin: Posts" },
+  { tool_key: "publish_to_wordpress",   tool_label: "Publish to WordPress",  category: "Plugin: Posts" },
   { tool_key: "list_tools",             tool_label: "List Tools",            category: "Routing" },
   { tool_key: "load_tools",             tool_label: "Load Tools",            category: "Routing" },
   { tool_key: "call_tool",              tool_label: "Call Tool",             category: "Routing" },
@@ -98,10 +102,9 @@ const BUILTIN_TOOLS = [
   { tool_key: "omni_analyzer",         tool_label: "Omni Analyzer",        category: "Routing" },
   { tool_key: "text_to_speech",         tool_label: "Text to Speech (Voice)", category: "Voice" },
   { tool_key: "terminal",               tool_label: "Terminal", category: "Terminal" },
-  { tool_key: "ask_permission",         tool_label: "Ask Permission (HITL)", category: "Terminal" },
 ];
 
-const TOOL_CATEGORIES = ["Search", "Memory", "Reasoning", "Images", "Skills", "Output", "Routing", "Voice", "Terminal"];
+const TOOL_CATEGORIES = ["Search", "Memory", "Reasoning", "Images", "Skills", "Plugin: Posts", "Routing", "Voice", "Terminal"];
 
 interface ToolSetting {
   id: string;
@@ -284,6 +287,14 @@ function ToolAssignmentPanel({
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [newToolKeys, setNewToolKeys] = useState<string[]>([]);
 
+  // Tools owned by a disabled plugin are hidden from the picker and the
+  // displayed list.
+  const { plugins } = usePlugins();
+  const blockedPluginTools = React.useMemo(
+    () => disabledPluginToolKeys(plugins),
+    [plugins]
+  );
+
   // Expanded tool bindings settings states
   const [expandedToolKey, setExpandedToolKey] = useState<string | null>(null);
   const [schemasCache, setSchemasCache] = useState<Record<string, any>>({});
@@ -400,12 +411,15 @@ function ToolAssignmentPanel({
     as => !assigned.some(a => a.tool_key === as.tool_key)
   );
 
-  const displayedTools = [...assigned, ...filteredAutoSkills];
+  const displayedTools = [...assigned, ...filteredAutoSkills].filter(
+    t => !(t.tool_type === "builtin" && blockedPluginTools.has(t.tool_key))
+  );
 
   // Get available tools to add from selected source
   const getAvailableTools = () => {
     if (selectedSource === "builtin") {
       return BUILTIN_TOOLS
+        .filter(t => !blockedPluginTools.has(t.tool_key))
         .filter(t => !displayedTools.some(a => a.tool_key === t.tool_key))
         .map(t => ({ key: t.tool_key, label: t.tool_label, type: "builtin" }));
     }

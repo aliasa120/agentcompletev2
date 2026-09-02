@@ -1,17 +1,27 @@
 """Layer 2: Hash Verification — CHECK ONLY.
 Per plan spec:
-- Hash = SHA-256(title + description + url)
+- Hash = SHA-256(normalized title)
 - Check if hash exists in feeder_seen_hashes
 - If YES -> DROP (no write)
 - If NO  -> PASS (storage atomically at pipeline end)
+
+Normalization (feeder.feed_clean.normalize_for_hash) is deliberate:
+lowercased, punctuation stripped, whitespace collapsed, and the RSS source
+suffix (" - Dawn") already removed at fetch time. Two outlets publishing the
+same wire headline now produce the SAME hash — exact-title duplicates are
+caught cross-source instead of only catching re-deliveries of the same item.
+(GUID layer still guards exact re-delivery of one feed item.)
 """
 import hashlib
 from feeder.db import supabase_client
+from feeder.feed_clean import normalize_for_hash
 
 
-def compute_hash(title: str, description: str, url: str = "") -> str:
-    raw = f"{title.strip().lower()}{description.strip().lower()}{url.strip().lower()}"
-    return hashlib.sha256(raw.encode()).hexdigest()
+def compute_hash(title: str, description: str = "", url: str = "") -> str:
+    """Content hash. description/url kept in the signature for call-site
+    compatibility but intentionally NOT hashed: they differ per outlet/feed,
+    which is exactly what used to let identical headlines slip through."""
+    return hashlib.sha256(normalize_for_hash(title).encode()).hexdigest()
 
 
 def layer_2_hash(title: str, description: str, url: str = "", workflow_id: str = None) -> tuple[bool, str, str]:
@@ -30,7 +40,7 @@ def layer_2_hash(title: str, description: str, url: str = "", workflow_id: str =
             query = query.is_("workflow_id", "null")
         result = query.execute()
         if result.data:
-            return False, h, f"Hash already in DB (exact content duplicate)"
+            return False, h, f"Hash already in DB (same normalized headline seen before)"
         return True, h, ""
     except Exception as e:
         print(f"  [L2] Hash DB error: {e}")

@@ -1,19 +1,26 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { authorizeRequest } from "@/lib/api-auth";
 
 const SUPABASE_URL =
     process.env.SUPABASE_URL ||
     process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const SUPABASE_ANON_KEY =
+const SUPABASE_SERVICE_KEY =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_ANON_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
+function getSupabaseAdmin() {
+    return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
+}
+
 export async function DELETE(
-    _req: Request,
+    req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
     const { id } = await params;
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
         return NextResponse.json(
             { success: false, error: "Supabase credentials not configured." },
             { status: 503 }
@@ -27,23 +34,39 @@ export async function DELETE(
         );
     }
 
-    try {
-        const res = await fetch(
-            `${SUPABASE_URL}/rest/v1/social_posts?id=eq.${encodeURIComponent(id)}`,
-            {
-                method: "DELETE",
-                headers: {
-                    apikey: SUPABASE_ANON_KEY,
-                    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-                    "Content-Type": "application/json",
-                    Prefer: "return=minimal",
-                },
-            }
-        );
+    // Deleting another user's post must not be possible from an open endpoint.
+    const caller = await authorizeRequest(req);
+    if (!caller) {
+        return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
 
-        if (!res.ok) {
-            const err = await res.text();
-            console.error("Supabase delete error:", err);
+    try {
+        const supabase = getSupabaseAdmin();
+
+        const { data: existing, error: fetchErr } = await supabase
+            .from("social_posts")
+            .select("id, user_id")
+            .eq("id", id)
+            .maybeSingle();
+
+        if (fetchErr) {
+            console.error("Supabase lookup error before delete:", fetchErr);
+            return NextResponse.json(
+                { success: false, error: "Failed to look up post." },
+                { status: 502 }
+            );
+        }
+        if (!existing) {
+            return NextResponse.json({ success: false, error: "Post not found." }, { status: 404 });
+        }
+        // Legacy rows have no owner and stay deletable by any signed-in user.
+        if (caller.kind === "user" && existing.user_id && existing.user_id !== caller.userId) {
+            return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+        }
+
+        const { error: delErr } = await supabase.from("social_posts").delete().eq("id", id);
+        if (delErr) {
+            console.error("Supabase delete error:", delErr);
             return NextResponse.json(
                 { success: false, error: "Failed to delete post from database." },
                 { status: 502 }

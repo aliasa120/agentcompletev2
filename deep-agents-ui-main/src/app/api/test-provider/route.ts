@@ -8,7 +8,9 @@ type Provider =
   | "tavily"
   | "linkup"
   | "exa"
-  | "brave";
+  | "brave"
+  | "vercel"
+  | "grok_imagine";
 
 // In-memory rate limiting: provider -> last test timestamp
 const _lastTest: Record<string, number> = {};
@@ -129,6 +131,18 @@ async function testBrave(key: string): Promise<{ latency_ms: number }> {
   return { latency_ms: Date.now() - start };
 }
 
+async function testVercelGateway(key: string): Promise<{ latency_ms: number }> {
+  const start = Date.now();
+  const resp = await fetch("https://ai-gateway.vercel.sh/v1/models", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${key}` },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (resp.status === 401 || resp.status === 403) throw new Error("Invalid Vercel AI Gateway API key");
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return { latency_ms: Date.now() - start };
+}
+
 const PROVIDER_KEY_MAP: Record<Provider, string> = {
   openrouter: "openrouter_client_api_key",
   gemini: "gemini_client_api_key",
@@ -136,6 +150,8 @@ const PROVIDER_KEY_MAP: Record<Provider, string> = {
   linkup: "linkup_api_key",
   exa: "exa_api_key",
   brave: "brave_api_key",
+  vercel: "ai_gateway_api_key",
+  grok_imagine: "ai_gateway_api_key",
 };
 
 const PROVIDER_TEST_FUNCS: Record<Provider, (key: string) => Promise<{ latency_ms: number }>> = {
@@ -145,6 +161,8 @@ const PROVIDER_TEST_FUNCS: Record<Provider, (key: string) => Promise<{ latency_m
   linkup: testLinkup,
   exa: testExa,
   brave: testBrave,
+  vercel: testVercelGateway,
+  grok_imagine: testVercelGateway,
 };
 
 export async function POST(request: NextRequest) {
