@@ -46,6 +46,11 @@ const BUILTIN_SCHEMAS: Record<string, any> = {
           items: { type: "string" },
           description: "Optional list of reference image URLs (<20MB each) for brand/style consistency.",
         },
+        reference_asset_keys: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional brand asset keys or labels attached to the current agent.",
+        },
       },
       required: [],
     },
@@ -141,21 +146,22 @@ const BUILTIN_SCHEMAS: Record<string, any> = {
   },
   omni_analyzer: {
     name: "omni_analyzer",
-    description: "Analyze ANY file (PDF, PPT, DOCX, XLSX, audio, video, image) or URL.",
+    description: "Analyze selected files, URLs, or brand assets. Supported assets are attached directly to model context; unsupported assets are analyzed by Omni.",
     parameters: {
       type: "object",
       properties: {
-        file_source: {
-          type: "string",
-          description: "URL, workspace path, or identifier of the file.",
+        file_sources: {
+          type: "array",
+          items: { type: "string" },
+          description: "URLs, workspace paths, asset keys, or asset labels to inspect.",
         },
         query: {
           type: "string",
-          description: "Specific question or analysis request for the file.",
-          default: "Analyze and summarize this file in detail.",
+          description: "Specific question or analysis request applied to every selected file.",
+          default: "Analyze and summarize these files in detail.",
         },
       },
-      required: ["file_source"],
+      required: ["file_sources"],
     },
   },
   youtube_transcript: {
@@ -294,6 +300,36 @@ const BUILTIN_SCHEMAS: Record<string, any> = {
         link: { type: "string", description: "Link URL to attach.", default: "" },
       },
       required: ["message"],
+    },
+  },
+  save_linkedin_post: {
+    name: "save_linkedin_post",
+    description: "Save a LinkedIn post, video, photo, or article share to Posts console.",
+    parameters: {
+      type: "object",
+      properties: {
+        commentary: { type: "string", description: "Thought leadership post text, insights, and hashtags." },
+        media_url: { type: "string", description: "Cloudflare R2 or web URL for video or image.", default: "" },
+        media_type: { type: "string", enum: ["text", "photo", "video", "article"], default: "text" },
+        title: { type: "string", description: "Article or video title.", default: "" },
+        link: { type: "string", description: "External landing page or article URL.", default: "" },
+        visibility: { type: "string", enum: ["PUBLIC", "CONNECTIONS"], default: "PUBLIC" },
+      },
+      required: ["commentary"],
+    },
+  },
+  save_twitter_post: {
+    name: "save_twitter_post",
+    description: "Save an X (Twitter) post or thread with photos or videos to Posts console.",
+    parameters: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "Tweet content up to 280 characters with hashtags." },
+        media_url: { type: "string", description: "Cloudflare R2 or web URL for image or video.", default: "" },
+        media_type: { type: "string", enum: ["photo", "video", "none"], default: "none" },
+        reply_to_tweet_id: { type: "string", description: "Tweet ID to reply to (optional).", default: "" },
+      },
+      required: ["text"],
     },
   },
   save_social_bundle: {

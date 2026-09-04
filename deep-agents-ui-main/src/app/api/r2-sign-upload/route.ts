@@ -38,7 +38,7 @@ function getSupabaseClient(cookieStore: any) {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
             );
-          } catch {}
+          } catch { /* no-op */ }
         },
       },
     }
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { filename, contentType, size, threadId } = await req.json();
+    const { filename, contentType, size, threadId, category, folderId } = await req.json();
     if (!filename || typeof size !== "number") {
       return NextResponse.json({ error: "filename and size are required" }, { status: 400 });
     }
@@ -93,7 +93,10 @@ export async function POST(req: Request) {
     const today = new Date().toISOString().slice(0, 10);
     const safeThread = threadId ? sanitizeKeyPart(String(threadId)) : "general";
     const uuid8 = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
-    const key = `uploads/${today}/${safeThread}/${uuid8}_${sanitizeKeyPart(filename)}`;
+    const key =
+      category === "brand-assets" && folderId
+        ? `brand-assets/${user.id}/${sanitizeKeyPart(String(folderId))}/${crypto.randomUUID()}_${sanitizeKeyPart(filename)}`
+        : `uploads/${today}/${safeThread}/${uuid8}_${sanitizeKeyPart(filename)}`;
 
     const s3 = new S3Client({
       region: "auto",

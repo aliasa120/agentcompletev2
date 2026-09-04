@@ -731,6 +731,8 @@ const ALL_BUILTIN_TOOLS = [
   { key: "save_youtube_video", label: "Save YouTube Video", badge: "Built-in" },
   { key: "save_instagram_post", label: "Save Instagram Post/Reel", badge: "Built-in" },
   { key: "save_facebook_post", label: "Save Facebook Post", badge: "Built-in" },
+  { key: "save_linkedin_post", label: "Save LinkedIn Post", badge: "Built-in" },
+  { key: "save_twitter_post", label: "Save X (Twitter) Post", badge: "Built-in" },
   { key: "save_social_bundle", label: "Save Social Bundle", badge: "Built-in" },
   { key: "get_wordpress_categories", label: "WP Categories", badge: "Built-in" },
   { key: "publish_to_wordpress", label: "WordPress Publish", badge: "Built-in" },

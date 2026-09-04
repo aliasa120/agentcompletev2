@@ -77,6 +77,134 @@ class WrappedAsyncStream:
         return self.generator
 
 
+async def _aheal_unsupported_media(kwargs: dict, user_id: str = None) -> dict:
+    """Reactive healer for OpenAI chat completion kwargs when provider rejects media payload with 400."""
+    import copy
+    from research_agent.preflight import (
+        get_extraction_prompts, run_omni_gemini_direct_async,
+        run_omni_gateway_async, make_system_note,
+        collect_attachment_url, append_attachment_links
+    )
+    from research_agent.tools.provider_engine import get_settings, active_user_id
+
+    effective_user_id = user_id or active_user_id.get()
+    db_settings = get_settings(effective_user_id)
+    prompts = get_extraction_prompts(effective_user_id)
+    omni_provider = db_settings.get("omni_provider", "gemini").strip().lower()
+    omni_model = db_settings.get("omni_model", "gemini-3.1-flash-lite").strip()
+
+    def _prompt_key_for_url(url: str) -> str:
+        url_lower = url.lower()
+        if url.startswith("data:application/pdf") or url_lower.endswith(".pdf"):
+            return "document"
+        if url.startswith("data:audio/") or url_lower.endswith((".mp3", ".wav", ".ogg", ".m4a", ".aac")):
+            return "audio"
+        if url.startswith("data:video/") or url_lower.endswith((".mp4", ".webm", ".mov", ".avi")):
+            return "video"
+        return "image"
+
+    def _note_url(url: str) -> str:
+        if url.startswith(("http://", "https://")):
+            return url
+        if url.startswith("data:"):
+            mime = url.split(";")[0].replace("data:", "") if ";" in url else "unknown"
+            return f"<inline {mime} attachment>"
+        return url or "<attachment>"
+
+    new_kwargs = copy.copy(kwargs)
+    raw_messages = kwargs.get("messages", [])
+    healed_messages = []
+
+    for msg in raw_messages:
+        if isinstance(msg, dict):
+            content = msg.get("content")
+            if not isinstance(content, list):
+                healed_messages.append(msg)
+                continue
+
+            new_content = []
+            attachment_links = []
+            for block in content:
+                collect_attachment_url(block, attachment_links)
+
+            for block in content:
+                if not isinstance(block, dict):
+                    new_content.append(block)
+                    continue
+                block_type = block.get("type")
+                if block_type == "text":
+                    new_content.append(block)
+                elif block_type == "image_url":
+                    img_dict = block.get("image_url", {})
+                    url = img_dict.get("url", "") if isinstance(img_dict, dict) else str(img_dict)
+                    url = url or block.get("url", "")
+                    prompt_key = _prompt_key_for_url(url)
+                    try:
+                        analysis = (
+                            await run_omni_gemini_direct_async(prompts[prompt_key], block, effective_user_id)
+                            if omni_provider == "gemini"
+                            else await run_omni_gateway_async(prompts[prompt_key], block, effective_user_id)
+                        )
+                        note = make_system_note(block, _note_url(url), omni_model, analysis)
+                        new_content.append(note if isinstance(note, dict) else {"type": "text", "text": str(note)})
+                    except Exception as e:
+                        new_content.append({"type": "text", "text": f"[Omni Analysis Failed for {url}: {e}]"})
+                elif block_type in ("audio", "input_audio"):
+                    url = block.get("audio", "") or block.get("input_audio", {}).get("data", "")
+                    try:
+                        analysis = (
+                            await run_omni_gemini_direct_async(prompts["audio"], block, effective_user_id)
+                            if omni_provider == "gemini"
+                            else await run_omni_gateway_async(prompts["audio"], block, effective_user_id)
+                        )
+                        note = make_system_note(block, _note_url(url), omni_model, analysis)
+                        new_content.append(note if isinstance(note, dict) else {"type": "text", "text": str(note)})
+                    except Exception as e:
+                        new_content.append({"type": "text", "text": f"[Omni Analysis Failed for audio: {e}]"})
+                elif block_type == "video":
+                    url = block.get("video", "")
+                    try:
+                        analysis = (
+                            await run_omni_gemini_direct_async(prompts["video"], block, effective_user_id)
+                            if omni_provider == "gemini"
+                            else await run_omni_gateway_async(prompts["video"], block, effective_user_id)
+                        )
+                        note = make_system_note(block, _note_url(url), omni_model, analysis)
+                        new_content.append(note if isinstance(note, dict) else {"type": "text", "text": str(note)})
+                    except Exception as e:
+                        new_content.append({"type": "text", "text": f"[Omni Analysis Failed for video: {e}]"})
+                else:
+                    new_content.append(block)
+
+            append_attachment_links(new_content, attachment_links)
+
+            text_parts = []
+            for b in new_content:
+                if isinstance(b, str):
+                    text_parts.append(b)
+                elif isinstance(b, dict):
+                    if b.get("type") == "text":
+                        text_parts.append(b.get("text", ""))
+                    elif "text" in b:
+                        text_parts.append(str(b["text"]))
+
+            new_msg = copy.copy(msg)
+            new_msg["content"] = "\n\n".join(text_parts) if text_parts else ""
+            healed_messages.append(new_msg)
+        else:
+            healed_messages.append(msg)
+
+    new_kwargs["messages"] = healed_messages
+    return new_kwargs
+
+
+def _heal_unsupported_media_sync(kwargs: dict, user_id: str = None) -> dict:
+    """Sync fallback for reactive healing of media payloads."""
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        return executor.submit(asyncio.run, _aheal_unsupported_media(kwargs, user_id)).result()
+
+
 class ResilientChatModel(ChatOpenAI):
     """Wraps ChatOpenAI with rate-limit-aware retries tuned for enterprise LLM APIs."""
 
@@ -338,13 +466,25 @@ class ResilientChatModel(ChatOpenAI):
                         try:
                             response = original_create(*args, **kwargs)
                         except Exception as req_err:
-                            print(f"[ResilientChatModel] [ERROR] Sync Request failed to {base_url_str}: {req_err}")
-                            if hasattr(req_err, "response"):
+                            err_str = str(req_err).lower()
+                            # ── Reactive Fallback: Self-healing on 400 unsupported media type (Sync) ──
+                            if "unsupported media type" in err_str or ("400" in err_str and any(w in err_str for w in ["media", "video", "audio", "image", "content"])):
+                                print(f"[ResilientChatModel] [REACTIVE HEAL SYNC] Provider rejected media payload: {req_err}. Transducing via Omni layer and retrying...")
                                 try:
-                                    print(f"[ResilientChatModel] [ERROR] Status: {getattr(req_err.response, 'status_code', 'N/A')}, Body: {getattr(req_err.response, 'text', '')}")
-                                except Exception:
-                                    pass
-                            raise req_err
+                                    healed_kwargs = _heal_unsupported_media_sync(kwargs, getattr(self, "user_id", None))
+                                    response = original_create(*args, **healed_kwargs)
+                                    print(f"[ResilientChatModel] [REACTIVE HEAL SYNC] ✅ Retry succeeded seamlessly!")
+                                except Exception as heal_err:
+                                    print(f"[ResilientChatModel] [REACTIVE HEAL SYNC] Retry failed: {heal_err}")
+                                    raise req_err
+                            else:
+                                print(f"[ResilientChatModel] [ERROR] Sync Request failed to {base_url_str}: {req_err}")
+                                if hasattr(req_err, "response"):
+                                    try:
+                                        print(f"[ResilientChatModel] [ERROR] Status: {getattr(req_err.response, 'status_code', 'N/A')}, Body: {getattr(req_err.response, 'text', '')}")
+                                    except Exception:
+                                        pass
+                                raise req_err
 
                         if kwargs.get("stream"):
                             def chunk_generator():

@@ -21,7 +21,7 @@ from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 load_dotenv()
 
-from langchain_core.messages import SystemMessage, AIMessage, ToolCall, ToolMessage
+from langchain_core.messages import SystemMessage, AIMessage, HumanMessage, ToolCall, ToolMessage
 from langchain_core.tools import tool, StructuredTool
 from langchain_core.runnables import RunnableConfig
 from langchain.agents.middleware import AgentMiddleware
@@ -203,6 +203,165 @@ class CurrentDateTimeMiddleware(AgentMiddleware):
         return await handler(request)
 
 
+from research_agent.brand_assets import build_agent_catalog, parse_direct_context_payload
+class BrandAssetContextMiddleware(AgentMiddleware):
+    """Attach brand assets catalog and selected omni_analyzer assets to model requests."""
+
+    name = "BrandAssetContextMiddleware"
+
+    def __init__(self, agent_id: str = ""):
+        super().__init__()
+        self.agent_id = agent_id
+
+    def _inject_catalog(self, request):
+        if not self.agent_id:
+            return request
+        try:
+            catalog = build_agent_catalog(self.agent_id)
+            if catalog:
+                base = request.system_message.content if request.system_message else ""
+                if "=== ATTACHED BRAND ASSETS ===" not in base:
+                    catalog_block = (
+                        "\n\n=== ATTACHED BRAND ASSETS ===\n"
+                        f"{catalog}\n\n"
+                        "Usage Guide:\n"
+                        "- These brand assets are attached to your agent for inspection and image generation.\n"
+                        "- You have access to images, videos, audio, and documents in the attached folders.\n"
+                        "- To inspect or view specific assets, call `omni_analyzer(file_sources=[...], query=...)` with the asset keys or labels you need.\n"
+                        "- When creating or editing images, pass selected reference asset keys or URLs to `create_post_image`.\n"
+                    )
+                    request = request.override(system_message=SystemMessage(content=f"{base}{catalog_block}"))
+        except Exception as e:
+            print(f"[BrandAssetContextMiddleware] Catalog injection skipped: {e}")
+        return request
+
+    def _latest_direct_context(self, messages: list):
+        # Gather all direct context payloads produced in the most recent tool execution step
+        last_turn_idx = -1
+        for idx, msg in enumerate(messages):
+            if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+                last_turn_idx = idx
+            elif isinstance(msg, HumanMessage):
+                last_turn_idx = max(last_turn_idx, idx)
+
+        start_idx = last_turn_idx + 1 if last_turn_idx >= 0 else 0
+        candidate_messages = messages[start_idx:]
+
+        combined_query_parts = []
+        combined_assets = []
+        seen_keys = set()
+
+        for msg in candidate_messages:
+            if isinstance(msg, ToolMessage) and isinstance(msg.content, str):
+                payload = parse_direct_context_payload(msg.content)
+                if payload:
+                    q = payload.get("query", "").strip()
+                    if q and q not in combined_query_parts:
+                        combined_query_parts.append(q)
+                    for asset in payload.get("assets", []):
+                        key = asset.get("asset_key") or asset.get("url") or asset.get("label")
+                        if key and key not in seen_keys:
+                            seen_keys.add(key)
+                            combined_assets.append(asset)
+                        elif not key:
+                            combined_assets.append(asset)
+
+        if combined_assets:
+            return {
+                "query": " | ".join(combined_query_parts) if combined_query_parts else "Inspect the attached assets.",
+                "assets": combined_assets,
+            }
+        return None
+
+    def _build_message(self, payload: dict):
+        content = [{
+            "type": "text",
+            "text": (
+                "Asset inspection request:\n"
+                f"{payload.get('query', 'Inspect the attached assets.')}\n\n"
+                "The following selected assets are attached for direct inspection."
+            ),
+        }]
+        for asset in payload.get("assets", []):
+            media_type = asset.get("media_type", "image")
+            url = asset.get("url", "")
+            if not url:
+                continue
+
+            # Convert local file paths into data URIs for direct LLM ingestion
+            if not (url.startswith("http://") or url.startswith("https://") or url.startswith("data:")):
+                if os.path.exists(url) and media_type in ("image", "document"):
+                    try:
+                        mime = asset.get("mime_type") or (
+                            "application/pdf" if media_type == "document" else "image/png"
+                        )
+                        with open(url, "rb") as f:
+                            raw_bytes = f.read()
+                        if media_type == "image":
+                            try:
+                                from PIL import Image
+                                import io
+                                im = Image.open(io.BytesIO(raw_bytes))
+                                if im.mode not in ("RGB", "RGBA"):
+                                    im = im.convert("RGBA" if "A" in im.mode else "RGB")
+                                out_io = io.BytesIO()
+                                save_fmt = "JPEG" if im.mode == "RGB" else "PNG"
+                                im.save(out_io, format=save_fmt)
+                                raw_bytes = out_io.getvalue()
+                                mime = "image/jpeg" if save_fmt == "JPEG" else "image/png"
+                            except Exception:
+                                pass
+                        b64 = base64.b64encode(raw_bytes).decode("utf-8")
+                        url = f"data:{mime};base64,{b64}"
+                    except Exception as b64_err:
+                        print(f"[BrandAssetContextMiddleware] Base64 encode failed for {url}: {b64_err}")
+            elif url.startswith(("http://", "https://")) and media_type == "image":
+                url_clean = url.split("?")[0].lower()
+                # Normalize non-standard image formats (jfif, pjpeg, tiff, bmp, etc.) to data URI
+                if url_clean.endswith((".jfif", ".pjpeg", ".jpe", ".bmp", ".tiff", ".tif")):
+                    try:
+                        import httpx
+                        import io
+                        from PIL import Image
+                        resp = httpx.get(url, timeout=15.0, follow_redirects=True)
+                        if resp.status_code == 200:
+                            im = Image.open(io.BytesIO(resp.content))
+                            if im.mode not in ("RGB", "RGBA"):
+                                im = im.convert("RGBA" if "A" in im.mode else "RGB")
+                            out_io = io.BytesIO()
+                            save_fmt = "JPEG" if im.mode == "RGB" else "PNG"
+                            im.save(out_io, format=save_fmt)
+                            mime = "image/jpeg" if save_fmt == "JPEG" else "image/png"
+                            b64 = base64.b64encode(out_io.getvalue()).decode("utf-8")
+                            url = f"data:{mime};base64,{b64}"
+                    except Exception as norm_err:
+                        print(f"[BrandAssetContextMiddleware] Image normalization failed for {url}: {norm_err}")
+
+            if media_type == "image":
+                content.append({"type": "image_url", "image_url": {"url": url}})
+            elif media_type == "video":
+                content.append({"type": "video", "video": url})
+            elif media_type == "audio":
+                content.append({"type": "audio", "audio": url})
+            else:
+                content.append({"type": "file", "data": url, "mediaType": asset.get("mime_type", "application/pdf")})
+        return HumanMessage(content=content)
+
+    def wrap_model_call(self, request, handler):
+        request = self._inject_catalog(request)
+        payload = self._latest_direct_context(request.messages)
+        if payload:
+            request = request.override(messages=[*request.messages, self._build_message(payload)])
+        return handler(request)
+
+    async def awrap_model_call(self, request, handler):
+        request = self._inject_catalog(request)
+        payload = self._latest_direct_context(request.messages)
+        if payload:
+            request = request.override(messages=[*request.messages, self._build_message(payload)])
+        return await handler(request)
+
+
 from research_agent.chat_model import ResilientChatModel
 from research_agent.plugins import enabled_plugins_from_bootstrap, is_tool_allowed
 from research_agent.tools.mcp_loader import load_mcp_tools_for_agent
@@ -226,6 +385,8 @@ from research_agent.tools import (
     save_instagram_post,
     save_facebook_post,
     save_youtube_video,
+    save_linkedin_post,
+    save_twitter_post,
     save_social_bundle,
     get_design_guide,
     read_skill,
@@ -318,28 +479,34 @@ def _get_base64_image(file_path: str) -> tuple[str, str]:
 
 
 def _get_agent_system_prompt_with_images(client, agent_id: str, base_prompt: str) -> str:
-    assets = _load_agent_design_assets(client, agent_id)
-    if not assets:
+    catalog = build_agent_catalog(agent_id)
+    if not catalog:
         return base_prompt
-
-    ref_lines = []
-    for idx, asset in enumerate(assets, start=1):
-        ref_lines.append(
-            f"Reference Image {idx}:\n"
-            f"- Key: {asset.get('asset_key', f'ref{idx}')}\n"
-            f"- Label: {asset.get('label', '')}\n"
-            f"- File Path: {asset.get('file_path', '')}"
-        )
 
     return (
         f"{base_prompt}\n\n"
-        "=== ATTACHED BRAND/STYLE REFERENCE IMAGES ===\n"
-        "The following brand/style reference images are attached to your configuration:\n\n"
-        + "\n\n".join(ref_lines) + "\n\n"
+        "=== ATTACHED BRAND ASSETS ===\n"
+        f"{catalog}\n\n"
         "Usage Guide:\n"
-        "- When creating or editing images, pass these reference images or their keys to `create_post_image`.\n"
-        "- If you need to inspect or analyze the visual details/contents of any brand image or attachment, call `omni_analyzer`.\n"
+        "- These assets are available for inspection and image generation.\n"
+        "- To inspect specific assets, call `omni_analyzer(file_sources=[...], query=...)` with only the assets you need.\n"
+        "- Do not request every asset in a folder; select only what is relevant.\n"
+        "- When creating or editing images, pass selected reference asset keys or URLs to `create_post_image`.\n"
     )
+
+
+def _bind_agent_id_to_omni_analyzer(omni_tool, agent_id: str, user_id: str = ""):
+    @tool("omni_analyzer")
+    def omni_analyzer_bound(file_sources: List[str], query: str, config: Optional[RunnableConfig] = None) -> str:
+        """Analyze selected files or brand assets with capability-aware routing."""
+        if user_id and config is not None and not config.get("configurable", {}).get("user_id"):
+            config = {**config, "configurable": {**config.get("configurable", {}), "user_id": user_id, "agent_id": agent_id}}
+        elif user_id and config is None:
+            config = {"configurable": {"user_id": user_id, "agent_id": agent_id}}
+        elif config is not None and not config.get("configurable", {}).get("agent_id"):
+            config = {**config, "configurable": {**config.get("configurable", {}), "agent_id": agent_id}}
+        return omni_tool.func(file_sources=file_sources, query=query, agent_id=agent_id, config=config)
+    return omni_analyzer_bound
 
 
 def _bind_agent_id_to_list_skills(list_skills_tool, agent_id: str, user_id: str = ""):
@@ -492,6 +659,8 @@ def load_dynamic_agents_by_workflow() -> dict:
             "save_instagram_post": save_instagram_post,
             "save_facebook_post": save_facebook_post,
             "save_youtube_video": save_youtube_video,
+            "save_linkedin_post": save_linkedin_post,
+            "save_twitter_post": save_twitter_post,
             "save_social_bundle": save_social_bundle,
             "get_design_guide": get_design_guide,
             "read_skill": read_skill,
@@ -680,6 +849,8 @@ def load_dynamic_agents_by_workflow() -> dict:
                     main_user_id = main_cfg.get("user_id", "")
                     if t_key == "list_skills":
                         tool_func = _bind_agent_id_to_list_skills(list_skills, main_id, user_id=main_user_id)
+                    elif t_key == "omni_analyzer":
+                        tool_func = _bind_agent_id_to_omni_analyzer(omni_analyzer, main_id, user_id=main_user_id)
                     elif t_key == "read_skill":
                         tool_func = _bind_agent_id_to_read_skill(read_skill, main_id, user_id=main_user_id)
                     elif t_key == "manage_skill":
@@ -814,6 +985,8 @@ def load_dynamic_agents_by_workflow() -> dict:
                         sub_user_id = sub.get("user_id", "")
                         if t_key == "list_skills":
                             tool_func = _bind_agent_id_to_list_skills(list_skills, sub_id, user_id=sub_user_id)
+                        elif t_key == "omni_analyzer":
+                            tool_func = _bind_agent_id_to_omni_analyzer(omni_analyzer, sub_id, user_id=sub_user_id)
                         elif t_key == "read_skill":
                             tool_func = _bind_agent_id_to_read_skill(read_skill, sub_id, user_id=sub_user_id)
                         elif t_key == "manage_skill":
@@ -857,7 +1030,7 @@ def load_dynamic_agents_by_workflow() -> dict:
                         sub_interrupt_on[t.name] = True
                     sub_tools.append(wrapped_t)
 
-                sub_mw = [CurrentDateTimeMiddleware()]
+                sub_mw = [CurrentDateTimeMiddleware(), BrandAssetContextMiddleware(agent_id=sub_id)]
                 if sub_interrupt_on:
                     sub_mw.append(SafeHumanInTheLoopMiddleware(interrupt_on=sub_interrupt_on))
                 subagents.append({
@@ -873,7 +1046,7 @@ def load_dynamic_agents_by_workflow() -> dict:
                 sa["tools"] = [t for t in sa["tools"] if getattr(t, "name", "") not in ("analyze_images_gemini", "get_design_guide")]
             main_tools = [t for t in main_tools if getattr(t, "name", "") not in ("analyze_images_gemini", "get_design_guide")]
 
-            main_mw = [CurrentDateTimeMiddleware()]
+            main_mw = [CurrentDateTimeMiddleware(), BrandAssetContextMiddleware(agent_id=main_id)]
             if main_interrupt_on:
                 main_mw.append(SafeHumanInTheLoopMiddleware(interrupt_on=main_interrupt_on))
             compiled_agent = create_deep_agent(

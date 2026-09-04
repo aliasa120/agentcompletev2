@@ -33,6 +33,7 @@ from PIL import Image
 
 from .provider_engine import execute_with_fallback, get_settings
 from research_agent.fs_backend import get_thread_output_dir
+from research_agent.brand_assets import _supabase_client, get_agent_brand_assets, _asset_media_type
 
 logger = logging.getLogger("unified_image")
 
@@ -170,15 +171,18 @@ def _upload_output_image_to_supabase(pil_img: Image.Image, filename: str, thread
     return None
 
 
-def _get_workflow_reference_images(workflow_id: str) -> list[str]:
-    """Retrieve reference image public URLs for the active workflow's Main Agent."""
-    from supabase import create_client
-    url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    key = os.environ.get("SUPABASE_ANON_KEY", "")
-    if not url or not key:
-        return []
+def _get_workflow_reference_images(workflow_id: str, reference_asset_keys: list[str] = None) -> list[str]:
+    """Retrieve reference image public URLs for the active workflow's Main Agent.
 
-    client = create_client(url, key)
+    Supports:
+    - Attached brand asset folders and directly attached assets
+    - Direct usage of stored public_url (e.g. Cloudflare R2 / Supabase Storage)
+    - Optional filtering by reference_asset_keys
+    - Up to 3 reference images
+    """
+    client = _supabase_client()
+    if not client or not workflow_id:
+        return []
 
     try:
         main_agent_resp = client.table("agent_configs").select("id").eq("workflow_id", workflow_id).eq("agent_type", "main").execute()
@@ -186,25 +190,50 @@ def _get_workflow_reference_images(workflow_id: str) -> list[str]:
             return []
 
         main_agent_id = main_agent_resp.data[0]["id"]
-        resp = client.table("agent_design_assets").select("design_assets(*)").eq("agent_id", main_agent_id).execute()
-        assets = []
-        for row in (resp.data or []):
-            if row.get("design_assets"):
-                assets.append(row["design_assets"])
+        assets = get_agent_brand_assets(main_agent_id)
+        if not assets:
+            return []
 
-        public_urls = []
+        image_assets = [a for a in assets if _asset_media_type(a) == "image"]
+        if not image_assets:
+            return []
+
+        selected_assets = []
+        if reference_asset_keys:
+            key_set = {k.strip().lower() for k in reference_asset_keys if k and k.strip()}
+            for asset in image_assets:
+                asset_key = (asset.get("asset_key") or "").lower()
+                label = (asset.get("label") or "").lower()
+                file_name = Path(asset.get("file_path") or "").name.lower()
+                pub_url_name = Path(asset.get("public_url") or "").name.lower()
+                if (asset_key in key_set or label in key_set or file_name in key_set or pub_url_name in key_set):
+                    selected_assets.append(asset)
+
+        if not selected_assets:
+            selected_assets = image_assets[:3]
+
+        public_urls: list[str] = []
         repo_root = Path(__file__).resolve().parents[2]
-        for asset in assets:
+
+        for asset in selected_assets[:3]:
+            pub_url = (asset.get("public_url") or "").strip()
+            if pub_url and pub_url.startswith("http"):
+                public_urls.append(pub_url)
+                continue
+
             file_path = asset.get("file_path")
             if not file_path:
                 continue
             full_path = repo_root / file_path
             if full_path.exists():
-                img = Image.open(full_path).convert("RGB")
-                asset_key = asset.get("asset_key", "ref")
-                pub_url = _upload_to_supabase(img, asset_key)
-                if pub_url:
-                    public_urls.append(pub_url)
+                try:
+                    img = Image.open(full_path).convert("RGB")
+                    asset_key = asset.get("asset_key", "ref")
+                    uploaded_url = _upload_to_supabase(img, asset_key)
+                    if uploaded_url:
+                        public_urls.append(uploaded_url)
+                except Exception as upload_err:
+                    logger.warning(f"[unified_image] Failed to upload local legacy ref image {file_path}: {upload_err}")
 
         return public_urls
     except Exception as e:
@@ -346,6 +375,7 @@ def create_post_image(
     headline_text: str = "",
     aspect_ratio: str = "1:1",
     reference_image_urls: list[str] = None,
+    reference_asset_keys: list[str] = None,
     config: RunnableConfig = None,
 ) -> str:
     """Create or edit a styled post image using the configured AI image model (KIE AI or Grok Imagine Image).
@@ -353,7 +383,7 @@ def create_post_image(
     Supports both text-to-image generation and multi-image editing with reference images.
     When editing a target image, provide image_url along with editing_prompt or prompt.
     You can select the aspect ratio ('1:1', '16:9', '4:3', '3:2', '2:3', '3:4', '9:16') and
-    optionally pass reference image URLs (<20MB each) for brand style consistency.
+    optionally pass reference image URLs (<20MB each) or brand reference_asset_keys for style consistency.
 
     Args:
         image_url: URL of the chosen target image/photo to edit (optional; leave empty for text-to-image).
@@ -362,6 +392,7 @@ def create_post_image(
         headline_text: Short headline (max 10 words) for filename generation or text overlays.
         aspect_ratio: Aspect ratio for the image: '1:1', '16:9', '4:3', '3:2', '2:3', '3:4', '9:16'. Default is '1:1'.
         reference_image_urls: Optional list of reference image URLs (<20MB each) for style/brand guidance.
+        reference_asset_keys: Optional list of attached brand asset keys or labels to use as references.
         config: LangChain runnable configuration.
 
     Returns:
@@ -421,7 +452,7 @@ def create_post_image(
                 logger.warning(f"[unified_image] Error resolving fallback workflow_id: {e}")
 
         if workflow_id:
-            ref_urls = _get_workflow_reference_images(workflow_id)
+            ref_urls = _get_workflow_reference_images(workflow_id, reference_asset_keys=reference_asset_keys)
             logger.info(f"[unified_image] Loaded {len(ref_urls)} workflow reference images.")
 
     # Upload target to Supabase for KIE AI access if available

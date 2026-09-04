@@ -99,6 +99,28 @@ export async function GET() {
             ? { enabled: true, interval_min: aInterval, elapsed_min: Math.round(aElapsed), next_in_min: Math.round(aNextIn) }
             : { enabled: false };
 
+        // ── YouTube Processing Sweeper ─────────────────────────────────────
+        // Checks any YouTube videos in 'processing' status to promote to public once checks finish
+        try {
+            const { data: processingVideos } = await supabase
+                .from("social_youtube_posts")
+                .select("id, post_id, published_video_id, user_id, created_at")
+                .eq("status", "processing")
+                .not("published_video_id", "is", null)
+                .limit(5);
+
+            if (processingVideos && processingVideos.length > 0) {
+                const { checkAndPromoteYoutubeProcessing } = await import("@/lib/youtube-publish");
+                for (const row of processingVideos) {
+                    if (row.published_video_id) {
+                        await checkAndPromoteYoutubeProcessing(row.published_video_id, row.post_id, row.user_id);
+                    }
+                }
+            }
+        } catch (ytCronErr) {
+            console.warn("[cron] YouTube sweeper error:", ytCronErr);
+        }
+
     } catch (e: any) {
         status.error = e.message;
     }

@@ -6,13 +6,25 @@ import Link from "next/link";
 import {
     RefreshCcw, ArrowLeft, Heart, MessageCircle, Repeat2,
     Bookmark, Share2, ThumbsUp, MoreHorizontal, Globe,
-    Settings, CheckCircle2, Loader2, XCircle, Play, Tag, Volume2, VolumeX,
-    Maximize2,
+    Settings, CheckCircle2, Loader2, XCircle, Play, Tag,
+    Pencil, Trash2, ExternalLink, ChevronDown, ChevronUp,
+    BookOpen, Sparkles, Folder, Eye, Check, Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+    DialogDescription,
+} from "@/components/ui/dialog";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { PluginGate } from "@/app/components/settings/PluginsSection";
 
+// ─── Type Definitions ────────────────────────────────────────────────────────
 interface PostData {
     id: string;
     created_at: string;
@@ -21,19 +33,44 @@ interface PostData {
     instagram: string;
     facebook: string;
     youtube?: string;
+    linkedin?: string;
     instagram_data?: Record<string, any> | null;
     facebook_data?: Record<string, any> | null;
     youtube_data?: Record<string, any> | null;
+    linkedin_data?: Record<string, any> | null;
+    twitter_data?: Record<string, any> | null;
     sources: string[];
     image: boolean;
     image_url: string | null;
     published_to: Record<string, boolean>;
 }
 
-interface PublishResult {
-    success: boolean;
-    post_id?: string;
-    error?: string;
+interface BlogPostData {
+    id: string;
+    created_at: string;
+    title: string;
+    slug: string;
+    content_md: string;
+    excerpt: string;
+    focus_keyword: string;
+    meta_description: string;
+    category_hint: string;
+    has_image_1: boolean;
+    has_image_2: boolean;
+    image_1_url: string | null;
+    image_2_url: string | null;
+    wp_status: string;
+    wp_post_url: string | null;
+    wp_post_id: number | null;
+    wp_edit_url: string | null;
+}
+
+interface WpCategory {
+    id: number;
+    name: string;
+    slug: string;
+    count: number;
+    link: string;
 }
 
 // Helper: Convert local path or remote URL into streamable URL
@@ -42,10 +79,8 @@ function getMediaStreamUrl(urlOrPath?: string | null): string | null {
     const trimmed = urlOrPath.trim();
     if (!trimmed) return null;
     if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-        // If external web URL that is an image/video, can load directly, or stream if it has special characters
         return trimmed;
     }
-    // Local filesystem path (Windows or Unix)
     return `/api/media/stream?path=${encodeURIComponent(trimmed)}`;
 }
 
@@ -56,7 +91,6 @@ function isVideoMedia(urlOrPath?: string | null, mediaType?: string): boolean {
     return lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".webm") || lower.endsWith(".mkv") || lower.includes("video");
 }
 
-// Strip the "Social Media Posts: " prefix agents sometimes add
 function cleanTitle(t: string) {
     return t.replace(/^social\s+media\s+posts?:\s*/i, "").trim();
 }
@@ -72,8 +106,6 @@ function VideoPlayer({
     className?: string;
 }) {
     const videoRef = useRef<HTMLVideoElement>(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [isMuted, setIsMuted] = useState(false);
     const streamUrl = getMediaStreamUrl(src);
 
     if (!streamUrl) return null;
@@ -88,43 +120,133 @@ function VideoPlayer({
                 playsInline
                 preload="metadata"
                 className="w-full h-full max-h-[460px] object-contain bg-black"
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
             />
         </div>
     );
 }
 
+// ─── Single Platform Publish Button ──────────────────────────────────────────
+function SinglePlatformPublishButton({
+    postId,
+    platform,
+    label,
+    isPublished,
+    onPublished,
+}: {
+    postId: string;
+    platform: "youtube" | "instagram" | "facebook" | "twitter" | "linkedin";
+    label: string;
+    isPublished: boolean;
+    onPublished: (postId: string, publishedTo: Record<string, boolean>) => void;
+}) {
+    const [publishing, setPublishing] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [error, setError] = useState("");
+    const [showError, setShowError] = useState(false);
+
+    const handlePublish = async () => {
+        setPublishing(true);
+        setError("");
+        setShowError(false);
+        try {
+            const res = await fetch("/api/publish", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ post_id: postId, platforms: [platform] }),
+            });
+            const json = await res.json();
+            if (json.results?.[platform]?.success || json.published_to?.[platform]) {
+                if (platform === "youtube" && json.results?.youtube?.status === "processing") {
+                    setIsProcessing(true);
+                }
+                onPublished(postId, json.published_to || { [platform]: true });
+            } else {
+                setError(json.results?.[platform]?.error || json.error || "Publishing failed");
+                setShowError(true);
+            }
+        } catch (e: any) {
+            setError(e.message || "Network error");
+            setShowError(true);
+        } finally {
+            setPublishing(false);
+        }
+    };
+
+    return (
+        <div className="relative flex items-center gap-1.5">
+            <Button
+                variant={isPublished ? "outline" : "default"}
+                size="sm"
+                onClick={handlePublish}
+                disabled={publishing}
+                className="gap-1.5 text-xs font-semibold shadow-sm h-8"
+            >
+                {publishing ? (
+                    <Loader2 size={13} className="animate-spin" />
+                ) : isProcessing ? (
+                    <Clock size={13} className="text-amber-500 animate-pulse" />
+                ) : isPublished ? (
+                    <CheckCircle2 size={13} className="text-emerald-500" />
+                ) : (
+                    <Share2 size={13} />
+                )}
+                {isProcessing
+                    ? "YouTube: Checking & Auto-Publishing..."
+                    : isPublished
+                    ? `Published to ${label}`
+                    : `1-Click Publish to ${label}`}
+            </Button>
+            {showError && error && (
+                <div className="absolute right-0 top-full mt-1.5 z-20 w-64 rounded-xl border border-destructive/30 bg-card p-2.5 shadow-xl text-xs text-destructive flex items-start justify-between gap-2">
+                    <span className="leading-tight">{error}</span>
+                    <button onClick={() => setShowError(false)} className="font-bold text-xs shrink-0">✕</button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── X / Twitter Card ────────────────────────────────────────────────────────
-function TwitterPost({ post, imageSrc, title }: { post: string; imageSrc: string | null; title: string }) {
-    const cleanPost = post.replace(/\*Character count:.*?\*\s*/gi, "").replace(/^---+\s*/gm, "").trim();
-    const mediaStream = getMediaStreamUrl(imageSrc);
-    const isVideo = isVideoMedia(imageSrc);
+function TwitterPost({
+    post,
+    imageSrc,
+    title,
+    rawData,
+}: {
+    post: string;
+    imageSrc: string | null;
+    title: string;
+    rawData?: any;
+}) {
+    const tweetText = (post || rawData?.text || "").replace(/\*Character count:.*?\*\s*/gi, "").replace(/^---+\s*/gm, "").trim();
+    const mediaSource = rawData?.media_url || imageSrc;
+    const mediaStream = getMediaStreamUrl(mediaSource);
+    const isVideo = isVideoMedia(mediaSource, rawData?.media_type);
 
     return (
         <div style={{ fontFamily: "'TwitterChirp', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}
-            className="overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-xl w-full">
+            className="overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-sm w-full">
             <div className="flex gap-3 px-4 pt-4 pb-2">
                 <div className="shrink-0">
-                    <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center font-bold text-primary-foreground text-base">N</div>
+                    <div className="h-10 w-10 rounded-full bg-foreground text-background flex items-center justify-center font-bold text-base">X</div>
                 </div>
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 flex-wrap">
-                        <span className="font-bold text-[15px]">News Agent</span>
+                        <span className="font-bold text-[15px]">Legend</span>
                         <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] fill-primary">
                             <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.66 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z" />
                         </svg>
-                        <span className="text-muted-foreground text-[14px]">@newsagent · Just now</span>
+                        <span className="text-muted-foreground text-[14px]">@legend · Just now</span>
                     </div>
                     <p className="text-[12px] text-muted-foreground/80 italic mb-1 mt-0.5 truncate">{title}</p>
-                    <p className="mt-1 text-[15px] leading-[1.5] text-foreground whitespace-pre-wrap break-words">{cleanPost}</p>
+                    <p className="mt-1 text-[15px] leading-[1.5] text-foreground whitespace-pre-wrap break-words">{tweetText}</p>
                     
                     {mediaStream && (
                         <div className="mt-3 overflow-hidden rounded-2xl border border-border w-full">
                             {isVideo ? (
-                                <VideoPlayer src={imageSrc!} />
+                                <VideoPlayer src={mediaSource!} />
                             ) : (
-                                <Image src={mediaStream} alt="Post image" width={600} height={338} className="w-full object-cover" unoptimized />
+                                <Image src={mediaStream} alt="Tweet media" width={600} height={338} className="w-full object-cover" unoptimized />
                             )}
                         </div>
                     )}
@@ -140,6 +262,143 @@ function TwitterPost({ post, imageSrc, title }: { post: string; imageSrc: string
             <div className="flex items-center gap-3 px-4 py-3 text-muted-foreground text-[14px]">
                 <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">U</div>
                 <span>Post your reply</span>
+            </div>
+        </div>
+    );
+}
+
+// ─── LinkedIn Card ────────────────────────────────────────────────────────────
+function LinkedInPost({
+    post,
+    imageSrc,
+    title,
+    rawData,
+}: {
+    post: string;
+    imageSrc: string | null;
+    title: string;
+    rawData?: any;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const commentary = post || rawData?.commentary || "";
+    const mediaSource = rawData?.media_url || imageSrc;
+    const mediaType = rawData?.media_type || (isVideoMedia(mediaSource) ? "video" : mediaSource ? "image" : "text");
+    const isVideo = mediaType === "video" || isVideoMedia(mediaSource);
+    const mediaStream = getMediaStreamUrl(mediaSource);
+    const linkUrl = rawData?.link;
+    const visibility = rawData?.visibility || "PUBLIC";
+
+    const PREVIEW_CHARS = 240;
+    const needsTruncation = commentary.length > PREVIEW_CHARS;
+    const visibleCommentary = expanded || !needsTruncation ? commentary : commentary.slice(0, PREVIEW_CHARS) + "…";
+
+    return (
+        <div style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}
+            className="overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-sm w-full">
+            {/* Header */}
+            <div className="flex items-start justify-between px-4 pt-4 pb-2.5">
+                <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-full bg-[#0A66C2] flex items-center justify-center text-white font-bold text-base shadow-sm shrink-0">
+                        LG
+                    </div>
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-[15px] text-foreground hover:text-[#0A66C2] cursor-pointer transition-colors">Legend gamerz</span>
+                            <span className="text-muted-foreground text-[11px] font-normal">• 1st</span>
+                        </div>
+                        <p className="text-[12px] text-muted-foreground truncate max-w-[280px] sm:max-w-md">Thought Leadership &amp; Industry Perspectives</p>
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5">
+                            <span>Just now</span>
+                            <span>•</span>
+                            <span className="flex items-center gap-0.5">
+                                <Globe size={11} /> {visibility === "PUBLIC" ? "Public" : "Connections"}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <button className="text-muted-foreground hover:text-foreground p-1 rounded-full hover:bg-accent">
+                    <MoreHorizontal size={18} />
+                </button>
+            </div>
+
+            {/* Title / Topic badge */}
+            {title && (
+                <div className="px-4 pb-1">
+                    <span className="text-[11px] font-medium text-muted-foreground/90 italic truncate block">
+                        {title}
+                    </span>
+                </div>
+            )}
+
+            {/* Commentary text */}
+            <div className="px-4 py-2 text-[14px] leading-[1.5] text-foreground whitespace-pre-wrap break-words">
+                {visibleCommentary}
+                {needsTruncation && !expanded && (
+                    <button
+                        onClick={() => setExpanded(true)}
+                        className="text-muted-foreground ml-1 font-semibold hover:text-[#0A66C2]"
+                    >
+                        …see more
+                    </button>
+                )}
+            </div>
+
+            {/* Media: Video, Image, or Article Link */}
+            {mediaStream && (
+                <div className="mt-2 w-full overflow-hidden border-y border-border bg-black/5">
+                    {isVideo ? (
+                        <VideoPlayer src={mediaSource!} />
+                    ) : (
+                        <div className="relative w-full max-h-[420px] overflow-hidden flex items-center justify-center bg-black">
+                            <Image
+                                src={mediaStream}
+                                alt="LinkedIn post media"
+                                width={700}
+                                height={400}
+                                className="w-full object-cover max-h-[420px]"
+                                unoptimized
+                            />
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Link Preview (if article / external link) */}
+            {!mediaStream && linkUrl && (
+                <div className="mx-4 my-2 p-3 rounded-xl border border-border/70 bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <a href={linkUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between gap-3 text-xs">
+                        <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-foreground truncate">{rawData?.title || linkUrl}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">{linkUrl}</p>
+                        </div>
+                        <ExternalLink size={14} className="text-muted-foreground shrink-0" />
+                    </a>
+                </div>
+            )}
+
+            {/* Social Counts bar */}
+            <div className="flex items-center justify-between px-4 py-2 border-b border-border/40 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                    <span className="h-4 w-4 rounded-full bg-[#0A66C2] flex items-center justify-center text-white text-[9px]">👍</span>
+                    <span>12 reactions</span>
+                </span>
+                <span>3 comments</span>
+            </div>
+
+            {/* LinkedIn Action Buttons */}
+            <div className="flex items-center justify-around px-2 py-1 text-muted-foreground text-xs font-semibold">
+                <button className="flex items-center gap-1.5 py-2 px-3 rounded-lg hover:bg-accent hover:text-foreground transition-colors">
+                    <ThumbsUp size={16} /> <span>Like</span>
+                </button>
+                <button className="flex items-center gap-1.5 py-2 px-3 rounded-lg hover:bg-accent hover:text-foreground transition-colors">
+                    <MessageCircle size={16} /> <span>Comment</span>
+                </button>
+                <button className="flex items-center gap-1.5 py-2 px-3 rounded-lg hover:bg-accent hover:text-foreground transition-colors">
+                    <Repeat2 size={16} /> <span>Repost</span>
+                </button>
+                <button className="flex items-center gap-1.5 py-2 px-3 rounded-lg hover:bg-accent hover:text-foreground transition-colors">
+                    <Share2 size={16} /> <span>Send</span>
+                </button>
             </div>
         </div>
     );
@@ -161,7 +420,7 @@ function InstagramPost({ post, imageSrc, title, rawData }: { post: string; image
 
     return (
         <div style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}
-            className="overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-xl w-full">
+            className="overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-sm w-full">
             <div className="flex items-center justify-between px-3 py-3 border-b border-border">
                 <div className="flex items-center gap-2.5">
                     <div className="h-9 w-9 rounded-full p-[2px] bg-gradient-to-br from-[#FCAF45] via-[#E1306C] to-[#833AB4]">
@@ -182,8 +441,7 @@ function InstagramPost({ post, imageSrc, title, rawData }: { post: string; image
                 <button className="text-foreground p-1"><MoreHorizontal size={20} /></button>
             </div>
 
-            {/* Video Player or Image */}
-            <div className="w-full bg-black relative flex items-center justify-center min-h-[300px]">
+            <div className="w-full bg-black relative flex items-center justify-center min-h-[260px] sm:min-h-[300px]">
                 {videoUrl ? (
                     <VideoPlayer src={videoUrl} poster={coverSrc} className="w-full aspect-square sm:aspect-[4/5]" />
                 ) : coverSrc ? (
@@ -236,7 +494,7 @@ function FacebookPost({ post, imageSrc, title, rawData }: { post: string; imageS
 
     return (
         <div style={{ fontFamily: "'Helvetica Neue', Arial, sans-serif" }}
-            className="overflow-hidden rounded-2xl bg-card shadow-xl w-full border border-border">
+            className="overflow-hidden rounded-2xl bg-card shadow-sm w-full border border-border">
             <div className="flex items-center gap-2 px-4 pt-4 pb-3">
                 <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">N</div>
                 <div className="flex-1 min-w-0">
@@ -261,7 +519,6 @@ function FacebookPost({ post, imageSrc, title, rawData }: { post: string; imageS
                 )}
             </div>
 
-            {/* Video Player or Image */}
             {videoUrl ? (
                 <div className="w-full bg-black overflow-hidden">
                     <VideoPlayer src={videoUrl} poster={imageSrc} className="w-full aspect-video" />
@@ -303,8 +560,7 @@ function YouTubePost({ post, imageSrc, title, rawData }: { post: string; imageSr
 
     return (
         <div style={{ fontFamily: "'Roboto', sans-serif" }}
-            className="overflow-hidden rounded-2xl bg-card shadow-xl w-full border border-border">
-            {/* Header */}
+            className="overflow-hidden rounded-2xl bg-card shadow-sm w-full border border-border">
             <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border/50">
                 <div className="flex items-center gap-3">
                     <div className="h-9 w-9 rounded-full bg-[#FF0000] flex items-center justify-center text-white shadow-sm">
@@ -329,7 +585,6 @@ function YouTubePost({ post, imageSrc, title, rawData }: { post: string; imageSr
                 </div>
             </div>
 
-            {/* Video Player or Thumbnail */}
             <div className="w-full bg-black relative overflow-hidden flex items-center justify-center">
                 {videoUrl ? (
                     <VideoPlayer src={videoUrl} poster={thumbnailUrl} className="w-full aspect-video" />
@@ -345,12 +600,8 @@ function YouTubePost({ post, imageSrc, title, rawData }: { post: string; imageSr
                 )}
             </div>
 
-            {/* Video Details */}
             <div className="p-4 space-y-3">
-                <div>
-                    <h3 className="font-bold text-[16px] text-foreground leading-snug">{ytTitle}</h3>
-                </div>
-
+                <h3 className="font-bold text-[16px] text-foreground leading-snug">{ytTitle}</h3>
                 <div className="bg-muted/40 rounded-xl p-3 border border-border/50 text-[13px] leading-relaxed">
                     <p className="whitespace-pre-wrap text-foreground/90">
                         {expanded || ytDesc.length <= 160 ? ytDesc : ytDesc.slice(0, 160) + "..."}
@@ -362,7 +613,6 @@ function YouTubePost({ post, imageSrc, title, rawData }: { post: string; imageSr
                     )}
                 </div>
 
-                {/* Tags */}
                 {tags && tags.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 pt-1">
                         {tags.map((tag: string, i: number) => (
@@ -377,19 +627,223 @@ function YouTubePost({ post, imageSrc, title, rawData }: { post: string; imageSr
     );
 }
 
-// ─── Platform tab config ──────────────────────────────────────────────────────
+// ─── WordPress Blog Article Card ──────────────────────────────────────────────
+function BlogPostCard({
+    post,
+    onEdit,
+    onDelete,
+    onPublished,
+    onCategoryClick,
+}: {
+    post: BlogPostData;
+    onEdit: (post: BlogPostData) => void;
+    onDelete: (id: string, title: string) => void;
+    onPublished: (id: string, url: string) => void;
+    onCategoryClick: (category: string) => void;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const [publishing, setPublishing] = useState(false);
+    const [publishStatus, setPublishStatus] = useState<"idle" | "success" | "error">("idle");
+    const [publishError, setPublishError] = useState("");
+
+    const isLive = post.wp_status === "publish" || !!post.wp_post_url;
+    const heroImage = post.image_1_url || post.image_2_url;
+
+    const handlePublishToWordpress = async () => {
+        setPublishing(true);
+        setPublishStatus("idle");
+        setPublishError("");
+        try {
+            const res = await fetch("/api/posts/wordpress/publish", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ blog_post_id: post.id }),
+            });
+            const data = await res.json();
+            if (data.success && data.post_url) {
+                setPublishStatus("success");
+                onPublished(post.id, data.post_url);
+            } else {
+                setPublishStatus("error");
+                setPublishError(data.error || "Publishing failed");
+            }
+        } catch (e: any) {
+            setPublishStatus("error");
+            setPublishError(e.message || "Network error");
+        } finally {
+            setPublishing(false);
+        }
+    };
+
+    return (
+        <div className="rounded-2xl border border-border/80 bg-card/70 p-4 sm:p-6 shadow-sm space-y-4 transition-all">
+            {/* Header: Title, Category Badge, Status & Actions */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-3.5">
+                <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {/* Category Badge - Clickable to filter */}
+                        <button
+                            onClick={() => onCategoryClick(post.category_hint)}
+                            title={`Filter articles by ${post.category_hint}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                        >
+                            <Folder size={11} />
+                            <span>{post.category_hint || "Uncategorized"}</span>
+                        </button>
+
+                        {post.focus_keyword && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full">
+                                <Tag size={10} /> {post.focus_keyword}
+                            </span>
+                        )}
+
+                        {isLive ? (
+                            <a
+                                href={post.wp_post_url!}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-white bg-emerald-600 px-2.5 py-0.5 rounded-full hover:bg-emerald-500 transition-colors"
+                            >
+                                <CheckCircle2 size={11} /> Live on WordPress <ExternalLink size={10} />
+                            </a>
+                        ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                                Draft
+                            </span>
+                        )}
+                    </div>
+
+                    <h2 className="font-bold text-base sm:text-lg text-foreground leading-snug pt-0.5">
+                        {post.title}
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground">
+                        Created {new Date(post.created_at).toLocaleDateString()} · ID: {post.id.slice(0, 8)}
+                        {post.slug && <span className="ml-2 font-mono text-[10px] text-muted-foreground/80">/{post.slug}</span>}
+                    </p>
+                </div>
+
+                {/* Actions: Publish, Edit, Delete */}
+                <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                    <Button
+                        variant={isLive ? "outline" : "default"}
+                        size="sm"
+                        onClick={handlePublishToWordpress}
+                        disabled={publishing}
+                        className="gap-1.5 text-xs font-semibold shadow-sm h-8"
+                    >
+                        {publishing ? (
+                            <Loader2 size={13} className="animate-spin" />
+                        ) : isLive ? (
+                            <CheckCircle2 size={13} className="text-emerald-500" />
+                        ) : (
+                            <Globe size={13} />
+                        )}
+                        {isLive ? "Republish to WP" : "1-Click Publish to WP"}
+                    </Button>
+
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => onEdit(post)}
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        title="Edit Article"
+                    >
+                        <Pencil size={13} />
+                    </Button>
+
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => onDelete(post.id, post.title)}
+                        className="h-8 w-8 text-destructive/80 hover:text-destructive hover:bg-destructive/10 hover:border-destructive/30"
+                        title="Delete Article"
+                    >
+                        <Trash2 size={13} />
+                    </Button>
+                </div>
+            </div>
+
+            {publishStatus === "error" && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center justify-between gap-2">
+                    <span className="truncate">{publishError}</span>
+                    <button onClick={() => setPublishStatus("idle")} className="font-bold text-xs">✕</button>
+                </div>
+            )}
+
+            {/* Body: Hero Image + Excerpt */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                {heroImage && (
+                    <div className="md:col-span-1 overflow-hidden rounded-xl border border-border relative aspect-video bg-black/5">
+                        <Image
+                            src={getMediaStreamUrl(heroImage)!}
+                            alt={post.title}
+                            fill
+                            className="object-cover"
+                            unoptimized
+                        />
+                    </div>
+                )}
+
+                <div className={heroImage ? "md:col-span-2 space-y-2.5" : "col-span-3 space-y-2.5"}>
+                    <p className="text-sm text-foreground/90 leading-relaxed">
+                        {post.excerpt || post.meta_description || "No summary provided for this article."}
+                    </p>
+
+                    <div className="pt-1 flex items-center gap-3">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setExpanded(!expanded)}
+                            className="h-7 px-2 text-xs font-semibold gap-1 text-primary hover:text-primary hover:bg-primary/10"
+                        >
+                            <BookOpen size={12} />
+                            {expanded ? "Hide Full Content" : "Read Full Article Content"}
+                            {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        </Button>
+
+                        {isLive && post.wp_post_url && (
+                            <a
+                                href={post.wp_post_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground font-medium underline-offset-4 hover:underline"
+                            >
+                                View Live Post <ExternalLink size={11} />
+                            </a>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Expandable Markdown Body */}
+            {expanded && (
+                <div className="pt-3 border-t border-border/40 mt-3">
+                    <div className="max-h-96 overflow-y-auto rounded-xl bg-muted/40 p-4 border border-border/50 text-xs font-mono whitespace-pre-wrap leading-relaxed">
+                        {post.content_md}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Platform tab config (All Channels tab removed as requested) ─────────────
 const PLATFORMS = [
     {
-        key: "all" as const,
-        label: "All Channels",
-        activeClass: "bg-primary text-primary-foreground",
+        key: "blog" as const,
+        label: "Blog Articles",
+        activeClass: "bg-[#0073AA] text-white shadow-sm",
         inactiveClass: "bg-card text-muted-foreground hover:bg-accent hover:text-foreground border-border",
-        icon: (active: boolean) => <Globe size={14} className={active ? "text-primary-foreground" : "text-muted-foreground"} />,
+        icon: (active: boolean) => (
+            <svg viewBox="0 0 24 24" className={`h-4 w-4 ${active ? "fill-white" : "fill-current"}`}>
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-8.86 10c0-1.84.58-3.54 1.57-4.94l6.09 16.69c-4.33-.92-7.66-4.52-7.66-8.75zm8.86 8.86c-1.12 0-2.18-.23-3.15-.65l3.52-10.22 3.6 9.87c-1.22.64-2.58 1-3.97 1zm1.25-13.62l3.41 9.94c1.86-1.54 3.06-3.87 3.06-6.48 0-1.07-.21-2.09-.59-3.03l-5.88-.43zm7.04-1.57c-.89-.98-1.99-1.74-3.23-2.21l-3.32 9.68 3.02-8.77c1.37.38 2.59 1.13 3.53 2.15z" />
+            </svg>
+        ),
     },
     {
         key: "youtube" as const,
         label: "YouTube",
-        activeClass: "bg-[#FF0000] text-white",
+        activeClass: "bg-[#FF0000] text-white shadow-sm",
         inactiveClass: "bg-card text-muted-foreground hover:bg-accent hover:text-foreground border-border",
         icon: (active: boolean) => (
             <svg viewBox="0 0 24 24" className={`h-4 w-4 ${active ? "fill-white" : "fill-current"}`}>
@@ -400,7 +854,7 @@ const PLATFORMS = [
     {
         key: "instagram" as const,
         label: "Instagram",
-        activeClass: "bg-gradient-to-r from-[#FCAF45] via-[#E1306C] to-[#833AB4] text-white",
+        activeClass: "bg-gradient-to-r from-[#FCAF45] via-[#E1306C] to-[#833AB4] text-white shadow-sm",
         inactiveClass: "bg-card text-muted-foreground hover:bg-accent hover:text-foreground border-border",
         icon: (active: boolean) => (
             <svg viewBox="0 0 24 24" className={`h-4 w-4 ${active ? "fill-white" : "fill-current"}`}>
@@ -411,7 +865,7 @@ const PLATFORMS = [
     {
         key: "facebook" as const,
         label: "Facebook",
-        activeClass: "bg-[#1877F2] text-white",
+        activeClass: "bg-[#1877F2] text-white shadow-sm",
         inactiveClass: "bg-card text-muted-foreground hover:bg-accent hover:text-foreground border-border",
         icon: (active: boolean) => (
             <svg viewBox="0 0 24 24" className={`h-4 w-4 ${active ? "fill-white" : "fill-current"}`}>
@@ -422,7 +876,7 @@ const PLATFORMS = [
     {
         key: "twitter" as const,
         label: "X",
-        activeClass: "bg-foreground text-background dark:bg-foreground dark:text-background",
+        activeClass: "bg-foreground text-background dark:bg-foreground dark:text-background shadow-sm",
         inactiveClass: "bg-card text-muted-foreground hover:bg-accent hover:text-foreground border-border",
         icon: (active: boolean) => (
             <svg viewBox="0 0 24 24" className={`h-4 w-4 ${active ? "fill-background dark:fill-background" : "fill-current"}`}>
@@ -430,154 +884,557 @@ const PLATFORMS = [
             </svg>
         ),
     },
+    {
+        key: "linkedin" as const,
+        label: "LinkedIn",
+        activeClass: "bg-[#0A66C2] text-white shadow-sm",
+        inactiveClass: "bg-card text-muted-foreground hover:bg-accent hover:text-foreground border-border",
+        icon: (active: boolean) => (
+            <svg viewBox="0 0 24 24" className={`h-4 w-4 ${active ? "fill-white" : "fill-current"}`}>
+                <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.45a1.6 1.6 0 0 0-1.6 1.6 1.6 1.6 0 0 0 1.6-1.6 1.6 1.6 0 0 0 1.6-1.6 1.6 1.6 0 0 0-1.6-1.6z" />
+            </svg>
+        ),
+    },
 ] as const;
 
 type Platform = typeof PLATFORMS[number]["key"];
 
-const PLATFORM_META = [
-    { key: "youtube", label: "YT", color: "bg-[#FF0000]" },
-    { key: "instagram", label: "IG", color: "bg-gradient-to-br from-[#FCAF45] via-[#E1306C] to-[#833AB4]" },
-    { key: "facebook", label: "FB", color: "bg-[#1877F2]" },
-    { key: "twitter", label: "X", color: "bg-black" },
-];
+// ─── Edit Modal Component ─────────────────────────────────────────────────────
+function PostEditDialog({
+    open,
+    onOpenChange,
+    editTarget,
+    onSaved,
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    editTarget: { type: "social" | "blog"; platformTab?: Platform; data: any } | null;
+    onSaved: (type: "social" | "blog", updatedData: any) => void;
+}) {
+    const [formData, setFormData] = useState<Record<string, any>>({});
+    const [saving, setSaving] = useState(false);
+    const [errorMsg, setErrorMsg] = useState("");
+    const [liveCategories, setLiveCategories] = useState<WpCategory[]>([]);
+    const [loadingCats, setLoadingCats] = useState(false);
 
-function PublishStatusIcons({ publishedTo }: { publishedTo: Record<string, boolean> }) {
-    const published = PLATFORM_META.filter((p) => publishedTo && publishedTo[p.key]);
-    if (!published.length) return null;
+    useEffect(() => {
+        if (editTarget?.data) {
+            setFormData({ ...editTarget.data });
+            setErrorMsg("");
+        }
+    }, [editTarget]);
+
+    // Fetch live categories when editing blog posts
+    useEffect(() => {
+        if (open && editTarget?.type === "blog") {
+            setLoadingCats(true);
+            fetch("/api/posts/wordpress/categories")
+                .then((r) => r.json())
+                .then((res) => {
+                    if (res.success && Array.isArray(res.categories)) {
+                        setLiveCategories(res.categories);
+                    }
+                })
+                .catch(() => {})
+                .finally(() => setLoadingCats(false));
+        }
+    }, [open, editTarget]);
+
+    if (!editTarget) return null;
+    const isBlog = editTarget.type === "blog";
+    const platform = editTarget.platformTab;
+
+    const handleSave = async () => {
+        setSaving(true);
+        setErrorMsg("");
+        try {
+            const res = await fetch(`/api/posts/${formData.id}?type=${editTarget.type}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(formData),
+            });
+            const json = await res.json();
+            if (json.success && json.post) {
+                onSaved(editTarget.type, json.post);
+                onOpenChange(false);
+            } else {
+                setErrorMsg(json.error || "Failed to update post.");
+            }
+        } catch (e: any) {
+            setErrorMsg(e.message || "Network error.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const twitterText = formData.twitter || "";
+    const twitterCharCount = twitterText.length;
+    const twitterOverLimit = twitterCharCount > 280;
+
     return (
-        <div className="flex items-center gap-1">
-            {published.map((p) => (
-                <span key={p.key} title={`Published to ${p.label}`}
-                    className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white ${p.color}`}>
-                    <CheckCircle2 size={9} /> {p.label}
-                </span>
-            ))}
-        </div>
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
+                <DialogHeader>
+                    <DialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+                        <Pencil className="h-4 w-4 text-primary" />
+                        {isBlog
+                            ? "Edit WordPress Blog Article"
+                            : `Edit ${platform ? platform.toUpperCase() : "Social"} Post`}
+                    </DialogTitle>
+                    <DialogDescription className="text-xs text-muted-foreground">
+                        {isBlog
+                            ? "Update headline, category, SEO tags, excerpt, and article body."
+                            : "Customize post content and media before publishing."}
+                    </DialogDescription>
+                </DialogHeader>
+
+                {errorMsg && (
+                    <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-xs text-destructive font-medium">
+                        {errorMsg}
+                    </div>
+                )}
+
+                <div className="space-y-4 py-2 text-xs">
+                    {/* Common: Headline */}
+                    <div>
+                        <label className="font-semibold block mb-1 text-foreground">Post Headline / Title</label>
+                        <Input
+                            value={formData.title || ""}
+                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                            className="h-9 text-xs"
+                            placeholder="Headline or Title"
+                        />
+                    </div>
+
+                    {/* 1. Blog-Specific Fields */}
+                    {isBlog && (
+                        <>
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="font-semibold text-foreground flex items-center gap-1">
+                                        <Folder size={12} className="text-primary" />
+                                        WordPress Category
+                                    </label>
+                                    {loadingCats && (
+                                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                            <Loader2 size={10} className="animate-spin" /> Loading WP categories...
+                                        </span>
+                                    )}
+                                </div>
+                                <Input
+                                    value={formData.category_hint || ""}
+                                    onChange={(e) => setFormData({ ...formData, category_hint: e.target.value })}
+                                    className="h-9 text-xs mb-1.5"
+                                    placeholder="e.g. Technology, Health, News"
+                                />
+                                {liveCategories.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                        <span className="text-[10px] text-muted-foreground self-center mr-1">Live WP Categories:</span>
+                                        {liveCategories.slice(0, 8).map((cat) => (
+                                            <button
+                                                key={cat.id}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, category_hint: cat.name })}
+                                                className={`text-[10px] font-medium px-2 py-0.5 rounded-md border transition-all ${
+                                                    formData.category_hint?.toLowerCase() === cat.name.toLowerCase()
+                                                        ? "bg-primary text-primary-foreground border-primary"
+                                                        : "bg-muted/40 hover:bg-muted text-muted-foreground border-border"
+                                                }`}
+                                            >
+                                                {cat.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="font-semibold block mb-1 text-foreground">URL Slug</label>
+                                    <Input
+                                        value={formData.slug || ""}
+                                        onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                                        className="h-9 text-xs"
+                                        placeholder="url-friendly-slug"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="font-semibold block mb-1 text-foreground">Focus SEO Keyword</label>
+                                    <Input
+                                        value={formData.focus_keyword || ""}
+                                        onChange={(e) => setFormData({ ...formData, focus_keyword: e.target.value })}
+                                        className="h-9 text-xs"
+                                        placeholder="primary keyword"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Featured Hero Image URL</label>
+                                <Input
+                                    value={formData.image_1_url || ""}
+                                    onChange={(e) => setFormData({ ...formData, image_1_url: e.target.value })}
+                                    className="h-9 text-xs"
+                                    placeholder="https://... or storage URL"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Excerpt / Meta Summary</label>
+                                <Textarea
+                                    rows={2}
+                                    value={formData.excerpt || ""}
+                                    onChange={(e) => setFormData({ ...formData, excerpt: e.target.value })}
+                                    className="text-xs"
+                                    placeholder="Brief summary for Google & readers..."
+                                />
+                            </div>
+
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Full Markdown Content</label>
+                                <Textarea
+                                    rows={8}
+                                    value={formData.content_md || ""}
+                                    onChange={(e) => setFormData({ ...formData, content_md: e.target.value })}
+                                    className="text-xs font-mono"
+                                    placeholder="# Heading\n\nArticle body..."
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {/* 2. YouTube Fields */}
+                    {platform === "youtube" && (
+                        <>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">YouTube Video Description</label>
+                                <Textarea
+                                    rows={5}
+                                    value={formData.youtube || formData.youtube_data?.description || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        youtube: e.target.value,
+                                        youtube_data: { ...(formData.youtube_data || {}), description: e.target.value },
+                                    })}
+                                    className="text-xs"
+                                    placeholder="Video description, timestamps, links..."
+                                />
+                            </div>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Video File URL</label>
+                                <Input
+                                    value={formData.youtube_data?.video_url || formData.image_url || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        youtube_data: { ...(formData.youtube_data || {}), video_url: e.target.value },
+                                    })}
+                                    className="h-9 text-xs"
+                                    placeholder="https://.../video.mp4"
+                                />
+                            </div>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Thumbnail URL</label>
+                                <Input
+                                    value={formData.youtube_data?.thumbnail_url || formData.image_url || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        image_url: e.target.value,
+                                        youtube_data: { ...(formData.youtube_data || {}), thumbnail_url: e.target.value },
+                                    })}
+                                    className="h-9 text-xs"
+                                    placeholder="https://.../thumbnail.jpg"
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {/* 3. Instagram Fields */}
+                    {platform === "instagram" && (
+                        <>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Instagram Caption &amp; Hashtags</label>
+                                <Textarea
+                                    rows={5}
+                                    value={formData.instagram || formData.instagram_data?.caption || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        instagram: e.target.value,
+                                        instagram_data: { ...(formData.instagram_data || {}), caption: e.target.value },
+                                    })}
+                                    className="text-xs"
+                                    placeholder="Post or Reel caption..."
+                                />
+                            </div>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Media URL (Video / Photo)</label>
+                                <Input
+                                    value={formData.instagram_data?.media_url || formData.image_url || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        image_url: e.target.value,
+                                        instagram_data: { ...(formData.instagram_data || {}), media_url: e.target.value },
+                                    })}
+                                    className="h-9 text-xs"
+                                    placeholder="https://.../media.mp4 or .jpg"
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {/* 4. Facebook Fields */}
+                    {platform === "facebook" && (
+                        <>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Facebook Message</label>
+                                <Textarea
+                                    rows={5}
+                                    value={formData.facebook || formData.facebook_data?.message || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        facebook: e.target.value,
+                                        facebook_data: { ...(formData.facebook_data || {}), message: e.target.value },
+                                    })}
+                                    className="text-xs"
+                                    placeholder="Post message..."
+                                />
+                            </div>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Media URL (Photo or Video)</label>
+                                <Input
+                                    value={formData.facebook_data?.media_url || formData.image_url || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        image_url: e.target.value,
+                                        facebook_data: { ...(formData.facebook_data || {}), media_url: e.target.value },
+                                    })}
+                                    className="h-9 text-xs"
+                                    placeholder="https://.../media.mp4 or .jpg"
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {/* 5. X / Twitter Fields */}
+                    {platform === "twitter" && (
+                        <>
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="font-semibold text-foreground">Tweet Text</label>
+                                    <span className={`text-[11px] font-mono ${twitterOverLimit ? "text-destructive font-bold" : "text-muted-foreground"}`}>
+                                        {twitterCharCount}/280
+                                    </span>
+                                </div>
+                                <Textarea
+                                    rows={4}
+                                    value={formData.twitter || formData.twitter_data?.text || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        twitter: e.target.value,
+                                        twitter_data: { ...(formData.twitter_data || {}), text: e.target.value },
+                                    })}
+                                    className={`text-xs ${twitterOverLimit ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                                    placeholder="Tweet text with hashtags..."
+                                />
+                            </div>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Attached Media URL (Cloudflare R2 or Web URL)</label>
+                                <Input
+                                    value={formData.twitter_data?.media_url || formData.image_url || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        image_url: e.target.value,
+                                        twitter_data: { ...(formData.twitter_data || {}), media_url: e.target.value },
+                                    })}
+                                    className="h-9 text-xs"
+                                    placeholder="https://... R2 image or video URL"
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {/* 6. LinkedIn Fields */}
+                    {platform === "linkedin" && (
+                        <>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Post Commentary / Insights</label>
+                                <Textarea
+                                    rows={5}
+                                    value={formData.linkedin || formData.linkedin_data?.commentary || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        linkedin: e.target.value,
+                                        linkedin_data: { ...(formData.linkedin_data || {}), commentary: e.target.value },
+                                    })}
+                                    className="text-xs"
+                                    placeholder="Thought leadership commentary, insights, hashtags..."
+                                />
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="font-semibold block mb-1 text-foreground">Media Type</label>
+                                    <Input
+                                        value={formData.linkedin_data?.media_type || "text"}
+                                        onChange={(e) => setFormData({
+                                            ...formData,
+                                            linkedin_data: { ...(formData.linkedin_data || {}), media_type: e.target.value },
+                                        })}
+                                        className="h-9 text-xs"
+                                        placeholder="text, image, video, or article"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="font-semibold block mb-1 text-foreground">Visibility</label>
+                                    <Input
+                                        value={formData.linkedin_data?.visibility || "PUBLIC"}
+                                        onChange={(e) => setFormData({
+                                            ...formData,
+                                            linkedin_data: { ...(formData.linkedin_data || {}), visibility: e.target.value },
+                                        })}
+                                        className="h-9 text-xs"
+                                        placeholder="PUBLIC or CONNECTIONS"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Attached Media URL (Cloudflare R2 or Web URL)</label>
+                                <Input
+                                    value={formData.linkedin_data?.media_url || formData.image_url || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        image_url: e.target.value,
+                                        linkedin_data: { ...(formData.linkedin_data || {}), media_url: e.target.value },
+                                    })}
+                                    className="h-9 text-xs"
+                                    placeholder="https://... image or video URL"
+                                />
+                            </div>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Article / External Link</label>
+                                <Input
+                                    value={formData.linkedin_data?.link || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        linkedin_data: { ...(formData.linkedin_data || {}), link: e.target.value },
+                                    })}
+                                    className="h-9 text-xs"
+                                    placeholder="https://example.com/article"
+                                />
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                <DialogFooter className="flex flex-row items-center justify-end gap-2 pt-2 border-t border-border">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onOpenChange(false)}
+                        className="text-xs"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="default"
+                        size="sm"
+                        onClick={handleSave}
+                        disabled={saving || (platform === "twitter" && twitterOverLimit)}
+                        className="text-xs font-semibold gap-1.5"
+                    >
+                        {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                        Save Changes
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
 
-// ─── Publish Button Component ─────────────────────────────────────────────────
-function PublishButton({
-    post,
-    enabledPlatforms,
-    onPublished,
+// ─── Delete Confirmation Dialog ───────────────────────────────────────────────
+function DeleteConfirmDialog({
+    open,
+    onOpenChange,
+    deleteTarget,
+    onConfirmDelete,
 }: {
-    post: PostData;
-    enabledPlatforms: string[];
-    onPublished: (postId: string, publishedTo: Record<string, boolean>) => void;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    deleteTarget: { id: string; title: string; type: "social" | "blog"; platformName?: string } | null;
+    onConfirmDelete: (id: string, type: "social" | "blog") => Promise<void>;
 }) {
-    const [publishing, setPublishing] = useState(false);
-    const [results, setResults] = useState<Record<string, PublishResult> | null>(null);
-    const [showResults, setShowResults] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
-    const availablePlatforms = enabledPlatforms.filter((p) => {
-        if (p === "youtube") return !!(post.youtube_data || post.youtube);
-        if (p === "instagram") return !!(post.instagram_data || post.instagram);
-        if (p === "facebook") return !!(post.facebook_data || post.facebook);
-        if (p === "twitter") return !!post.twitter;
-        return true;
-    });
+    if (!deleteTarget) return null;
 
-    const unpublished = availablePlatforms.filter((p) => !post.published_to?.[p]);
-    const allPublished = unpublished.length === 0 && availablePlatforms.length > 0;
-
-    const doPublish = async (platforms: string[]) => {
-        if (!platforms.length) return;
-        setPublishing(true);
-        setResults(null);
+    const handleDelete = async () => {
+        setDeleting(true);
         try {
-            const res = await fetch("/api/publish", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ post_id: post.id, platforms }),
-            });
-            const json = await res.json();
-            setResults(json.results || {});
-            setShowResults(true);
-            if (json.published_to) onPublished(post.id, json.published_to);
-        } catch {
-            setResults({ error: { success: false, error: "Network error" } });
-            setShowResults(true);
+            await onConfirmDelete(deleteTarget.id, deleteTarget.type);
+            onOpenChange(false);
         } finally {
-            setPublishing(false);
+            setDeleting(false);
         }
     };
 
     return (
-        <div className="relative flex items-center gap-2">
-            <Button
-                variant={allPublished ? "outline" : "default"}
-                size="sm"
-                onClick={() => doPublish(unpublished.length > 0 ? unpublished : availablePlatforms)}
-                disabled={publishing}
-                className="gap-1.5 text-xs font-semibold shadow-sm"
-            >
-                {publishing ? (
-                    <Loader2 size={13} className="animate-spin" />
-                ) : allPublished ? (
-                    <CheckCircle2 size={13} className="text-emerald-500" />
-                ) : (
-                    <Share2 size={13} />
-                )}
-                {allPublished ? "Published" : "1-Click Publish"}
-            </Button>
-
-            {showResults && results && (
-                <div className="absolute right-0 top-full mt-2 z-20 w-72 rounded-xl border border-border bg-card p-3 shadow-xl space-y-2 text-xs">
-                    <div className="flex items-center justify-between font-bold text-foreground pb-1 border-b border-border">
-                        <span>Publish Status</span>
-                        <button onClick={() => setShowResults(false)} className="text-muted-foreground hover:text-foreground">✕</button>
-                    </div>
-                    {Object.entries(results).map(([plat, r]: any) => (
-                        <div key={plat} className="flex items-center justify-between">
-                            <span className="capitalize font-medium text-foreground">{plat}</span>
-                            {r.success ? (
-                                <span className="text-emerald-500 flex items-center gap-1 font-semibold">
-                                    <CheckCircle2 size={12} /> Live
-                                </span>
-                            ) : (
-                                <span className="text-destructive flex items-center gap-1 truncate max-w-[140px]" title={r.error}>
-                                    <XCircle size={12} /> {r.error || "Failed"}
-                                </span>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-md p-5 rounded-2xl">
+                <DialogHeader>
+                    <DialogTitle className="text-base font-bold flex items-center gap-2 text-destructive">
+                        <Trash2 size={16} /> Delete {deleteTarget.platformName || "Post"}
+                    </DialogTitle>
+                    <DialogDescription className="text-xs text-muted-foreground pt-1 leading-relaxed">
+                        Are you sure you want to permanently delete <strong className="text-foreground">&ldquo;{deleteTarget.title}&rdquo;</strong>?
+                        This will remove it from your console and database.
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter className="flex flex-row items-center justify-end gap-2 pt-3 border-t border-border">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onOpenChange(false)}
+                        className="text-xs"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleDelete}
+                        disabled={deleting}
+                        className="text-xs font-semibold gap-1.5"
+                    >
+                        {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                        Delete Post
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
 
+// ─── Main Scalable Posts Page Component ───────────────────────────────────────
 export default function PostsPage() {
     const [posts, setPosts] = useState<PostData[]>([]);
+    const [blogPosts, setBlogPosts] = useState<BlogPostData[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<Platform>("all");
-    const [enabledPlatforms, setEnabledPlatforms] = useState<string[]>(["youtube", "instagram", "facebook", "twitter"]);
+    const [activeTab, setActiveTab] = useState<Platform>("blog");
+    const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
+    // Edit and Delete Modal states
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [editTarget, setEditTarget] = useState<{ type: "social" | "blog"; platformTab?: Platform; data: any } | null>(null);
+
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string; type: "social" | "blog"; platformName?: string } | null>(null);
 
     const loadPosts = useCallback(async () => {
         setLoading(true);
         try {
-            const [postsRes, settingsRes] = await Promise.all([
-                fetch("/api/posts"),
-                fetch("/api/agent-settings"),
-            ]);
-
-            if (postsRes.ok) {
-                const data = await postsRes.json();
+            const res = await fetch("/api/posts?type=all");
+            if (res.ok) {
+                const data = await res.json();
                 setPosts(data.posts || []);
-            }
-
-            if (settingsRes.ok) {
-                const settingsData = await settingsRes.json();
-                const settingsMap: Record<string, string> = {};
-                for (const row of settingsData.settings ?? []) settingsMap[row.key] = row.value ?? "";
-
-                const enabled: string[] = [];
-                if (settingsMap.social_youtube_enabled !== "false") enabled.push("youtube");
-                if (settingsMap.social_ig_enabled !== "false") enabled.push("instagram");
-                if (settingsMap.social_fb_enabled !== "false") enabled.push("facebook");
-                if (settingsMap.social_twitter_enabled === "true") enabled.push("twitter");
-                setEnabledPlatforms(enabled);
+                setBlogPosts(data.blog_posts || []);
             }
         } catch (err) {
             console.error("Failed to load posts:", err);
@@ -596,152 +1453,523 @@ export default function PostsPage() {
         );
     };
 
+    const handleBlogPublishedUpdate = (blogId: string, url: string) => {
+        setBlogPosts((prev) =>
+            prev.map((b) => (b.id === blogId ? { ...b, wp_status: "publish", wp_post_url: url } : b))
+        );
+    };
+
+    // Edit Handlers
+    const handleOpenEdit = (type: "social" | "blog", data: any, platformTab?: Platform) => {
+        setEditTarget({ type, platformTab, data });
+        setEditModalOpen(true);
+    };
+
+    const handleSaveEdit = (type: "social" | "blog", updated: any) => {
+        if (type === "blog") {
+            setBlogPosts((prev) => prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b)));
+        } else {
+            setPosts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
+        }
+    };
+
+    // Delete Handlers
+    const handleOpenDelete = (id: string, title: string, type: "social" | "blog", platformName?: string) => {
+        setDeleteTarget({ id, title, type, platformName });
+        setDeleteModalOpen(true);
+    };
+
+    const handleConfirmDelete = async (id: string, type: "social" | "blog") => {
+        try {
+            const res = await fetch(`/api/posts/${id}?type=${type}`, { method: "DELETE" });
+            if (res.ok) {
+                if (type === "blog") {
+                    setBlogPosts((prev) => prev.filter((b) => b.id !== id));
+                } else {
+                    setPosts((prev) => prev.filter((p) => p.id !== id));
+                }
+            }
+        } catch (err) {
+            console.error("Failed to delete post:", err);
+        }
+    };
+
+    // Category filter for Blog Articles
+    const allCategories = Array.from(
+        new Set(blogPosts.map((b) => b.category_hint).filter(Boolean))
+    );
+
+    const filteredBlogPosts = blogPosts.filter((b) => {
+        if (selectedCategory === "all") return true;
+        return b.category_hint.toLowerCase() === selectedCategory.toLowerCase();
+    });
+
+    // Platform-specific filtered post lists
+    const youtubePosts = posts.filter((p) => !!(p.youtube_data || p.youtube));
+    const instagramPosts = posts.filter((p) => !!(p.instagram_data || p.instagram));
+    const facebookPosts = posts.filter((p) => !!(p.facebook_data || p.facebook));
+    const twitterPosts = posts.filter((p) => !!(p.twitter || p.twitter_data));
+    const linkedinPosts = posts.filter((p) => !!(p.linkedin || p.linkedin_data));
+
+    // Current tab items count
+    let currentTabCount = 0;
+    if (activeTab === "blog") currentTabCount = filteredBlogPosts.length;
+    else if (activeTab === "youtube") currentTabCount = youtubePosts.length;
+    else if (activeTab === "instagram") currentTabCount = instagramPosts.length;
+    else if (activeTab === "facebook") currentTabCount = facebookPosts.length;
+    else if (activeTab === "twitter") currentTabCount = twitterPosts.length;
+    else if (activeTab === "linkedin") currentTabCount = linkedinPosts.length;
+
     return (
         <PluginGate pluginKey="posts">
-            <div className="min-h-screen bg-background text-foreground">
-                <header className="sticky top-0 z-10 border-b border-border bg-card/95 backdrop-blur-md shadow-sm">
-                    <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-                        <div className="flex items-center gap-3">
+            <div className="min-h-screen bg-background text-foreground pb-16">
+                {/* ── Mobile-Optimized Sticky Top Navbar ── */}
+                <header className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur-md shadow-sm">
+                    <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-3 sm:px-4 py-2.5 sm:py-3">
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                             <Link href="/">
-                                <Button variant="ghost" size="sm" className="gap-2 -ml-2 text-muted-foreground hover:text-foreground">
+                                <Button variant="ghost" size="sm" className="h-8 px-2 -ml-1 text-muted-foreground hover:text-foreground">
                                     <ArrowLeft size={16} />
-                                    <span>Dashboard</span>
+                                    <span className="hidden sm:inline ml-1">Dashboard</span>
                                 </Button>
                             </Link>
-                            <div className="h-5 w-px bg-border hidden sm:block" />
-                            <h1 className="text-lg font-bold tracking-tight">Social Posts Console</h1>
+                            <div className="h-4 w-px bg-border hidden sm:block" />
+                            <h1 className="text-base sm:text-lg font-bold tracking-tight truncate">
+                                Posts Console
+                            </h1>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                             <ThemeToggle />
-                            <Button variant="outline" size="sm" onClick={loadPosts} className="gap-1.5 text-xs">
-                                <RefreshCcw size={13} /> Refresh
+                            <Button variant="outline" size="sm" onClick={loadPosts} className="h-8 px-2 sm:px-3 text-xs gap-1.5">
+                                <RefreshCcw size={13} className={loading ? "animate-spin" : ""} />
+                                <span className="hidden sm:inline">Refresh</span>
                             </Button>
                             <Link href="/posts/settings">
-                                <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-                                    <Settings size={13} /> Channels
+                                <Button variant="outline" size="sm" className="h-8 px-2 sm:px-3 text-xs gap-1.5">
+                                    <Settings size={13} />
+                                    <span className="hidden sm:inline">Channels</span>
                                 </Button>
                             </Link>
                         </div>
                     </div>
                 </header>
 
-                <main className="mx-auto max-w-5xl px-4 py-6 space-y-6">
-                    {/* Platform Filter Tabs */}
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                <main className="mx-auto max-w-5xl px-3 sm:px-4 py-4 sm:py-6 space-y-5">
+                    {/* ── Scalable Platform Tabs (All Channels removed) ── */}
+                    <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
                         {PLATFORMS.map((p) => {
                             const active = activeTab === p.key;
+                            let count = 0;
+                            if (p.key === "blog") count = blogPosts.length;
+                            else if (p.key === "youtube") count = youtubePosts.length;
+                            else if (p.key === "instagram") count = instagramPosts.length;
+                            else if (p.key === "facebook") count = facebookPosts.length;
+                            else if (p.key === "twitter") count = twitterPosts.length;
+                            else if (p.key === "linkedin") count = linkedinPosts.length;
+
                             return (
                                 <button
                                     key={p.key}
                                     onClick={() => setActiveTab(p.key)}
-                                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
+                                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all shrink-0 min-h-[38px] ${
                                         active ? p.activeClass : p.inactiveClass
                                     }`}
                                 >
                                     {p.icon(active)}
                                     <span>{p.label}</span>
+                                    <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                                        active ? "bg-black/20 text-white" : "bg-muted text-muted-foreground"
+                                    }`}>
+                                        {count}
+                                    </span>
                                 </button>
                             );
                         })}
                     </div>
 
-                    {/* Posts List */}
-                    {loading ? (
-                        <div className="flex h-64 items-center justify-center">
-                            <Loader2 className="animate-spin h-8 w-8 text-muted-foreground" />
-                        </div>
-                    ) : posts.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-border p-12 text-center space-y-3">
-                            <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto text-xl font-bold">
-                                ✍️
-                            </div>
-                            <h3 className="font-bold text-base">No social posts created yet</h3>
-                            <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                                Ask your AI Agent in chat to create posts or reels (e.g. &quot;Create a YouTube Shorts script and Instagram Reel for our launch&quot;).
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="space-y-8">
-                            {posts.map((post) => {
-                                const title = cleanTitle(post.title || "Social Post Draft");
-                                const imageSrc = post.image_url || null;
-
+                    {/* ── Category Filter Bar (Visible on Blog tab) ── */}
+                    {activeTab === "blog" && allCategories.length > 0 && (
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs scrollbar-none">
+                            <span className="text-muted-foreground text-[11px] font-medium mr-1 shrink-0 flex items-center gap-1">
+                                <Folder size={12} /> Category:
+                            </span>
+                            <button
+                                onClick={() => setSelectedCategory("all")}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors shrink-0 ${
+                                    selectedCategory === "all"
+                                        ? "bg-primary text-primary-foreground border-primary"
+                                        : "bg-card text-muted-foreground border-border hover:bg-accent"
+                                }`}
+                            >
+                                All ({blogPosts.length})
+                            </button>
+                            {allCategories.map((cat) => {
+                                const catCount = blogPosts.filter((b) => b.category_hint.toLowerCase() === cat.toLowerCase()).length;
                                 return (
-                                    <div key={post.id} className="rounded-2xl border border-border/80 bg-card/60 p-4 sm:p-6 shadow-sm space-y-4">
-                                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
-                                            <div>
-                                                <h2 className="font-bold text-base text-foreground leading-snug">{title}</h2>
-                                                <p className="text-[11px] text-muted-foreground mt-0.5">
-                                                    Created {new Date(post.created_at).toLocaleDateString()} · ID: {post.id.slice(0, 8)}
-                                                </p>
-                                            </div>
-
-                                            <div className="flex items-center gap-3">
-                                                <PublishStatusIcons publishedTo={post.published_to} />
-                                                <PublishButton
-                                                    post={post}
-                                                    enabledPlatforms={enabledPlatforms}
-                                                    onPublished={handlePublishedUpdate}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Card Renderers */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                                            {/* YouTube */}
-                                            {(activeTab === "all" || activeTab === "youtube") && (post.youtube_data || post.youtube) && (
-                                                <div className="flex flex-col items-center">
-                                                    <YouTubePost
-                                                        post={post.youtube || ""}
-                                                        imageSrc={imageSrc}
-                                                        title={title}
-                                                        rawData={post.youtube_data}
-                                                    />
-                                                </div>
-                                            )}
-
-                                            {/* Instagram */}
-                                            {(activeTab === "all" || activeTab === "instagram") && (post.instagram_data || post.instagram) && (
-                                                <div className="flex flex-col items-center">
-                                                    <InstagramPost
-                                                        post={post.instagram || ""}
-                                                        imageSrc={imageSrc}
-                                                        title={title}
-                                                        rawData={post.instagram_data}
-                                                    />
-                                                </div>
-                                            )}
-
-                                            {/* Facebook */}
-                                            {(activeTab === "all" || activeTab === "facebook") && (post.facebook_data || post.facebook) && (
-                                                <div className="flex flex-col items-center">
-                                                    <FacebookPost
-                                                        post={post.facebook || ""}
-                                                        imageSrc={imageSrc}
-                                                        title={title}
-                                                        rawData={post.facebook_data}
-                                                    />
-                                                </div>
-                                            )}
-
-                                            {/* Twitter */}
-                                            {(activeTab === "all" || activeTab === "twitter") && post.twitter && (
-                                                <div className="flex flex-col items-center">
-                                                    <TwitterPost
-                                                        post={post.twitter}
-                                                        imageSrc={imageSrc}
-                                                        title={title}
-                                                    />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
+                                    <button
+                                        key={cat}
+                                        onClick={() => setSelectedCategory(cat)}
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors shrink-0 ${
+                                            selectedCategory.toLowerCase() === cat.toLowerCase()
+                                                ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                                                : "bg-card text-muted-foreground border-border hover:bg-accent"
+                                        }`}
+                                    >
+                                        {cat} ({catCount})
+                                    </button>
                                 );
                             })}
                         </div>
                     )}
+
+                    {/* ── Platform-Specific Content List ── */}
+                    {loading ? (
+                        <div className="flex h-64 items-center justify-center">
+                            <Loader2 className="animate-spin h-8 w-8 text-muted-foreground" />
+                        </div>
+                    ) : currentTabCount === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-border p-8 sm:p-12 text-center space-y-3">
+                            <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto text-xl font-bold">
+                                ✍️
+                            </div>
+                            <h3 className="font-bold text-base sm:text-lg">No {activeTab.toUpperCase()} posts found</h3>
+                            <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
+                                {activeTab === "blog"
+                                    ? "Ask your AI Agent to create and save a WordPress article (e.g. 'Research AI news and write a blog post')."
+                                    : `Ask your AI Agent to draft posts for ${activeTab.toUpperCase()} (e.g. 'Create a ${activeTab.toUpperCase()} video and reel').`}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-6 sm:space-y-8">
+                            {/* 1. Blog Tab: WordPress Articles */}
+                            {activeTab === "blog" && (
+                                <div className="space-y-4">
+                                    {filteredBlogPosts.map((blog) => (
+                                        <BlogPostCard
+                                            key={blog.id}
+                                            post={blog}
+                                            onEdit={(b) => handleOpenEdit("blog", b, "blog")}
+                                            onDelete={(id, title) => handleOpenDelete(id, title, "blog", "WordPress Article")}
+                                            onPublished={handleBlogPublishedUpdate}
+                                            onCategoryClick={(cat) => setSelectedCategory(cat)}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* 2. YouTube Tab */}
+                            {activeTab === "youtube" && (
+                                <div className="space-y-6">
+                                    {youtubePosts.map((post) => {
+                                        const ytTitle = post.youtube_data?.title || cleanTitle(post.title);
+                                        const isPublished = Boolean(post.published_to?.youtube);
+
+                                        return (
+                                            <div key={post.id} className="rounded-2xl border border-border/80 bg-card/60 p-4 sm:p-6 shadow-sm space-y-4">
+                                                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
+                                                    <div className="min-w-0 flex-1">
+                                                        <h2 className="font-bold text-base text-foreground leading-snug truncate">{ytTitle}</h2>
+                                                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                                                            Created {new Date(post.created_at).toLocaleDateString()} · ID: {post.id.slice(0, 8)}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <SinglePlatformPublishButton
+                                                            postId={post.id}
+                                                            platform="youtube"
+                                                            label="YouTube"
+                                                            isPublished={isPublished}
+                                                            onPublished={handlePublishedUpdate}
+                                                        />
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenEdit("social", post, "youtube")}
+                                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                                            title="Edit YouTube Video"
+                                                        >
+                                                            <Pencil size={13} />
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenDelete(post.id, ytTitle, "social", "YouTube Video")}
+                                                            className="h-8 w-8 text-destructive/80 hover:text-destructive hover:bg-destructive/10 hover:border-destructive/30"
+                                                            title="Delete YouTube Video"
+                                                        >
+                                                            <Trash2 size={13} />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="max-w-2xl mx-auto">
+                                                    <YouTubePost
+                                                        post={post.youtube || ""}
+                                                        imageSrc={post.image_url}
+                                                        title={ytTitle}
+                                                        rawData={post.youtube_data}
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* 3. Instagram Tab */}
+                            {activeTab === "instagram" && (
+                                <div className="space-y-6">
+                                    {instagramPosts.map((post) => {
+                                        const igTitle = cleanTitle(post.title);
+                                        const isPublished = Boolean(post.published_to?.instagram);
+
+                                        return (
+                                            <div key={post.id} className="rounded-2xl border border-border/80 bg-card/60 p-4 sm:p-6 shadow-sm space-y-4">
+                                                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
+                                                    <div className="min-w-0 flex-1">
+                                                        <h2 className="font-bold text-base text-foreground leading-snug truncate">{igTitle}</h2>
+                                                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                                                            Created {new Date(post.created_at).toLocaleDateString()} · ID: {post.id.slice(0, 8)}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <SinglePlatformPublishButton
+                                                            postId={post.id}
+                                                            platform="instagram"
+                                                            label="Instagram"
+                                                            isPublished={isPublished}
+                                                            onPublished={handlePublishedUpdate}
+                                                        />
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenEdit("social", post, "instagram")}
+                                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                                            title="Edit Instagram Post"
+                                                        >
+                                                            <Pencil size={13} />
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenDelete(post.id, igTitle, "social", "Instagram Post")}
+                                                            className="h-8 w-8 text-destructive/80 hover:text-destructive hover:bg-destructive/10 hover:border-destructive/30"
+                                                            title="Delete Instagram Post"
+                                                        >
+                                                            <Trash2 size={13} />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="max-w-xl mx-auto">
+                                                    <InstagramPost
+                                                        post={post.instagram || ""}
+                                                        imageSrc={post.image_url}
+                                                        title={igTitle}
+                                                        rawData={post.instagram_data}
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* 4. Facebook Tab */}
+                            {activeTab === "facebook" && (
+                                <div className="space-y-6">
+                                    {facebookPosts.map((post) => {
+                                        const fbTitle = post.facebook_data?.title || cleanTitle(post.title);
+                                        const isPublished = Boolean(post.published_to?.facebook);
+
+                                        return (
+                                            <div key={post.id} className="rounded-2xl border border-border/80 bg-card/60 p-4 sm:p-6 shadow-sm space-y-4">
+                                                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
+                                                    <div className="min-w-0 flex-1">
+                                                        <h2 className="font-bold text-base text-foreground leading-snug truncate">{fbTitle}</h2>
+                                                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                                                            Created {new Date(post.created_at).toLocaleDateString()} · ID: {post.id.slice(0, 8)}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <SinglePlatformPublishButton
+                                                            postId={post.id}
+                                                            platform="facebook"
+                                                            label="Facebook"
+                                                            isPublished={isPublished}
+                                                            onPublished={handlePublishedUpdate}
+                                                        />
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenEdit("social", post, "facebook")}
+                                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                                            title="Edit Facebook Post"
+                                                        >
+                                                            <Pencil size={13} />
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenDelete(post.id, fbTitle, "social", "Facebook Post")}
+                                                            className="h-8 w-8 text-destructive/80 hover:text-destructive hover:bg-destructive/10 hover:border-destructive/30"
+                                                            title="Delete Facebook Post"
+                                                        >
+                                                            <Trash2 size={13} />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="max-w-2xl mx-auto">
+                                                    <FacebookPost
+                                                        post={post.facebook || ""}
+                                                        imageSrc={post.image_url}
+                                                        title={fbTitle}
+                                                        rawData={post.facebook_data}
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* 5. X / Twitter Tab */}
+                            {activeTab === "twitter" && (
+                                <div className="space-y-6">
+                                    {twitterPosts.map((post) => {
+                                        const twTitle = cleanTitle(post.title);
+                                        const isPublished = Boolean(post.published_to?.twitter);
+
+                                        return (
+                                            <div key={post.id} className="rounded-2xl border border-border/80 bg-card/60 p-4 sm:p-6 shadow-sm space-y-4">
+                                                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
+                                                    <div className="min-w-0 flex-1">
+                                                        <h2 className="font-bold text-base text-foreground leading-snug truncate">{twTitle}</h2>
+                                                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                                                            Created {new Date(post.created_at).toLocaleDateString()} · ID: {post.id.slice(0, 8)}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <SinglePlatformPublishButton
+                                                            postId={post.id}
+                                                            platform="twitter"
+                                                            label="X"
+                                                            isPublished={isPublished}
+                                                            onPublished={handlePublishedUpdate}
+                                                        />
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenEdit("social", post, "twitter")}
+                                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                                            title="Edit X Post"
+                                                        >
+                                                            <Pencil size={13} />
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenDelete(post.id, twTitle, "social", "X Tweet")}
+                                                            className="h-8 w-8 text-destructive/80 hover:text-destructive hover:bg-destructive/10 hover:border-destructive/30"
+                                                            title="Delete X Post"
+                                                        >
+                                                            <Trash2 size={13} />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="max-w-xl mx-auto">
+                                                    <TwitterPost
+                                                        post={post.twitter}
+                                                        imageSrc={post.image_url}
+                                                        title={twTitle}
+                                                        rawData={post.twitter_data}
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* 6. LinkedIn Tab */}
+                            {activeTab === "linkedin" && (
+                                <div className="space-y-6">
+                                    {linkedinPosts.map((post) => {
+                                        const liTitle = post.linkedin_data?.title || cleanTitle(post.title);
+                                        const isPublished = Boolean(post.published_to?.linkedin);
+
+                                        return (
+                                            <div key={post.id} className="rounded-2xl border border-border/80 bg-card/60 p-4 sm:p-6 shadow-sm space-y-4">
+                                                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
+                                                    <div className="min-w-0 flex-1">
+                                                        <h2 className="font-bold text-base text-foreground leading-snug truncate">{liTitle}</h2>
+                                                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                                                            Created {new Date(post.created_at).toLocaleDateString()} · ID: {post.id.slice(0, 8)}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <SinglePlatformPublishButton
+                                                            postId={post.id}
+                                                            platform="linkedin"
+                                                            label="LinkedIn"
+                                                            isPublished={isPublished}
+                                                            onPublished={handlePublishedUpdate}
+                                                        />
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenEdit("social", post, "linkedin")}
+                                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                                            title="Edit LinkedIn Post"
+                                                        >
+                                                            <Pencil size={13} />
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenDelete(post.id, liTitle, "social", "LinkedIn Post")}
+                                                            className="h-8 w-8 text-destructive/80 hover:text-destructive hover:bg-destructive/10 hover:border-destructive/30"
+                                                            title="Delete LinkedIn Post"
+                                                        >
+                                                            <Trash2 size={13} />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="max-w-2xl mx-auto">
+                                                    <LinkedInPost
+                                                        post={post.linkedin || ""}
+                                                        imageSrc={post.image_url}
+                                                        title={liTitle}
+                                                        rawData={post.linkedin_data}
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </main>
+
+                {/* ── Modals: Edit & Delete ── */}
+                <PostEditDialog
+                    open={editModalOpen}
+                    onOpenChange={setEditModalOpen}
+                    editTarget={editTarget}
+                    onSaved={handleSaveEdit}
+                />
+
+                <DeleteConfirmDialog
+                    open={deleteModalOpen}
+                    onOpenChange={setDeleteModalOpen}
+                    deleteTarget={deleteTarget}
+                    onConfirmDelete={handleConfirmDelete}
+                />
             </div>
         </PluginGate>
     );

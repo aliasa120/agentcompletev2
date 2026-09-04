@@ -155,7 +155,8 @@ def create_tables():
     # Check which tables already exist
     tables_to_create = []
     for table in ["workflows", "agent_configs", "agent_tool_assignments",
-                  "mcp_connections", "skills_library", "design_assets", "telegram_chat_bindings", "telegram_bots",
+                  "mcp_connections", "skills_library", "design_assets", "design_folders", "agent_design_folders",
+                  "telegram_chat_bindings", "telegram_bots",
                   "agent_scheduled_tasks", "plugins", "user_plugin_settings"]:
         exists = _table_exists(table)
         status = "✅ exists" if exists else "❌ missing"
@@ -312,6 +313,62 @@ CREATE TABLE IF NOT EXISTS design_assets (
   CONSTRAINT design_assets_user_asset_key_unique UNIQUE (user_id, asset_key)
 );
 
+-- Brand asset folders and R2-backed asset metadata
+CREATE TABLE IF NOT EXISTS design_folders (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now(),
+  CONSTRAINT design_folders_user_name_unique UNIQUE (user_id, name)
+);
+
+ALTER TABLE design_assets ADD COLUMN IF NOT EXISTS folder_id       UUID REFERENCES design_folders(id) ON DELETE SET NULL;
+ALTER TABLE design_assets ADD COLUMN IF NOT EXISTS media_type      TEXT DEFAULT 'image';
+ALTER TABLE design_assets ADD COLUMN IF NOT EXISTS mime_type       TEXT DEFAULT '';
+ALTER TABLE design_assets ADD COLUMN IF NOT EXISTS storage_backend TEXT DEFAULT 'local_legacy';
+ALTER TABLE design_assets ADD COLUMN IF NOT EXISTS storage_key      TEXT DEFAULT '';
+ALTER TABLE design_assets ADD COLUMN IF NOT EXISTS public_url      TEXT;
+ALTER TABLE design_assets ADD COLUMN IF NOT EXISTS size_bytes      BIGINT;
+ALTER TABLE design_assets ADD COLUMN IF NOT EXISTS source          TEXT DEFAULT 'upload';
+ALTER TABLE design_assets ADD COLUMN IF NOT EXISTS sort_order      INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE design_assets ALTER COLUMN file_path DROP NOT NULL;
+
+CREATE TABLE IF NOT EXISTS agent_design_folders (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id    UUID NOT NULL REFERENCES agent_configs(id) ON DELETE CASCADE,
+  folder_id   UUID NOT NULL REFERENCES design_folders(id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(agent_id, folder_id)
+);
+
+CREATE TABLE IF NOT EXISTS provider_design_assets (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider_slug   TEXT NOT NULL,
+  design_asset_id UUID NOT NULL REFERENCES design_assets(id) ON DELETE CASCADE,
+  created_at      TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(provider_slug, design_asset_id)
+);
+
+INSERT INTO design_folders (user_id, name, description, sort_order)
+SELECT DISTINCT user_id, 'Legacy Brand Assets', 'Assets imported from the previous flat library', 999
+FROM design_assets
+WHERE user_id IS NOT NULL
+ON CONFLICT (user_id, name) DO NOTHING;
+
+UPDATE design_assets da
+SET folder_id = df.id
+FROM design_folders df
+WHERE da.folder_id IS NULL
+  AND df.user_id IS NOT DISTINCT FROM da.user_id
+  AND df.name = 'Legacy Brand Assets';
+
+CREATE INDEX IF NOT EXISTS idx_design_assets_folder ON design_assets(folder_id);
+CREATE INDEX IF NOT EXISTS idx_design_assets_user ON design_assets(user_id);
+CREATE INDEX IF NOT EXISTS idx_agent_design_folders_agent ON agent_design_folders(agent_id);
+
 -- ── telegram_chat_bindings ──────────────────────────────────
 CREATE TABLE IF NOT EXISTS telegram_chat_bindings (
   chat_id     TEXT,
@@ -381,6 +438,8 @@ ALTER TABLE agent_tool_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mcp_connections        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE skills_library         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE design_assets          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE design_folders         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_design_folders   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE telegram_chat_bindings  DISABLE ROW LEVEL SECURITY;
 ALTER TABLE telegram_bots           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_scheduled_tasks   ENABLE ROW LEVEL SECURITY;
@@ -426,6 +485,16 @@ CREATE POLICY user_agent_tool_assignments_policy ON agent_tool_assignments
   USING (EXISTS (SELECT 1 FROM agent_configs WHERE agent_configs.id = agent_tool_assignments.agent_id AND agent_configs.user_id = auth.uid()))
   WITH CHECK (EXISTS (SELECT 1 FROM agent_configs WHERE agent_configs.id = agent_tool_assignments.agent_id AND agent_configs.user_id = auth.uid()));
 
+DROP POLICY IF EXISTS user_design_folders_policy ON design_folders;
+CREATE POLICY user_design_folders_policy ON design_folders
+  FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS user_agent_design_folders_policy ON agent_design_folders;
+CREATE POLICY user_agent_design_folders_policy ON agent_design_folders
+  FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM agent_configs WHERE agent_configs.id = agent_design_folders.agent_id AND agent_configs.user_id = auth.uid()))
+  WITH CHECK (EXISTS (SELECT 1 FROM agent_configs WHERE agent_configs.id = agent_design_folders.agent_id AND agent_configs.user_id = auth.uid()));
+
 -- ── Realtime: Enable for instant config reloads ──────────────
 ALTER PUBLICATION supabase_realtime ADD TABLE workflows;
 ALTER PUBLICATION supabase_realtime ADD TABLE agent_configs;
@@ -433,6 +502,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE agent_tool_assignments;
 ALTER PUBLICATION supabase_realtime ADD TABLE mcp_connections;
 ALTER PUBLICATION supabase_realtime ADD TABLE telegram_chat_bindings;
 ALTER PUBLICATION supabase_realtime ADD TABLE agent_scheduled_tasks;
+ALTER PUBLICATION supabase_realtime ADD TABLE design_folders;
+ALTER PUBLICATION supabase_realtime ADD TABLE agent_design_folders;
 
 -- ── Indexes ──────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_agent_configs_type

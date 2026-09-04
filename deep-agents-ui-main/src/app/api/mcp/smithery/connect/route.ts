@@ -451,40 +451,68 @@ async function handleRemoteConnect(
     }
   }
 
-  // 3. Create the remote connection on Smithery via POST
-  let connectionResult: any;
+  // 3. Check if connection already exists in namespace (e.g. pre-added in Toolbox like twitter), or create via POST
+  let connectionResult: any = null;
   try {
-    const postBody = {
-      mcpUrl: mcpServerUrl,
-      name: displayName,
-      ...(Object.keys(headersToSend).length > 0 ? { headers: headersToSend } : {})
-    };
-    console.log("[Smithery Connect] namespace:", namespace);
-    console.log("[Smithery Connect] mcpUrl:", mcpServerUrl);
-    console.log("[Smithery Connect] headersToSend:", headersToSend);
-    console.log("[Smithery Connect] POST body:", JSON.stringify(postBody));
-
-    const connRes = await fetch(`https://smithery.run/${namespace}`, {
-      method: "POST",
+    const listRes = await fetch(`https://smithery.run/${namespace}`, {
       headers: {
-        "Content-Type": "application/json",
         "Accept": "application/json",
         "User-Agent": "Mozilla/5.0",
         "Authorization": `Bearer ${smitheryApiKey.trim()}`,
       },
-      body: JSON.stringify(postBody)
     });
-    if (!connRes.ok) {
-      let errMsg = `Connection creation returned ${connRes.status}`;
-      try {
-        const errText = await connRes.text();
-        errMsg = `${errMsg}: ${errText}`;
-      } catch {}
-      throw new Error(errMsg);
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      const conns: any[] = listData.connections || (Array.isArray(listData) ? listData : []);
+      connectionResult = conns.find(
+        (c: any) =>
+          c.connectionId === qualifiedName ||
+          c.name?.toLowerCase() === displayName.toLowerCase() ||
+          c.mcpUrl?.includes(`/${qualifiedName}/mcp`) ||
+          c.mcpUrl?.includes(`/${qualifiedName}`)
+      );
+      if (connectionResult) {
+        console.log(`[Smithery Connect] Found existing namespace connection for ${qualifiedName}: ${connectionResult.connectionId} (${connectionResult.status?.state})`);
+      }
     }
-    connectionResult = await connRes.json();
-  } catch (e: any) {
-    return NextResponse.json({ success: false, error: `Failed to create Smithery connection: ${e.message}` });
+  } catch (lookupErr) {
+    console.warn("[Smithery Connect] Lookup existing connection failed:", lookupErr);
+  }
+
+  if (!connectionResult) {
+    try {
+      const postBody = {
+        mcpUrl: mcpServerUrl,
+        name: displayName,
+        ...(Object.keys(headersToSend).length > 0 ? { headers: headersToSend } : {})
+      };
+      console.log("[Smithery Connect] namespace:", namespace);
+      console.log("[Smithery Connect] mcpUrl:", mcpServerUrl);
+      console.log("[Smithery Connect] headersToSend:", headersToSend);
+      console.log("[Smithery Connect] POST body:", JSON.stringify(postBody));
+
+      const connRes = await fetch(`https://smithery.run/${namespace}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "User-Agent": "Mozilla/5.0",
+          "Authorization": `Bearer ${smitheryApiKey.trim()}`,
+        },
+        body: JSON.stringify(postBody)
+      });
+      if (!connRes.ok) {
+        let errMsg = `Connection creation returned ${connRes.status}`;
+        try {
+          const errText = await connRes.text();
+          errMsg = `${errMsg}: ${errText}`;
+        } catch {}
+        throw new Error(errMsg);
+      }
+      connectionResult = await connRes.json();
+    } catch (e: any) {
+      return NextResponse.json({ success: false, error: `Failed to create Smithery connection: ${e.message}` });
+    }
   }
 
   const connectionId = connectionResult.connectionId;
