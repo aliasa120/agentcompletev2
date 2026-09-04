@@ -8,6 +8,8 @@ from .social_saver_tools import (
     save_instagram_post,
     save_facebook_post,
     save_youtube_video,
+    save_linkedin_post,
+    save_twitter_post,
     save_social_bundle,
 )
 from .think import think_tool
@@ -90,6 +92,8 @@ __all__ = [
     "save_instagram_post",
     "save_facebook_post",
     "save_youtube_video",
+    "save_linkedin_post",
+    "save_twitter_post",
     "save_social_bundle",
     "get_design_guide",
     # ── Blog + WordPress tools ─────────────────────────────────────────────────

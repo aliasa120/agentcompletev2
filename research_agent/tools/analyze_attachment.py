@@ -21,9 +21,16 @@ import mimetypes
 import logging
 import requests
 import httpx
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
+from research_agent.brand_assets import (
+    asset_supports_direct_context,
+    build_direct_context_payload,
+    get_agent_brand_assets,
+    get_agent_capabilities,
+    resolve_selected_assets,
+)
 from research_agent.tools.provider_engine import (
     get_llm_config,
     get_settings,
@@ -214,8 +221,7 @@ def _extract_text_layer(raw_bytes: bytes, filename: str, mime_type: str, file_ur
     return None
 
 
-@tool(parse_docstring=True)
-def omni_analyzer(file_source: str, query: str, config: RunnableConfig) -> str:
+def _analyze_single_file(file_source: str, query: str, config: Optional[RunnableConfig] = None) -> str:
     """Universal file & document analysis tool — analyze any document, image, audio, video, or URL.
 
     Features:
@@ -487,3 +493,142 @@ def omni_analyzer(file_source: str, query: str, config: RunnableConfig) -> str:
             print(f"[omni_analyzer] LLM analysis call failed: {llm_err}")
             return f"❌ Error: Failed to analyze '{filename}' using {actual_provider}: {llm_err}"
 
+def _infer_source_media_type(source: str) -> Tuple[str, str]:
+    """Infer (media_type, mime_type) from URL, filename, or data URI."""
+    source_clean = source.strip().lower()
+
+    if source_clean.startswith("data:"):
+        header = source_clean.split(";")[0].replace("data:", "")
+        if header.startswith("image/"):
+            return "image", header
+        if header.startswith("video/"):
+            return "video", header
+        if header.startswith("audio/"):
+            return "audio", header
+        if header == "application/pdf" or "pdf" in header:
+            return "document", "application/pdf"
+        return "document", header
+
+    path_part = source_clean.split("?")[0].rstrip("/")
+    ext = os.path.splitext(path_part)[1]
+
+    if ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".tiff"):
+        mime = "image/png" if ext == ".png" else "image/webp" if ext == ".webp" else "image/jpeg"
+        return "image", mime
+    if ext in (".mp4", ".webm", ".mov", ".avi", ".mkv"):
+        return "video", f"video/{ext.lstrip('.')}"
+    if ext in (".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac"):
+        return "audio", f"audio/{ext.lstrip('.')}"
+    if ext == ".pdf":
+        return "document", "application/pdf"
+    if ext in (".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".csv", ".txt", ".md", ".html"):
+        return "document", "text/plain"
+
+    if any(hint in source_clean for hint in ["/photo-", "/image", "format=jpg", "format=png", "format=webp", "img_url"]):
+        return "image", "image/jpeg"
+
+    return "unknown", "application/octet-stream"
+
+@tool(parse_docstring=True)
+def omni_analyzer(
+    file_sources: List[str],
+    query: str,
+    agent_id: Optional[str] = None,
+    config: Optional[RunnableConfig] = None,
+) -> str:
+    """Analyze one or more files, URLs, or brand assets with capability-aware routing.
+
+    Supported inputs:
+    - Public URLs (images, videos, audio, documents, web pages)
+    - Workspace file names or paths
+    - Brand asset keys or labels attached to the current agent
+
+    Consistent Treatment:
+    - If the current model natively supports the asset modality (e.g. vision for images),
+      the asset is routed directly into the agent's context for native inspection.
+    - If the current model lacks native support (or for complex documents/text extraction),
+      it is analyzed by Omni and returned as structured text.
+
+    Args:
+        file_sources: One or more file names, URLs, asset keys, or asset labels to inspect.
+        query: The question or inspection instruction to apply to every selected file.
+        agent_id: Optional agent ID filter — if provided, inspects brand assets attached to this agent.
+        config: LangChain runtime configuration.
+
+    Returns:
+        A combined analysis, plus a direct-context marker when supported assets should be
+        attached to the next model request by the runtime.
+    """
+    if isinstance(file_sources, str):
+        file_sources = [file_sources]
+    if not file_sources:
+        return "❌ Error: file_sources is empty."
+
+    if len(file_sources) > 8:
+        return (
+            f"❌ Error: Too many files selected ({len(file_sources)}). "
+            "Maximum allowed is 8 assets per inspection call. Please select up to 8 assets."
+        )
+
+    configurable = config.get("configurable", {}) if config else {}
+    if not agent_id:
+        agent_id = configurable.get("agent_id")
+    user_id = configurable.get("user_id")
+
+    if not agent_id:
+        results = []
+        for source in file_sources:
+            results.append(f"### {source}\n{_analyze_single_file(source, query, config)}")
+        return "\n\n".join(results)
+
+    agent_assets = get_agent_brand_assets(agent_id)
+    selected, missing = resolve_selected_assets(file_sources, agent_assets)
+    caps = get_agent_capabilities(agent_id, user_id=user_id)
+
+    direct_assets = [asset for asset in selected if asset_supports_direct_context(asset, caps)]
+    omni_assets = [asset for asset in selected if not asset_supports_direct_context(asset, caps)]
+
+    sections = []
+
+    if omni_assets:
+        for asset in omni_assets:
+            source = asset.get("resolved_url") or asset.get("asset_key") or asset.get("label")
+            analysis = _analyze_single_file(source, query, config)
+            sections.append(f"### {asset.get('label') or asset.get('asset_key')}\n{analysis}")
+
+    for source in missing:
+        is_url = source.startswith(("http://", "https://", "ftp://"))
+        is_data = source.startswith("data:")
+        is_file = os.path.exists(source)
+
+        if is_url or is_data or is_file:
+            media_type, mime_type = _infer_source_media_type(source)
+            external_asset = {
+                "asset_key": source,
+                "label": os.path.basename(source.split("?")[0]) or source,
+                "media_type": media_type,
+                "mime_type": mime_type,
+                "resolved_media_type": media_type,
+                "resolved_url": source,
+            }
+            if asset_supports_direct_context(external_asset, caps):
+                direct_assets.append(external_asset)
+            else:
+                analysis = _analyze_single_file(source, query, config)
+                sections.append(f"### {source}\n{analysis}")
+        else:
+            # Reject brand asset not attached to this agent
+            sections.append(
+                f"### {source}\n❌ Access Denied: Asset '{source}' is not attached to this agent. "
+                "Only brand assets in folders attached to this agent can be inspected."
+            )
+
+    if direct_assets:
+        direct_summary = (
+            "Direct context assets (attached by the runtime):\n"
+            + "\n".join(f"- {asset.get('label') or asset.get('asset_key')}" for asset in direct_assets)
+        )
+        sections.insert(0, direct_summary)
+        sections.append(build_direct_context_payload(query, direct_assets))
+
+    return "\n\n".join(sections)

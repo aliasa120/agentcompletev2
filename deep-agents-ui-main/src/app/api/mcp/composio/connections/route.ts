@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { triggerAgentReload } from "@/lib/agent-reloader";
 
 const COMPOSIO_API_KEY = process.env.COMPOSIO_API_KEY ?? "";
-const COMPOSIO_BASE = "https://backend.composio.dev/api/v3";
+const COMPOSIO_BASE = "https://backend.composio.dev/api/v3.1";
 
 function getSupabaseClient(cookieStore: any) {
   return createServerClient(
@@ -123,10 +123,12 @@ export async function GET(req: Request) {
 
             let toolsList: { tool_key: string; tool_name: string }[] = [];
             if (active && toolkitSlug) {
-              const existing = cached?.find((c) => c.composio_conn_id === acc.id);
-              toolsList = existing?.available_tools ?? [];
-              if (!toolsList || toolsList.length === 0) {
-                toolsList = await fetchToolsForSlug(toolkitSlug, apiKey);
+              const fetchedTools = await fetchToolsForSlug(toolkitSlug, apiKey);
+              if (fetchedTools && fetchedTools.length > 0) {
+                toolsList = fetchedTools;
+              } else {
+                const existing = cached?.find((c) => c.composio_conn_id === acc.id);
+                toolsList = existing?.available_tools ?? [];
               }
             }
 

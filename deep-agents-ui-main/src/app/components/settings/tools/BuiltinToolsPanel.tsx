@@ -32,6 +32,8 @@ const BUILTIN_TOOLS = [
   { key: "save_youtube_video", label: "Save YouTube Video", desc: "Saves YouTube video drafts with SEO tags and custom thumbnail", pluginBadge: "Posts Plugin" },
   { key: "save_instagram_post", label: "Save Instagram Reel/Post", desc: "Saves Instagram Reels, photos, videos, & carousels to Posts console", pluginBadge: "Posts Plugin" },
   { key: "save_facebook_post", label: "Save Facebook Post", desc: "Saves Facebook Page posts, photos, and video reels", pluginBadge: "Posts Plugin" },
+  { key: "save_linkedin_post", label: "Save LinkedIn Post", desc: "Saves LinkedIn posts, video reels, and article shares", pluginBadge: "Posts Plugin" },
+  { key: "save_twitter_post", label: "Save X (Twitter) Post", desc: "Saves X posts and threads with R2 media attachments", pluginBadge: "Posts Plugin" },
   { key: "save_social_bundle", label: "Save Social Bundle", desc: "Saves multi-platform campaign across all social channels", pluginBadge: "Posts Plugin" },
   { key: "get_wordpress_categories", label: "WP Categories", desc: "Fetch WordPress categories", pluginBadge: "Posts Plugin" },
   { key: "publish_to_wordpress", label: "WordPress Publish", desc: "WP REST API publisher", pluginBadge: "Posts Plugin" },

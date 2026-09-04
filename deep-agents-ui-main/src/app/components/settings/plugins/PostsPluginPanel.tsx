@@ -329,6 +329,16 @@ export function PostsPluginPanel({
               desc: "Saves Facebook Page posts, photos, and video reels with captions.",
             },
             {
+              key: "save_linkedin_post",
+              label: "LinkedIn Post & Video Saver",
+              desc: "Saves LinkedIn thought leadership posts, native videos, photos, and article shares to Posts console.",
+            },
+            {
+              key: "save_twitter_post",
+              label: "X (Twitter) Post Saver",
+              desc: "Saves tweets and threads with attached photos and videos from Cloudflare R2 to Posts console.",
+            },
+            {
               key: "save_social_bundle",
               label: "Social Campaign Bundle Saver",
               desc: "Saves multi-platform cross-channel campaigns across social networks in one turn.",

@@ -23,7 +23,7 @@ from PIL import Image
 logger = logging.getLogger("grok_imagine_image")
 
 _GATEWAY_BASE = "https://ai-gateway.vercel.sh/v1"
-_MODEL = "xai/grok-imagine-image"
+_MODEL = "spacexai/grok-imagine-image"
 _MAX_IMAGE_BYTES = 20 * 1024 * 1024  # 20 MB limit per reference/source image
 _VALID_ASPECT_RATIOS = {"1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16"}
 
@@ -173,16 +173,55 @@ async def grok_imagine_generate(
     )
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as client:
-        # Try /v1/images/generations
-        resp = await client.post(
-            f"{_GATEWAY_BASE}/images/generations",
-            headers=headers,
-            json=payload_generations,
-        )
+        resp = None
 
-        # If /images/generations returns 404 or 400 with multimodal requirement, try /chat/completions fallback
-        if resp.status_code in (404, 400) and input_images_b64:
-            logger.info("[grok_imagine_image] /images/generations fallback -> trying /chat/completions multimodal...")
+        # 1. Image Editing: If a target source image is provided, call /v1/images/edits
+        if source_img is not None:
+            img_bytes, mime_type = _optimize_pil_image(source_img)
+            logger.info(
+                f"[grok_imagine_image] Editing target photo: sending {len(img_bytes)} bytes to {_GATEWAY_BASE}/images/edits..."
+            )
+            edit_headers = {"Authorization": f"Bearer {api_key}"}
+            ext = "png" if "png" in mime_type else "jpg"
+            files = {"image": (f"source.{ext}", img_bytes, mime_type)}
+            data = {
+                "model": _MODEL,
+                "prompt": full_prompt,
+            }
+            try:
+                resp = await client.post(
+                    f"{_GATEWAY_BASE}/images/edits",
+                    headers=edit_headers,
+                    data=data,
+                    files=files,
+                )
+                logger.info(f"[grok_imagine_image] /images/edits response status: {resp.status_code}")
+            except Exception as edit_err:
+                logger.warning(f"[grok_imagine_image] /images/edits request failed: {edit_err}")
+
+        # 2. Text-to-Image Generation (or fallback if /images/edits returned non-success)
+        if resp is None or not resp.is_success:
+            payload_generations = {
+                "model": _MODEL,
+                "prompt": full_prompt,
+                "aspect_ratio": ratio,
+                "response_format": "b64_json",
+            }
+            if input_images_b64 and source_img is None:
+                payload_generations["images"] = input_images_b64
+
+            logger.info(
+                f"[grok_imagine_image] Requesting {_MODEL} via {_GATEWAY_BASE}/images/generations (aspect_ratio={ratio})..."
+            )
+            resp = await client.post(
+                f"{_GATEWAY_BASE}/images/generations",
+                headers=headers,
+                json=payload_generations,
+            )
+
+        # 3. Multimodal Chat Fallback: if /images/generations returns 404 or 400 and we have images
+        if not resp.is_success and input_images_b64:
+            logger.info("[grok_imagine_image] fallback -> trying /chat/completions multimodal...")
             content_parts: list = [{"type": "text", "text": full_prompt}]
             for img_uri in input_images_b64:
                 content_parts.append({

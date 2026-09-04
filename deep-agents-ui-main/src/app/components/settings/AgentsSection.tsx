@@ -92,6 +92,8 @@ const BUILTIN_TOOLS = [
   { tool_key: "save_youtube_video",     tool_label: "Save YouTube Video",   category: "Plugin: Posts" },
   { tool_key: "save_instagram_post",    tool_label: "Save Instagram Reel/Post", category: "Plugin: Posts" },
   { tool_key: "save_facebook_post",     tool_label: "Save Facebook Post",   category: "Plugin: Posts" },
+  { tool_key: "save_linkedin_post",     tool_label: "Save LinkedIn Post",   category: "Plugin: Posts" },
+  { tool_key: "save_twitter_post",      tool_label: "Save X (Twitter) Post", category: "Plugin: Posts" },
   { tool_key: "save_social_bundle",     tool_label: "Save Social Bundle",   category: "Plugin: Posts" },
   { tool_key: "get_wordpress_categories", tool_label: "WP Categories",       category: "Plugin: Posts" },
   { tool_key: "publish_to_wordpress",   tool_label: "Publish to WordPress",  category: "Plugin: Posts" },
@@ -123,6 +125,115 @@ interface DesignAsset {
   sort_order: number;
 }
 
+interface DesignFolder {
+  id: string;
+  name: string;
+  description: string;
+}
+
+function BrandFoldersPicker({ agentId }: { agentId: string }) {
+  const [folders, setFolders] = useState<DesignFolder[]>([]);
+  const [attached, setAttached] = useState<DesignFolder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [allRes, attachedRes] = await Promise.all([
+        fetch("/api/design-folders"),
+        fetch(`/api/design-folders/agent?agent_id=${agentId}`),
+      ]);
+      const allData = await allRes.json();
+      const attachedData = await attachedRes.json();
+      setFolders(allData.folders ?? []);
+      setAttached((attachedData.folders ?? []).map((row: any) => row.design_folders).filter(Boolean));
+    } finally {
+      setLoading(false);
+    }
+  }, [agentId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const attach = async (folder: DesignFolder) => {
+    setBusy(folder.id);
+    try {
+      await fetch("/api/design-folders/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent_id: agentId, folder_id: folder.id }),
+      });
+      setAttached(prev => (prev.some(f => f.id === folder.id) ? prev : [...prev, folder]));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const detach = async (folder: DesignFolder) => {
+    setBusy(folder.id);
+    try {
+      await fetch("/api/design-folders/agent", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent_id: agentId, folder_id: folder.id }),
+      });
+      setAttached(prev => prev.filter(f => f.id !== folder.id));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (loading) {
+    return <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading folders…</div>;
+  }
+
+  if (folders.length === 0) {
+    return <p className="text-xs text-muted-foreground">No brand asset folders yet. Create one in the Brand Assets tab.</p>;
+  }
+
+  const unattached = folders.filter(f => !attached.some(a => a.id === f.id));
+
+  return (
+    <div className="space-y-3">
+      {attached.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {attached.map(folder => (
+            <div key={folder.id} className="flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/5 px-3 py-1 text-violet-600 dark:text-violet-400">
+              <span className="max-w-[160px] truncate text-xs font-medium">{folder.name}</span>
+              <button
+                type="button"
+                onClick={() => detach(folder)}
+                disabled={busy === folder.id}
+                className="rounded-full p-0.5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+              >
+                {busy === folder.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {unattached.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          {unattached.map(folder => (
+            <button
+              key={folder.id}
+              type="button"
+              onClick={() => attach(folder)}
+              disabled={busy === folder.id}
+              className="flex items-center justify-between gap-2 rounded-lg border border-dashed p-2 text-left text-xs transition-all hover:border-violet-500/40 hover:bg-violet-500/5 disabled:opacity-50"
+            >
+              <span className="min-w-0 flex-1 truncate font-medium">{folder.name}</span>
+              {busy === folder.id ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : <Plus className="h-3.5 w-3.5 text-muted-foreground" />}
+            </button>
+          ))}
+        </div>
+      )}
+      {attached.length === 0 && unattached.length === 0 && (
+        <p className="text-xs text-muted-foreground">All folders are attached.</p>
+      )}
+    </div>
+  );
+}
 // ── Reference Images Picker ──────────────────────────────────────────────────
 
 function ReferenceImagesPicker({ agentId }: { agentId: string }) {
@@ -1273,9 +1384,18 @@ function AgentEditorCard({
             </div>
           </JanCard>
 
-          {/* Card 6: Reference Assets */}
-          <JanCard title="Reference Images">
-            <ReferenceImagesPicker agentId={agent.id} />
+          {/* Card 6: Brand Assets */}
+          <JanCard title="Brand Assets">
+            <div className="space-y-4">
+              <div>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Folders</p>
+                <BrandFoldersPicker agentId={agent.id} />
+              </div>
+              <div>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Individual Assets</p>
+                <ReferenceImagesPicker agentId={agent.id} />
+              </div>
+            </div>
           </JanCard>
         </div>
       </div>

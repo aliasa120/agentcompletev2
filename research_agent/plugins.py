@@ -21,6 +21,8 @@ PLUGIN_TOOLS: Dict[str, List[str]] = {
         "save_instagram_post",
         "save_facebook_post",
         "save_youtube_video",
+        "save_linkedin_post",
+        "save_twitter_post",
         "save_social_bundle",
         "get_wordpress_categories",
         "publish_to_wordpress",

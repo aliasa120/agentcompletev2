@@ -12,7 +12,7 @@ The stored schemas match the exact parameter requirements for downstream Composi
 import json
 import os
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 import requests
 from dotenv import load_dotenv
 from langchain_core.tools import tool
@@ -489,40 +489,221 @@ def save_youtube_video(
 
 
 @tool
+def save_linkedin_post(
+    commentary: str,
+    media_url: str = "",
+    media_type: str = "text",
+    title: str = "",
+    link: str = "",
+    visibility: str = "PUBLIC",
+) -> str:
+    """Save a LinkedIn post (thought leadership commentary, photo, video, or article share) to the database for user review and publishing.
+
+    Args:
+        commentary: The post text body including insights, formatting, hashtags, and mentions.
+        media_url: PUBLIC HTTPS URL of the image or video (e.g. Cloudflare R2 storage URL of
+            the user's attachment). A local filename is accepted only if the file
+            exists in the workspace — it is then uploaded to storage automatically.
+        media_type: Content format: 'text', 'image', 'video', or 'article'.
+        title: Optional headline or title for the video or article share.
+        link: Optional external article or website URL.
+        visibility: Post visibility: 'PUBLIC' (everyone) or 'CONNECTIONS' (connections only).
+    """
+    supabase_url = _get_supabase_url()
+    if not supabase_url:
+        return "[Error] SUPABASE_URL not configured — post kept in memory."
+
+    resolved, err = _normalize_media_fields({"media_url": media_url})
+    if err:
+        return err
+    media_url = resolved["media_url"]
+    if media_type in ("image", "video") and not media_url:
+        return f"[Error] media_type='{media_type}' requires media_url (a public HTTPS URL or workspace file)."
+
+    if media_type == "video" and _looks_like_image(media_url):
+        return f"[Error] media_url '{media_url}' looks like an image, not a video. LinkedIn video requires an MP4/MOV video file."
+
+    row = {
+        "title": title or (commentary[:60] + "..." if len(commentary) > 60 else commentary),
+        "linkedin": commentary,
+        "image_url": media_url if media_type in ("image", "photo") else None,
+        "has_image": bool(media_url and media_type in ("image", "photo")),
+        "linkedin_data": {
+            "commentary": commentary,
+            "media_type": media_type,
+            "media_url": media_url,
+            "title": title,
+            "link": link,
+            "visibility": visibility,
+        },
+        "published_to": {"linkedin": False},
+    }
+
+    try:
+        resp = requests.post(
+            f"{supabase_url}/rest/v1/social_posts",
+            headers=_supabase_headers(),
+            json=_with_owner(row),
+            timeout=15,
+        )
+        if not resp.ok:
+            return f"[Error] Failed to save LinkedIn post: {resp.status_code} {resp.text[:200]}"
+
+        post_data = resp.json()
+        post_id = post_data[0]["id"] if post_data else "?"
+
+        li_row = {
+            "post_id": post_id,
+            "commentary": commentary,
+            "title": title,
+            "media_type": media_type,
+            "media_url": media_url,
+            "link": link,
+            "visibility": visibility,
+            "status": "draft",
+        }
+        requests.post(
+            f"{supabase_url}/rest/v1/social_linkedin_posts",
+            headers=_supabase_headers(),
+            json=_with_owner(li_row),
+            timeout=10,
+        )
+
+        _trigger_auto_publish_if_enabled(post_id, ["linkedin"])
+
+        return f"[Success] LinkedIn {media_type.capitalize()} post saved to Posts console (ID: {post_id}). Ready for 1-click publishing!"
+    except Exception as e:
+        return f"[Error] saving LinkedIn post: {str(e)}"
+
+
+@tool
+def save_twitter_post(
+    text: str,
+    media_url: str = "",
+    media_type: str = "text",
+    reply_to_id: str = "",
+) -> str:
+    """Save an X (Twitter) post or tweet with optional photo/video attachment from R2 to the database for user review and publishing.
+
+    Args:
+        text: The tweet text (up to 280 characters, or longer for X Premium) including hashtags and emojis.
+        media_url: PUBLIC HTTPS URL of the photo or video (e.g. Cloudflare R2 storage URL of
+            the user's attachment). A local filename is accepted only if the file
+            exists in the workspace — it is then uploaded to storage automatically.
+        media_type: Content format: 'text', 'photo', or 'video'.
+        reply_to_id: Optional tweet ID if this post is a reply to an existing tweet.
+    """
+    supabase_url = _get_supabase_url()
+    if not supabase_url:
+        return "[Error] SUPABASE_URL not configured — tweet kept in memory."
+
+    resolved, err = _normalize_media_fields({"media_url": media_url})
+    if err:
+        return err
+    media_url = resolved["media_url"]
+    if media_type in ("photo", "video") and not media_url:
+        return f"[Error] media_type='{media_type}' requires media_url (a public HTTPS URL or workspace file)."
+
+    if media_type == "video" and _looks_like_image(media_url):
+        return f"[Error] media_url '{media_url}' looks like an image, not a video. Twitter video requires a video file."
+
+    row = {
+        "title": text[:60] + "..." if len(text) > 60 else text,
+        "twitter": text,
+        "image_url": media_url if media_type == "photo" else None,
+        "has_image": bool(media_url and media_type == "photo"),
+        "twitter_data": {
+            "text": text,
+            "media_type": media_type,
+            "media_url": media_url,
+            "reply_to_id": reply_to_id,
+        },
+        "published_to": {"twitter": False},
+    }
+
+    try:
+        resp = requests.post(
+            f"{supabase_url}/rest/v1/social_posts",
+            headers=_supabase_headers(),
+            json=_with_owner(row),
+            timeout=15,
+        )
+        if not resp.ok:
+            return f"[Error] Failed to save Twitter post: {resp.status_code} {resp.text[:200]}"
+
+        post_data = resp.json()
+        post_id = post_data[0]["id"] if post_data else "?"
+
+        tw_row = {
+            "post_id": post_id,
+            "text": text,
+            "media_type": media_type,
+            "media_url": media_url,
+            "reply_to_id": reply_to_id,
+            "status": "draft",
+        }
+        requests.post(
+            f"{supabase_url}/rest/v1/social_twitter_posts",
+            headers=_supabase_headers(),
+            json=_with_owner(tw_row),
+            timeout=10,
+        )
+
+        _trigger_auto_publish_if_enabled(post_id, ["twitter"])
+
+        return f"[Success] X (Twitter) {media_type.capitalize()} post saved to Posts console (ID: {post_id}). Ready for 1-click publishing!"
+    except Exception as e:
+        return f"[Error] saving Twitter post: {str(e)}"
+
+
+@tool
 def save_social_bundle(
     title: str,
     instagram: Optional[Dict[str, Any]] = None,
     facebook: Optional[Dict[str, Any]] = None,
     youtube: Optional[Dict[str, Any]] = None,
-    twitter: Optional[str] = None,
+    twitter: Optional[Union[str, Dict[str, Any]]] = None,
+    linkedin: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """Save a multi-platform social media campaign bundle across Instagram, Facebook, YouTube, and X in one call.
+    """Save a multi-platform social media campaign bundle across Instagram, Facebook, YouTube, X, and LinkedIn in one call.
 
-    All media fields must be PUBLIC HTTPS URLs (e.g. the storage URLs of the user's
+    All media fields must be PUBLIC HTTPS URLs (e.g. Cloudflare R2 URLs of the user's
     attachments). Local filenames are accepted only if the file exists in the
-    workspace â€” it is then uploaded to storage automatically.
+    workspace — it is then uploaded to storage automatically.
 
     Args:
         title: Main campaign or post title.
         instagram: Dict with Instagram fields: {'caption': str, 'media_url': str, 'media_type': 'reel'|'photo'|'video', 'cover_url': str}.
         facebook: Dict with Facebook fields: {'message': str, 'media_type': 'text'|'photo'|'video', 'media_url': str, 'title': str}.
         youtube: Dict with YouTube fields: {'title': str, 'description': str, 'video_url': str, 'thumbnail_url': str, 'tags': list}.
-        twitter: Tweet text (max 280 chars) for X / Twitter.
+        twitter: Tweet text (str) or Dict with {'text': str, 'media_url': str, 'media_type': 'text'|'photo'|'video'}.
+        linkedin: Dict with LinkedIn fields: {'commentary': str, 'media_url': str, 'media_type': 'text'|'image'|'video'|'article', 'title': str, 'link': str}.
     """
     supabase_url = _get_supabase_url()
     if not supabase_url:
-        return "[Error] SUPABASE_URL not configured â€” bundle kept in memory."
+        return "[Error] SUPABASE_URL not configured — bundle kept in memory."
 
-    # Normalize every per-platform media reference to a public URL before saving,
-    # so 1-click publish never sees an unresolvable filename.
     instagram = dict(instagram) if instagram else None
     facebook = dict(facebook) if facebook else None
     youtube = dict(youtube) if youtube else None
+    linkedin = dict(linkedin) if linkedin else None
+
+    # Handle twitter whether passed as string or dict
+    twitter_dict: Optional[Dict[str, Any]] = None
+    twitter_text = ""
+    if isinstance(twitter, dict):
+        twitter_dict = dict(twitter)
+        twitter_text = twitter_dict.get("text", "")
+    elif isinstance(twitter, str) and twitter.strip():
+        twitter_text = twitter.strip()
+        twitter_dict = {"text": twitter_text, "media_type": "text"}
 
     for payload, field_names, label in (
         (instagram, ("media_url", "cover_url"), "instagram"),
         (facebook, ("media_url",), "facebook"),
         (youtube, ("video_url", "thumbnail_url"), "youtube"),
+        (linkedin, ("media_url",), "linkedin"),
+        (twitter_dict, ("media_url",), "twitter"),
     ):
         if not payload:
             continue
@@ -544,6 +725,8 @@ def save_social_bundle(
                 f"[Error] youtube.video_url '{youtube['video_url']}' looks like an image, "
                 f"not a video. YouTube needs an actual video file."
             )
+    if linkedin and linkedin.get("media_type") in ("image", "video") and not linkedin.get("media_url"):
+        return f"[Error] linkedin.media_url is required for media_type='{linkedin.get('media_type')}'."
 
     cover_image = None
     if instagram and instagram.get("cover_url"):
@@ -554,23 +737,31 @@ def save_social_bundle(
         cover_image = instagram["media_url"]
     elif facebook and facebook.get("media_url") and facebook.get("media_type") == "photo":
         cover_image = facebook["media_url"]
+    elif linkedin and linkedin.get("media_url") and linkedin.get("media_type") == "image":
+        cover_image = linkedin["media_url"]
+    elif twitter_dict and twitter_dict.get("media_url") and twitter_dict.get("media_type") == "photo":
+        cover_image = twitter_dict["media_url"]
 
     row = {
         "title": title,
-        "twitter": twitter or "",
+        "twitter": twitter_text,
         "instagram": instagram.get("caption", "") if instagram else "",
         "facebook": facebook.get("message", "") if facebook else "",
         "youtube": f"{youtube.get('title', '')}\n\n{youtube.get('description', '')}" if youtube else "",
+        "linkedin": linkedin.get("commentary", "") if linkedin else "",
         "instagram_data": instagram,
         "facebook_data": facebook,
         "youtube_data": youtube,
+        "twitter_data": twitter_dict,
+        "linkedin_data": linkedin,
         "image_url": cover_image,
         "has_image": bool(cover_image),
         "published_to": {
             "instagram": False if instagram else None,
             "facebook": False if facebook else None,
             "youtube": False if youtube else None,
-            "twitter": False if twitter else None,
+            "twitter": False if twitter_dict else None,
+            "linkedin": False if linkedin else None,
         },
     }
 
@@ -637,14 +828,48 @@ def save_social_bundle(
                 timeout=10,
             )
 
+        if linkedin:
+            requests.post(
+                f"{supabase_url}/rest/v1/social_linkedin_posts",
+                headers=_supabase_headers(),
+                json=_with_owner({
+                    "post_id": post_id,
+                    "commentary": linkedin.get("commentary", ""),
+                    "title": linkedin.get("title", ""),
+                    "media_type": linkedin.get("media_type", "text"),
+                    "media_url": linkedin.get("media_url", ""),
+                    "link": linkedin.get("link", ""),
+                    "visibility": linkedin.get("visibility", "PUBLIC"),
+                    "status": "draft",
+                }),
+                timeout=10,
+            )
+
+        if twitter_dict:
+            requests.post(
+                f"{supabase_url}/rest/v1/social_twitter_posts",
+                headers=_supabase_headers(),
+                json=_with_owner({
+                    "post_id": post_id,
+                    "text": twitter_dict.get("text", ""),
+                    "media_type": twitter_dict.get("media_type", "text"),
+                    "media_url": twitter_dict.get("media_url", ""),
+                    "reply_to_id": twitter_dict.get("reply_to_id", ""),
+                    "status": "draft",
+                }),
+                timeout=10,
+            )
+
         channels = []
         if instagram: channels.append("Instagram")
         if facebook: channels.append("Facebook")
         if youtube: channels.append("YouTube")
-        if twitter: channels.append("X/Twitter")
+        if twitter_dict: channels.append("X/Twitter")
+        if linkedin: channels.append("LinkedIn")
 
         _trigger_auto_publish_if_enabled(post_id, [c.lower().replace("x/twitter", "twitter") for c in channels])
 
         return f"[Success] Social Campaign Bundle '{title}' saved for [{', '.join(channels)}] (ID: {post_id}). Ready in Posts console!"
     except Exception as e:
         return f"[Error] saving social bundle: {str(e)}"
+

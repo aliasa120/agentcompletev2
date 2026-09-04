@@ -37,6 +37,8 @@ from research_agent.tools.social_saver_tools import (
     save_instagram_post,
     save_facebook_post,
     save_youtube_video,
+    save_linkedin_post,
+    save_twitter_post,
     save_social_bundle,
 )
 from research_agent.tools.get_design_guide import get_design_guide
@@ -76,6 +78,8 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
     "save_instagram_post": save_instagram_post,
     "save_facebook_post": save_facebook_post,
     "save_youtube_video": save_youtube_video,
+    "save_linkedin_post": save_linkedin_post,
+    "save_twitter_post": save_twitter_post,
     "save_social_bundle": save_social_bundle,
     "get_design_guide": get_design_guide,
     "read_skill": read_skill,
@@ -105,7 +109,7 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
 TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
     "omni_analyzer": {
         "short_description": "Universal file analysis tool — analyze any file via URL, attachment, or data.",
-        "keywords": ["analyze file", "inspect file", "analyze image", "analyze audio", "analyze video", "analyze pdf", "analyze document", "analyze url", "omni analyzer", "file analysis"],
+        "keywords": ["analyze file", "inspect file", "analyze image", "analyze audio", "analyze video", "analyze pdf", "analyze document", "analyze url", "omni analyzer", "file analysis", "inspect brand assets", "analyze multiple files"],
         "example_triggers": [
             "What's in this image?",
             "Summarize this video",
@@ -222,12 +226,30 @@ TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
             "Save video draft to YouTube posts."
         ]
     },
+    "save_linkedin_post": {
+        "short_description": "Save a LinkedIn post, thought leadership commentary, photo, video, or article share.",
+        "keywords": ["save linkedin", "linkedin post", "linkedin article", "save linkedin video", "linkedin commentary", "post to linkedin"],
+        "example_triggers": [
+            "Save this LinkedIn post with hashtags.",
+            "Save this video with caption on LinkedIn.",
+            "Save this article share to LinkedIn."
+        ]
+    },
+    "save_twitter_post": {
+        "short_description": "Save an X (Twitter) post or tweet with optional photo/video attachment from R2.",
+        "keywords": ["save twitter", "save x", "tweet saver", "post to x", "save tweet", "twitter video", "x post"],
+        "example_triggers": [
+            "Save this tweet to X.",
+            "Save this video with caption on X.",
+            "Save this photo post to Twitter."
+        ]
+    },
     "save_social_bundle": {
-        "short_description": "Save a multi-platform social media campaign across Instagram, Facebook, YouTube, and X.",
+        "short_description": "Save a multi-platform social media campaign across Instagram, Facebook, YouTube, X, and LinkedIn.",
         "keywords": ["save social bundle", "multi platform post", "campaign save", "save all social posts"],
         "example_triggers": [
             "Save this cross-platform social campaign.",
-            "Save posts for Instagram, Facebook, and YouTube.",
+            "Save posts for Instagram, Facebook, YouTube, X, and LinkedIn.",
             "Save the social bundle to database."
         ]
     },
@@ -343,6 +365,8 @@ FALLBACK_CATEGORIES: Dict[str, List[str]] = {
         "save_instagram_post",
         "save_facebook_post",
         "save_youtube_video",
+        "save_linkedin_post",
+        "save_twitter_post",
         "save_social_bundle",
         "upload_to_storage",
     ],

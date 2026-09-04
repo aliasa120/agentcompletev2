@@ -366,7 +366,7 @@ def make_attachment_links_note(links: list) -> dict:
             f"{lines}\n"
             "Use these EXACT URLs whenever a tool needs a file URL (for example "
             "`save_instagram_post(media_url=...)`, `save_facebook_post(media_url=...)`, "
-            "`save_youtube_video(video_url=...)`, or `omni_analyzer(file_source=...)`). "
+            "`save_youtube_video(video_url=...)`, or `omni_analyzer(file_sources=[...])`). "
             "Never pass a bare filename or a local path to those tools.\n"
         ),
     }
