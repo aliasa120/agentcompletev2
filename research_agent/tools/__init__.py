@@ -10,6 +10,8 @@ from .social_saver_tools import (
     save_youtube_video,
     save_linkedin_post,
     save_twitter_post,
+    save_tiktok_post,
+    save_pinterest_post,
     save_social_bundle,
 )
 from .think import think_tool
@@ -37,6 +39,7 @@ from .wordpress_publisher import get_wordpress_categories, publish_to_wordpress
 from .list_skills import list_skills, build_skills_index
 from .manage_skill import manage_skill
 from .cronjob import cronjob
+from .desk import add_to_desk
 
 # ── Hermes-style 3-Layer Memory Tools ────────────────────────────────────
 from research_agent.memory.builtin_provider import add_memory, replace_memory, remove_memory
@@ -94,6 +97,8 @@ __all__ = [
     "save_youtube_video",
     "save_linkedin_post",
     "save_twitter_post",
+    "save_tiktok_post",
+    "save_pinterest_post",
     "save_social_bundle",
     "get_design_guide",
     # ── Blog + WordPress tools ─────────────────────────────────────────────────
@@ -105,6 +110,7 @@ __all__ = [
     "list_skills",
     "manage_skill",
     "cronjob",
+    "add_to_desk",
     "build_skills_index",
     # ── Raw providers (not exposed to agent directly) ─────────────────────────
     "linkup_search",

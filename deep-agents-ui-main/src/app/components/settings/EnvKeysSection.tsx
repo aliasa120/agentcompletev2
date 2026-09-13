@@ -141,16 +141,36 @@ const KEY_GROUPS: KeyGroup[] = [
   },
   {
     id: "platform",
-    label: "MCP Platforms & Tracing",
-    description: "Credentials for Composio, Smithery, Zapier, and LangSmith tracing",
+    label: "MCP Platforms & Social Gateways",
+    description: "Credentials for Composio, Buffer (TikTok/Multi-platform), Smithery, Zapier, and LangSmith tracing",
     icon: <Bot className="h-4 w-4" />,
     iconClass: "text-amber-500",
     defaultExpanded: false,
     fields: [
+      { key: "buffer_access_token", label: "Buffer Access Token (TikTok)", placeholder: "1/...", helpUrl: "https://publish.buffer.com/settings/api", testable: true, testKey: "buffer" },
       { key: "composio_api_key",   label: "Composio API Key",   placeholder: "ak_drGs...",   helpUrl: "https://app.composio.dev/",        testable: false },
       { key: "smithery_api_key",   label: "Smithery API Key",   placeholder: "05ada...",    helpUrl: "https://smithery.ai/settings",     testable: false },
       { key: "zapier_mcp_secret",  label: "Zapier MCP Secret",  placeholder: "mlX5sN...",    helpUrl: "https://mcp.zapier.com/",          testable: false },
       { key: "langsmith_api_key",  label: "LangSmith API Key",  placeholder: "lsv2_pt_...", helpUrl: "https://smith.langchain.com/",     testable: false, type: "text" },
+    ],
+  },
+  {
+    id: "social-x",
+    label: "X (Twitter) Developer API",
+    description: "Direct Twitter API v2 credentials for publishing tweets, threads, and media attachments (photos/videos) from your own developer account",
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current">
+        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.74l7.73-8.835L1.254 2.25H8.08l4.259 5.63 5.905-5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+      </svg>
+    ),
+    iconClass: "text-foreground",
+    defaultExpanded: true,
+    fields: [
+      { key: "social_twitter_api_key",       label: "API Key (Consumer Key)",              placeholder: "e.g. 7xK9...", helpUrl: "https://developer.x.com/en/portal/dashboard", testable: true, testKey: "twitter" },
+      { key: "social_twitter_api_secret",    label: "API Key Secret (Consumer Secret)",   placeholder: "e.g. 3mP8...", helpUrl: "https://developer.x.com/en/portal/dashboard", testable: false },
+      { key: "social_twitter_access_token",  label: "Access Token",                       placeholder: "e.g. 1823...-...", helpUrl: "https://developer.x.com/en/portal/dashboard", testable: false },
+      { key: "social_twitter_access_secret", label: "Access Token Secret",                placeholder: "e.g. 9bQ2...", helpUrl: "https://developer.x.com/en/portal/dashboard", testable: false },
+      { key: "social_twitter_bearer_token",  label: "Bearer Token (Optional)",            placeholder: "AAAAAAAAAAAAA...", helpUrl: "https://developer.x.com/en/portal/dashboard", testable: false },
     ],
   },
 ];
@@ -168,7 +188,7 @@ function KeyRow({
   field: KeyField;
   currentValue: string;
   onSave: (key: string, value: string) => Promise<void>;
-  onTest?: (testKey: string) => Promise<void>;
+  onTest?: (testKey: string, liveKey?: string) => Promise<string | void>;
 }) {
   const [localValue, setLocalValue] = useState(currentValue);
   const [showValue, setShowValue] = useState(false);
@@ -197,14 +217,20 @@ function KeyRow({
     setTestState("testing");
     setTestMsg("");
     try {
-      await onTest(field.testKey);
+      const msg = await onTest(field.testKey, localValue);
       setTestState("ok");
-      setTestMsg("Connected ✓");
-      setTimeout(() => { setTestState("idle"); setTestMsg(""); }, 4000);
+      setTestMsg(msg ? `${msg} ✓` : "Connected ✓");
+      // If the key was typed but not yet saved, save it automatically on verified test!
+      if (isDirty && localValue.trim()) {
+        try {
+          await onSave(field.key, localValue);
+        } catch {}
+      }
+      setTimeout(() => { setTestState("idle"); setTestMsg(""); }, 6000);
     } catch (e: any) {
       setTestState("error");
       setTestMsg(e.message || "Failed");
-      setTimeout(() => { setTestState("idle"); setTestMsg(""); }, 5000);
+      setTimeout(() => { setTestState("idle"); setTestMsg(""); }, 8000);
     }
   };
 
@@ -395,14 +421,15 @@ export function EnvKeysSection({ hiddenGroupIds = [] }: { hiddenGroupIds?: strin
     }
   }, []);
 
-  const handleTestKey = useCallback(async (testKey: string) => {
+  const handleTestKey = useCallback(async (testKey: string, liveKey?: string) => {
     const res = await fetch("/api/test-provider", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: testKey }),
+      body: JSON.stringify({ provider: testKey, key: liveKey }),
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || "Provider test failed");
+    return data.message;
   }, []);
 
   const handleSaveAll = async () => {
@@ -494,8 +521,8 @@ export function EnvKeysSection({ hiddenGroupIds = [] }: { hiddenGroupIds?: strin
             <Globe className="h-4 w-4" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-foreground">WordPress & Social Media Channels</p>
-            <p className="text-xs text-muted-foreground">WordPress, Facebook, Instagram, and Twitter/X keys are managed inside the Posts Plugin.</p>
+            <p className="text-xs font-semibold text-foreground">Social Channels & Posts Plugin</p>
+            <p className="text-xs text-muted-foreground">X (Twitter) Developer API keys can be managed above. Facebook, Instagram, YouTube, and WordPress are managed in Posts.</p>
           </div>
         </div>
         <Link href="/agent-settings?tab=plugins-posts">

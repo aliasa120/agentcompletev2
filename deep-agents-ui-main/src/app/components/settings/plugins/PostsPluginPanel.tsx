@@ -339,6 +339,16 @@ export function PostsPluginPanel({
               desc: "Saves tweets and threads with attached photos and videos from Cloudflare R2 to Posts console.",
             },
             {
+              key: "save_tiktok_post",
+              label: "TikTok Video Saver",
+              desc: "Saves short-form TikTok video drafts with captions, hashtags, and sound metadata to Posts console.",
+            },
+            {
+              key: "save_pinterest_post",
+              label: "Pinterest Pin Saver",
+              desc: "Saves Pinterest image & video pins with destination link, board name, and rich description to Posts console.",
+            },
+            {
               key: "save_social_bundle",
               label: "Social Campaign Bundle Saver",
               desc: "Saves multi-platform cross-channel campaigns across social networks in one turn.",

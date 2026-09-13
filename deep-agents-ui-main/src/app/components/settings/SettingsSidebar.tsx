@@ -3,7 +3,7 @@
 import React from "react";
 import {
   Wrench, Cpu, Bot, Users, LayoutList, BookOpen, Image as ImageIcon,
-  ChevronRight, Database, Settings, Menu, Brain, Route, AlarmClock, LayoutGrid, Shield, Palette, SlidersHorizontal
+  ChevronRight, Database, Settings, Menu, Brain, Route, AlarmClock, LayoutGrid, Shield, Palette, SlidersHorizontal, Inbox
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +25,7 @@ export type SettingsSection =
   | "skills"
   | "design-assets"
   | "queue"
+  | "desk"
   | "configuration"
   | "feeder"
   | "memories"
@@ -69,6 +70,13 @@ const NAV_ITEMS: NavItem[] = [
     label: "Scheduled Tasks",
     description: "Replicated Hermes background cron jobs",
     icon: <AlarmClock className="h-4 w-4" />,
+  },
+  {
+    id: "desk",
+    label: "Desk",
+    description: "Agent task cards awaiting one-click execution",
+    icon: <Inbox className="h-4 w-4" />,
+    badge: "NEW",
   },
   {
     id: "tools",

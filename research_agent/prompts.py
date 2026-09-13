@@ -631,7 +631,9 @@ After verification passes, save the created content to the database using the ap
 - **YouTube Video / Shorts**: Call `save_youtube_video(title=..., description=..., video_url=..., tags=[...])`.
 - **LinkedIn Post / Video / Article**: Call `save_linkedin_post(commentary=..., media_url=..., media_type="text"|"image"|"video"|"article", title=..., link=...)`.
 - **X / Twitter Post / Tweet**: Call `save_twitter_post(text=..., media_url=..., media_type="text"|"photo"|"video")`.
-- **Multi-Platform Bundle**: Call `save_social_bundle(title=..., instagram={...}, facebook={...}, youtube={...}, twitter=..., linkedin={...})`.
+- **TikTok Short Video**: Call `save_tiktok_post(video_url=..., caption=..., title=..., tags=[...])`.
+- **Pinterest Pin**: Call `save_pinterest_post(media_url=..., title=..., description=..., board_name=..., link=...)`.
+- **Multi-Platform Bundle**: Call `save_social_bundle(title=..., instagram={...}, facebook={...}, youtube={...}, twitter=..., linkedin={...}, tiktok={...}, pinterest={...})`.
 
 This is the LAST tool call of every run. Never skip it.
 

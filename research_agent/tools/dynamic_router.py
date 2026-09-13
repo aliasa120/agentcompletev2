@@ -39,6 +39,8 @@ from research_agent.tools.social_saver_tools import (
     save_youtube_video,
     save_linkedin_post,
     save_twitter_post,
+    save_tiktok_post,
+    save_pinterest_post,
     save_social_bundle,
 )
 from research_agent.tools.get_design_guide import get_design_guide
@@ -63,6 +65,7 @@ from research_agent.memory.honcho_provider import (
 from research_agent.tools.text_to_speech import text_to_speech
 from research_agent.tools.terminal_tool import terminal
 from research_agent.tools.upload_to_storage import upload_to_storage
+from research_agent.tools.desk import add_to_desk
 
 # Registry mapping tool names to actual tool objects
 TOOL_OBJECTS: Dict[str, BaseTool] = {
@@ -80,6 +83,8 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
     "save_youtube_video": save_youtube_video,
     "save_linkedin_post": save_linkedin_post,
     "save_twitter_post": save_twitter_post,
+    "save_tiktok_post": save_tiktok_post,
+    "save_pinterest_post": save_pinterest_post,
     "save_social_bundle": save_social_bundle,
     "get_design_guide": get_design_guide,
     "read_skill": read_skill,
@@ -103,6 +108,7 @@ TOOL_OBJECTS: Dict[str, BaseTool] = {
     "text_to_speech": text_to_speech,
     "terminal": terminal,
     "upload_to_storage": upload_to_storage,
+    "add_to_desk": add_to_desk,
 }
 
 # Rich tool metadata including descriptions, keywords (synonyms), and example triggers
@@ -244,12 +250,30 @@ TOOLS_METADATA: Dict[str, Dict[str, Any]] = {
             "Save this photo post to Twitter."
         ]
     },
+    "save_tiktok_post": {
+        "short_description": "Save a TikTok video post with caption and tags for 1-click publishing via Buffer.",
+        "keywords": ["save tiktok", "post tiktok", "tiktok video", "tiktok reel", "buffer tiktok", "publish tiktok"],
+        "example_triggers": [
+            "Save this video to TikTok.",
+            "Post this clip on TikTok via Buffer.",
+            "Save this short video draft for TikTok."
+        ]
+    },
+    "save_pinterest_post": {
+        "short_description": "Save a Pinterest pin with title, description, image, and board for publishing via Composio.",
+        "keywords": ["save pinterest", "create pin", "post pinterest", "pinterest board", "pin image", "composio pinterest"],
+        "example_triggers": [
+            "Save this pin to Pinterest.",
+            "Create a new pin on my Pinterest board.",
+            "Save this image post to Pinterest."
+        ]
+    },
     "save_social_bundle": {
-        "short_description": "Save a multi-platform social media campaign across Instagram, Facebook, YouTube, X, and LinkedIn.",
-        "keywords": ["save social bundle", "multi platform post", "campaign save", "save all social posts"],
+        "short_description": "Save a multi-platform social media campaign across Instagram, Facebook, YouTube, X, LinkedIn, TikTok, and Pinterest.",
+        "keywords": ["save social bundle", "multi platform post", "campaign save", "save all social posts", "omnichannel social"],
         "example_triggers": [
             "Save this cross-platform social campaign.",
-            "Save posts for Instagram, Facebook, YouTube, X, and LinkedIn.",
+            "Save posts for Instagram, Facebook, YouTube, X, LinkedIn, TikTok, and Pinterest.",
             "Save the social bundle to database."
         ]
     },
@@ -367,6 +391,8 @@ FALLBACK_CATEGORIES: Dict[str, List[str]] = {
         "save_youtube_video",
         "save_linkedin_post",
         "save_twitter_post",
+        "save_tiktok_post",
+        "save_pinterest_post",
         "save_social_bundle",
         "upload_to_storage",
     ],
@@ -436,6 +462,66 @@ def _enabled_plugins_from_db() -> set:
     """Fetch the enabled plugin set from Supabase (all enabled on failure)."""
     from research_agent.plugins import enabled_plugins_from_db
     return enabled_plugins_from_db()
+
+
+def get_enabled_tool_assignment(agent_id: str, tool_name: str, user_id: str) -> Dict[str, Any]:
+    """Resolve one enabled assignment for a user-owned, enabled agent."""
+    if not agent_id or not tool_name or not user_id:
+        return {"ok": False, "error": "Missing user, agent, or tool identity."}
+    try:
+        from supabase import create_client
+        url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        if not url or not key:
+            return {"ok": False, "error": "Privileged Supabase credentials are unavailable."}
+        client = create_client(url, key)
+        agent = (
+            client.table("agent_configs")
+            .select("id,user_id,enabled")
+            .eq("id", str(agent_id))
+            .eq("user_id", str(user_id))
+            .eq("enabled", True)
+            .maybe_single()
+            .execute()
+        )
+        if not agent.data:
+            return {"ok": False, "error": "Agent is unavailable or not owned by this user."}
+        assignment = (
+            client.table("agent_tool_assignments")
+            .select("tool_type,tool_key,enabled,loading_mode,permission_mode,parameter_bindings")
+            .eq("agent_id", str(agent_id))
+            .eq("tool_key", str(tool_name))
+            .eq("enabled", True)
+            .maybe_single()
+            .execute()
+        )
+        if not assignment.data:
+            return {"ok": False, "error": "Tool is not assigned to this agent or is disabled."}
+        row = assignment.data
+        if row.get("tool_type") == "builtin":
+            enabled_plugins = _enabled_plugins_from_db()
+            if not is_tool_allowed(tool_name, enabled_plugins):
+                return {"ok": False, "error": "Tool belongs to a disabled plugin."}
+        elif row.get("tool_type") == "mcp":
+            connections = (
+                client.table("mcp_connections")
+                .select("available_tools")
+                .eq("user_id", str(user_id))
+                .eq("status", "active")
+                .execute()
+            )
+            available = set()
+            for connection in connections.data or []:
+                for tool_entry in connection.get("available_tools") or []:
+                    key_value = tool_entry.get("tool_key") if isinstance(tool_entry, dict) else tool_entry
+                    if key_value:
+                        available.add(str(key_value))
+            if tool_name not in available:
+                return {"ok": False, "error": "MCP tool is not available on an active user-owned connection."}
+        return {"ok": True, "assignment": row}
+    except Exception as exc:
+        logger.warning(f"Failed to authorize tool assignment '{tool_name}': {exc}")
+        return {"ok": False, "error": "Tool authorization lookup failed."}
 
 
 def get_allowed_routing_tools(agent_id: str) -> Dict[str, set[str]]:
@@ -896,43 +982,65 @@ def list_tools(
 
 
 def get_tool_permission_mode(tool_name: str, agent_id: Optional[str] = None, user_id: Optional[str] = None) -> str:
-    """Retrieve the permission mode ('always_allow', 'ask', 'deny') for a tool from Supabase/cache."""
+    """Resolve a permission mode; lookup failures deny execution."""
+    if not agent_id or not user_id:
+        return "deny"
+    authorization = get_enabled_tool_assignment(agent_id, tool_name, user_id)
+    if not authorization.get("ok"):
+        return "deny"
+    assignment = authorization["assignment"]
+    assignment_mode = assignment.get("permission_mode")
+    if assignment_mode in {"always_allow", "ask", "deny"}:
+        return assignment_mode
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
         if not url or not key:
-            return "always_allow"
+            return "deny"
         client = create_client(url, key)
 
-        # 1. Check mcp_tool_settings table directly for this tool_key
-        try:
-            mcp_res = client.table("mcp_tool_settings").select("permission_mode").eq("tool_key", tool_name).execute()
-            if mcp_res.data and len(mcp_res.data) > 0:
-                p_mode = mcp_res.data[0].get("permission_mode")
-                if p_mode:
-                    return p_mode
-        except Exception:
-            pass
+        if assignment.get("tool_type") == "mcp":
+            connections = (
+                client.table("mcp_connections")
+                .select("id")
+                .eq("user_id", str(user_id))
+                .eq("status", "active")
+                .execute()
+            )
+            connection_ids = [str(row["id"]) for row in connections.data or [] if row.get("id")]
+            if not connection_ids:
+                return "deny"
+            settings = (
+                client.table("mcp_tool_settings")
+                .select("permission_mode")
+                .in_("connection_id", connection_ids)
+                .eq("tool_key", tool_name)
+                .execute()
+            )
+            modes = {row.get("permission_mode") for row in settings.data or [] if row.get("permission_mode")}
+            if len(modes) == 1:
+                mode = modes.pop()
+                return mode if mode in {"always_allow", "ask", "deny"} else "deny"
+            if len(modes) > 1:
+                return "deny"
 
-        # 2. Check bootstrap / agent_settings
-        bootstrap_resp = client.rpc("get_backend_bootstrap_data").execute()
-        bootstrap = bootstrap_resp.data or {}
-        all_settings = bootstrap.get("agent_settings") or []
-        for row in all_settings:
-            k = row.get("key")
-            v = row.get("value")
-            if k in ("mcp_tools_permission_modes", "builtin_tools_permission_modes") and v:
-                try:
-                    parsed = json.loads(v) if isinstance(v, str) else v
-                    if tool_name in parsed:
-                        return parsed[tool_name]
-                except Exception:
-                    pass
+        settings = (
+            client.table("agent_settings")
+            .select("key,value")
+            .eq("user_id", str(user_id))
+            .in_("key", ["mcp_tools_permission_modes", "builtin_tools_permission_modes"])
+            .execute()
+        )
+        for row in settings.data or []:
+            value = row.get("value")
+            parsed = json.loads(value) if isinstance(value, str) else value
+            if isinstance(parsed, dict) and parsed.get(tool_name) in {"always_allow", "ask", "deny"}:
+                return parsed[tool_name]
         return "always_allow"
-    except Exception as e:
-        logger.warning(f"Failed to get tool permission mode for '{tool_name}': {e}")
-        return "always_allow"
+    except Exception as exc:
+        logger.warning(f"Failed to get tool permission mode for '{tool_name}': {exc}")
+        return "deny"
 
 
 def get_tool_bindings(agent_id: Optional[str], tool_name: str) -> Dict[str, Any]:
@@ -1063,22 +1171,66 @@ def load_tools(
     return json.dumps(result, indent=2)
 
 
-@tool(parse_docstring=True)
-def call_tool(
+def _validate_tool_arguments(tool_obj: Any, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(arguments, dict):
+        raise ValueError("Tool arguments must be an object.")
+    schema = convert_to_openai_tool(tool_obj).get("function", {}).get("parameters", {})
+    properties = schema.get("properties", {}) if isinstance(schema, dict) else {}
+    unknown = sorted(set(arguments) - set(properties))
+    if unknown:
+        raise ValueError(f"Unknown tool arguments: {unknown}")
+    try:
+        import jsonschema
+        jsonschema.validate(arguments, schema)
+    except ImportError:
+        required = schema.get("required", []) if isinstance(schema, dict) else []
+        missing = [name for name in required if name not in arguments]
+        if missing:
+            raise ValueError(f"Missing required tool arguments: {missing}")
+    return arguments
+
+
+def execute_tool_for_desk(
+    tool_name: str,
+    arguments: Dict[str, Any],
+    agent_id: str,
+    config: Optional[Any] = None,
+) -> Dict[str, Any]:
+    try:
+        result = _execute_tool(
+            tool_name=tool_name,
+            arguments=arguments,
+            agent_id=agent_id,
+            config=config,
+            skip_ask=True,
+        )
+        text = str(result)
+        parsed = None
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            pass
+        if text.strip().lower().startswith("error"):
+            return {"ok": False, "code": "tool_error", "error": text}
+        if isinstance(parsed, dict) and (parsed.get("error") or parsed.get("success") is False):
+            return {"ok": False, "code": "tool_error", "error": str(parsed.get("error") or parsed)}
+        return {"ok": True, "output": text}
+    except Exception as exc:
+        return {"ok": False, "code": "execution_error", "error": str(exc)}
+
+
+def _execute_tool(
     tool_name: str,
     arguments: Dict[str, Any],
     agent_id: Optional[str] = None,
     config: Optional[Any] = None,
+    skip_ask: bool = False,
 ) -> str:
-    """Execute a dynamically loaded tool with the specified arguments.
+    """Shared execution engine for call_tool AND the Desk one-click executor.
 
-    Use this tool to execute any tool from the <available_tools> index or found via list_tools
-    after you have loaded its schema via load_tools. Do NOT call dynamic tools directly;
-    you must route them through this call_tool function.
-
-    Args:
-        tool_name: The name of the tool to execute (e.g. 'publish_to_wordpress')
-        arguments: A dictionary of arguments to pass to the tool (e.g. {'blog_post_markdown': '...', 'category_id': 1})
+    skip_ask=True is used ONLY when the user already approved this exact call by
+    clicking an Execute button on a Desk task card — the click is the approval,
+    so the mid-chat 'ask' interrupt is bypassed. 'deny' permission always blocks.
     """
     from langchain_core.runnables import RunnableConfig
     tool_name = tool_name.strip()
@@ -1086,24 +1238,18 @@ def call_tool(
     if config:
         configurable = config.configurable if hasattr(config, "configurable") else config.get("configurable", {})
         user_id = configurable.get("user_id")
-    
-    # Security/Access check: if agent_id is passed, the tool MUST be in the allowed list
-    if agent_id:
-        allowed = get_allowed_routing_tools(agent_id)
-        allowed_tools = allowed.get("normal", set()).union(allowed.get("super", set()))
-        if tool_name not in allowed_tools:
-            return f"Error: Tool '{tool_name}' is not assigned to this agent or is disabled."
-    else:
-        # Plugin gate: tools owned by a disabled plugin are unavailable
-        if tool_name in TOOL_OBJECTS and not is_tool_allowed(tool_name, _enabled_plugins_from_db()):
-            return f"Error: Tool '{tool_name}' belongs to a disabled plugin and cannot be executed."
+
+    # Security/Access check: execution always requires an exact enabled assignment.
+    authorization = get_enabled_tool_assignment(str(agent_id or ""), tool_name, str(user_id or ""))
+    if not authorization.get("ok"):
+        return f"Error: {authorization.get('error') or 'Tool execution is not authorized.'}"
 
     # Permission check: verify if tool is denied or requires human confirmation
     perm_mode = get_tool_permission_mode(tool_name, agent_id=agent_id, user_id=user_id)
     if perm_mode == "deny":
         return f"Error: Tool '{tool_name}' execution is blocked/denied by your security permissions."
 
-    if perm_mode == "ask":
+    if perm_mode == "ask" and not skip_ask:
         from langgraph.types import interrupt
         from langgraph.errors import GraphInterrupt
         interrupt_payload = {
@@ -1143,7 +1289,10 @@ def call_tool(
                         arguments = decision["edited_args"]
 
     # Fetch bindings and merge arguments
-    bindings = get_tool_bindings(agent_id, tool_name)
+    assignment_bindings = authorization.get("assignment", {}).get("parameter_bindings") or {}
+    bindings = assignment_bindings if isinstance(assignment_bindings, dict) else {}
+    if not bindings:
+        bindings = get_tool_bindings(agent_id, tool_name)
     if bindings:
         bound_params = {}
         for param_name, param_cfg in bindings.items():
@@ -1158,6 +1307,7 @@ def call_tool(
     tool_obj = TOOL_OBJECTS.get(tool_name)
     if tool_obj:
         try:
+            arguments = _validate_tool_arguments(tool_obj, arguments)
             res = tool_obj.invoke(arguments, config=config)
             return str(res)
         except Exception as e:
@@ -1172,6 +1322,7 @@ def call_tool(
         mcp_tools = run_sync(load_mcp_tool_by_key(tool_name, user_id))
         if mcp_tools:
             mcp_tool_obj = mcp_tools[0]
+            arguments = _validate_tool_arguments(mcp_tool_obj, arguments)
             # MCP StructuredTools from langchain_mcp_adapters are async-only.
             # Each invocation re-opens the stdio subprocess (shutil.which → os.access),
             # so we must bypass blockbuster by setting blockbuster_skip=True in the
@@ -1228,6 +1379,26 @@ def call_tool(
     except Exception as e:
         logger.error(f"Error executing MCP tool '{tool_name}': {e}")
         return f"Error executing tool '{tool_name}': {e}"
+
+
+@tool(parse_docstring=True)
+def call_tool(
+    tool_name: str,
+    arguments: Dict[str, Any],
+    agent_id: Optional[str] = None,
+    config: Optional[Any] = None,
+) -> str:
+    """Execute a dynamically loaded tool with the specified arguments.
+
+    Use this tool to execute any tool from the <available_tools> index or found via list_tools
+    after you have loaded its schema via load_tools. Do NOT call dynamic tools directly;
+    you must route them through this call_tool function.
+
+    Args:
+        tool_name: The name of the tool to execute (e.g. 'publish_to_wordpress')
+        arguments: A dictionary of arguments to pass to the tool (e.g. {'blog_post_markdown': '...', 'category_id': 1})
+    """
+    return _execute_tool(tool_name=tool_name, arguments=arguments, agent_id=agent_id, config=config)
 
 
 def unload_unused_tools(active_schemas: Dict[str, Any], tools_to_keep: List[str], max_limit: int = 15) -> Dict[str, Any]:
@@ -1364,6 +1535,8 @@ def bind_tool_parameters(tool: Any, bindings: Dict[str, Any]) -> Any:
 def get_tool_bindings(agent_id: str, tool_name: str) -> Dict[str, Any]:
     """Fetch tool parameter bindings from Supabase."""
     try:
+        if not agent_id or str(agent_id).lower() in ("none", "null", ""):
+            return {}
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").rstrip("/")
         key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")

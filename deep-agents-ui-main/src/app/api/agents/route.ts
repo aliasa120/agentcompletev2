@@ -16,7 +16,9 @@ function getSupabaseClient(cookieStore: any) {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
             );
-          } catch {}
+          } catch {
+            // Cookies may be read-only in route handlers.
+          }
         },
       },
     }
@@ -52,6 +54,7 @@ export async function GET() {
           tool_label,
           enabled,
           loading_mode,
+          permission_mode,
           parameter_bindings
         )
       `)

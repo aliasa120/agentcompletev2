@@ -14,6 +14,18 @@ function getSupabaseAdmin() {
     return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
 }
 
+function extractStashedField(rawMarkdown: string | null | undefined, fieldName: string): any {
+    if (!rawMarkdown) return null;
+    const regex = new RegExp(`<!--\\s*STASHED_${fieldName.toUpperCase()}:\\s*([\\s\\S]*?)\\s*-->`);
+    const match = rawMarkdown.match(regex);
+    if (!match) return null;
+    try {
+        return JSON.parse(match[1]);
+    } catch {
+        return match[1];
+    }
+}
+
 export async function DELETE(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
@@ -96,6 +108,8 @@ export async function DELETE(
             supabase.from("social_youtube_posts").delete().eq("post_id", id),
             supabase.from("social_linkedin_posts").delete().eq("post_id", id),
             supabase.from("social_twitter_posts").delete().eq("post_id", id),
+            supabase.from("social_tiktok_posts").delete().eq("post_id", id),
+            supabase.from("social_pinterest_posts").delete().eq("post_id", id),
         ]);
 
         const { error: delErr } = await supabase.from("social_posts").delete().eq("id", id);
@@ -177,6 +191,8 @@ export async function PATCH(
         if (body.facebook !== undefined) patch.facebook = body.facebook;
         if (body.youtube !== undefined) patch.youtube = body.youtube;
         if (body.linkedin !== undefined) patch.linkedin = body.linkedin;
+        if (body.tiktok !== undefined) patch.tiktok = body.tiktok;
+        if (body.pinterest !== undefined) patch.pinterest = body.pinterest;
         if (body.image_url !== undefined) {
             patch.image_url = body.image_url;
             patch.has_image = Boolean(body.image_url);
@@ -186,16 +202,51 @@ export async function PATCH(
         if (body.youtube_data !== undefined) patch.youtube_data = body.youtube_data;
         if (body.linkedin_data !== undefined) patch.linkedin_data = body.linkedin_data;
         if (body.twitter_data !== undefined) patch.twitter_data = body.twitter_data;
+        if (body.tiktok_data !== undefined) patch.tiktok_data = body.tiktok_data;
+        if (body.pinterest_data !== undefined) patch.pinterest_data = body.pinterest_data;
 
-        const { data, error } = await supabase
-            .from("social_posts")
-            .update(patch)
-            .eq("id", id)
-            .select()
-            .single();
+        let currentPatch = { ...patch };
+        let data: any = null;
+        let lastError: any = null;
 
-        if (error) {
-            return NextResponse.json({ success: false, error: error.message }, { status: 502 });
+        // Try updating, defensively falling back to raw_markdown stashing if columns don't exist yet
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const res = await supabase
+                .from("social_posts")
+                .update(currentPatch)
+                .eq("id", id)
+                .select()
+                .single();
+
+            if (!res.error) {
+                data = res.data;
+                lastError = null;
+                break;
+            }
+
+            lastError = res.error;
+            const errMsg = res.error.message || "";
+            const match = errMsg.match(/Could not find the '([^']+)' column/);
+            if (match && match[1]) {
+                const missingCol = match[1];
+                const omittedVal = currentPatch[missingCol];
+                delete currentPatch[missingCol];
+
+                if (omittedVal !== undefined) {
+                    const { data: currentPost } = await supabase.from("social_posts").select("raw_markdown").eq("id", id).maybeSingle();
+                    let raw = currentPost?.raw_markdown || "";
+                    const markerRegex = new RegExp(`<!--\\s*STASHED_${missingCol.toUpperCase()}:[\\s\\S]*?-->`, "g");
+                    raw = raw.replace(markerRegex, "").trim();
+                    const newMarker = `\n<!-- STASHED_${missingCol.toUpperCase()}: ${JSON.stringify(omittedVal)} -->`;
+                    currentPatch.raw_markdown = (raw + newMarker).trim();
+                    continue;
+                }
+            }
+            break;
+        }
+
+        if (lastError || !data) {
+            return NextResponse.json({ success: false, error: lastError?.message || "Failed to update post" }, { status: 502 });
         }
 
         // Synchronize child platform tables if caption/message changed
@@ -229,6 +280,25 @@ export async function PATCH(
                 .update({ text: body.twitter })
                 .eq("post_id", id);
         }
+        if (body.tiktok !== undefined) {
+            await supabase
+                .from("social_tiktok_posts")
+                .update({ text: body.tiktok })
+                .eq("post_id", id);
+        }
+        if (body.pinterest !== undefined) {
+            await supabase
+                .from("social_pinterest_posts")
+                .update({ description: body.pinterest })
+                .eq("post_id", id);
+        }
+
+        // Un-stash fields on return data for client UI
+        const raw = data.raw_markdown || "";
+        data.tiktok = data.tiktok || extractStashedField(raw, "tiktok") || body.tiktok || "";
+        data.tiktok_data = data.tiktok_data || extractStashedField(raw, "tiktok_data") || body.tiktok_data || null;
+        data.pinterest = data.pinterest || extractStashedField(raw, "pinterest") || body.pinterest || "";
+        data.pinterest_data = data.pinterest_data || extractStashedField(raw, "pinterest_data") || body.pinterest_data || null;
 
         return NextResponse.json({ success: true, post: data });
     } catch (err: any) {

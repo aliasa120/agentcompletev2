@@ -16,7 +16,7 @@ from typing import List
 import httpx
 from langchain_core.tools import tool
 
-from .provider_engine import execute_with_fallback, get_settings, execute_unified_pipeline
+from .provider_engine import execute_unified_pipeline
 
 logger = logging.getLogger("unified_search")
 
@@ -151,11 +151,17 @@ _PROVIDER_MAP = {
 from langchain_core.runnables import RunnableConfig
 
 @tool(parse_docstring=True)
-def unified_search(query: str, config: RunnableConfig = None) -> str:
+def unified_search(query: str, provider: str = "", config: RunnableConfig = None) -> str:
     """Search the web for current news and information on a given topic.
 
     Provider selection, priority, retry count, and fallback logic are
     handled automatically based on the numbered settings in Supabase.
+
+    Fallback protocol:
+    - The active provider is retried automatically (waits of 3s / 8s / 16s).
+    - If it keeps failing, the tool result will contain a FALLBACK HANDOFF
+      message naming the next provider and its schema. In that case, call
+      this tool AGAIN with provider='<next_provider_key>' from that message.
 
     Query writing rules:
     - Short, specific keyword string (4-8 words) — no quotation marks.
@@ -166,6 +172,7 @@ def unified_search(query: str, config: RunnableConfig = None) -> str:
 
     Args:
         query: Keyword-dense search string (4-8 words). No quotes. Include year.
+        provider: Optional provider key to pin this call to one configured provider (e.g. 'linkup', 'tavily'). Set this ONLY when following a FALLBACK HANDOFF message.
         config: Optional LangChain runnable configuration.
 
     Returns:
@@ -195,6 +202,7 @@ def unified_search(query: str, config: RunnableConfig = None) -> str:
             max_retries=4,
             timeout_seconds=30,
             query=query,
+            provider=provider,
             config=config,
         )
     )

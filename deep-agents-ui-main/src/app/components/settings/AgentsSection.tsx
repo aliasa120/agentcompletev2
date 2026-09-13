@@ -27,6 +27,8 @@ interface ToolAssignment {
   tool_key: string;
   tool_label: string;
   enabled: boolean;
+  loading_mode?: string | null;
+  permission_mode?: string | null;
   parameter_bindings?: Record<string, { value: any; decide_by_ai: boolean }>;
   isAutoAttached?: boolean;
 }
@@ -94,6 +96,8 @@ const BUILTIN_TOOLS = [
   { tool_key: "save_facebook_post",     tool_label: "Save Facebook Post",   category: "Plugin: Posts" },
   { tool_key: "save_linkedin_post",     tool_label: "Save LinkedIn Post",   category: "Plugin: Posts" },
   { tool_key: "save_twitter_post",      tool_label: "Save X (Twitter) Post", category: "Plugin: Posts" },
+  { tool_key: "save_tiktok_post",       tool_label: "Save TikTok Video",     category: "Plugin: Posts" },
+  { tool_key: "save_pinterest_post",    tool_label: "Save Pinterest Pin",    category: "Plugin: Posts" },
   { tool_key: "save_social_bundle",     tool_label: "Save Social Bundle",   category: "Plugin: Posts" },
   { tool_key: "get_wordpress_categories", tool_label: "WP Categories",       category: "Plugin: Posts" },
   { tool_key: "publish_to_wordpress",   tool_label: "Publish to WordPress",  category: "Plugin: Posts" },
@@ -102,11 +106,12 @@ const BUILTIN_TOOLS = [
   { tool_key: "call_tool",              tool_label: "Call Tool",             category: "Routing" },
   { tool_key: "cronjob",                tool_label: "Cron Scheduler",        category: "Routing" },
   { tool_key: "omni_analyzer",         tool_label: "Omni Analyzer",        category: "Routing" },
+  { tool_key: "add_to_desk",          tool_label: "Add to Desk",          category: "Desk" },
   { tool_key: "text_to_speech",         tool_label: "Text to Speech (Voice)", category: "Voice" },
   { tool_key: "terminal",               tool_label: "Terminal", category: "Terminal" },
 ];
 
-const TOOL_CATEGORIES = ["Search", "Memory", "Reasoning", "Images", "Skills", "Plugin: Posts", "Routing", "Voice", "Terminal"];
+const _TOOL_CATEGORIES = ["Search", "Memory", "Reasoning", "Images", "Skills", "Plugin: Posts", "Routing", "Desk", "Voice", "Terminal"];
 
 interface ToolSetting {
   id: string;
@@ -993,6 +998,21 @@ function AgentEditorCard({
     }
   }, [provider, updatedProviderMetas, model]);
 
+  const comparableAssignments = (assignments: ToolAssignment[]) => assignments
+    .filter((assignment) => !assignment.isAutoAttached)
+    .map((assignment) => ({
+      tool_type: assignment.tool_type,
+      tool_key: assignment.tool_key,
+      tool_label: assignment.tool_label,
+      enabled: assignment.enabled,
+      loading_mode: assignment.loading_mode ?? null,
+      permission_mode: assignment.permission_mode ?? null,
+      parameter_bindings: Object.fromEntries(
+        Object.entries(assignment.parameter_bindings ?? {}).sort(([a], [b]) => a.localeCompare(b))
+      ),
+    }))
+    .sort((a, b) => `${a.tool_type}:${a.tool_key}`.localeCompare(`${b.tool_type}:${b.tool_key}`));
+
   const isDirty =
     name !== agent.name ||
     description !== agent.description ||
@@ -1002,8 +1022,8 @@ function AgentEditorCard({
     attachAllSkills !== (agent.attach_all_skills ?? false) ||
     avatarUrl !== (agent.avatar_url || "") ||
     JSON.stringify([...workflowIds].sort()) !== JSON.stringify([...initialWorkflowIds].sort()) ||
-    JSON.stringify(tools.map(t => t.tool_key).sort()) !==
-    JSON.stringify((agent.agent_tool_assignments ?? []).map(t => t.tool_key).sort());
+    JSON.stringify(comparableAssignments(tools)) !==
+    JSON.stringify(comparableAssignments(agent.agent_tool_assignments ?? []));
 
   const handleSave = async () => {
     setSaving(true);

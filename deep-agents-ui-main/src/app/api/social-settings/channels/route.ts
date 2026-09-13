@@ -100,7 +100,15 @@ export async function GET(req: NextRequest) {
       let query = supabase
         .from("agent_settings")
         .select("key, value")
-        .in("key", ["fb_page_id", "fb_page_name", "yt_channel_id", "yt_channel_title"]);
+        .in("key", [
+          "fb_page_id",
+          "fb_page_name",
+          "yt_channel_id",
+          "yt_channel_title",
+          "social_pinterest_board_id",
+          "social_pinterest_board_name",
+          "pinterest_board_id",
+        ]);
 
       if (user?.id) {
         query = query.eq("user_id", user.id);
@@ -212,14 +220,82 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, channels });
     }
 
-    return NextResponse.json({ error: "Invalid platform. Specify platform=facebook, platform=youtube, or platform=saved." }, { status: 400 });
+    // 4. Fetch Pinterest Boards
+    if (platform === "pinterest") {
+      const conn = await getComposioConnection("pinterest");
+      const connectedAccountId = conn?.composio_conn_id || undefined;
+      const targetUserId = conn?.user_id || userId;
+
+      const payload: Record<string, any> = {
+        arguments: {
+          page_size: 25,
+        },
+      };
+      if (connectedAccountId) {
+        payload.connected_account_id = connectedAccountId;
+      }
+      payload.user_id = targetUserId;
+
+      const res = await fetch("https://backend.composio.dev/api/v3.1/tools/execute/PINTEREST_LIST_BOARDS", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error) {
+        return NextResponse.json(
+          { error: json.error?.message || json.message || "Failed to fetch Pinterest boards from Composio" },
+          { status: res.status }
+        );
+      }
+
+      // Parse Pinterest boards
+      const rawData = json.data?.items || json.data?.boards || json.data || json.items || [];
+      let boards = (Array.isArray(rawData) ? rawData : []).map((b: any) => ({
+        id: String(b.id || ""),
+        name: b.name || "Unnamed Board",
+        privacy: b.privacy || "PUBLIC",
+        pin_count: b.pin_count ?? 0,
+      })).filter((b: any) => Boolean(b.id));
+
+      // If user has 0 boards, auto-create a default board
+      if (boards.length === 0) {
+        try {
+          const createPayload: Record<string, any> = {
+            arguments: { name: "General Pins" },
+            user_id: targetUserId,
+          };
+          if (connectedAccountId) createPayload.connected_account_id = connectedAccountId;
+          const createRes = await fetch("https://backend.composio.dev/api/v3.1/tools/execute/PINTEREST_CREATE_BOARD", {
+            method: "POST",
+            headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+            body: JSON.stringify(createPayload),
+          });
+          const createJson = await createRes.json().catch(() => ({}));
+          const createdId = createJson.data?.id || createJson.id;
+          if (createdId) {
+            boards = [{ id: String(createdId), name: "General Pins", privacy: "PUBLIC", pin_count: 0 }];
+          }
+        } catch (err) {
+          console.warn("[channels] Warning: Auto-creating Pinterest board failed:", err);
+        }
+      }
+
+      return NextResponse.json({ success: true, boards });
+    }
+
+    return NextResponse.json({ error: "Invalid platform. Specify platform=facebook, platform=youtube, platform=pinterest, or platform=saved." }, { status: 400 });
   } catch (err: any) {
     console.error("[social-settings/channels GET] Error:", err);
     return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
   }
 }
 
-// POST: Save user's chosen Facebook Page or YouTube Channel to agent_settings
+// POST: Save user's chosen Facebook Page, YouTube Channel, or Pinterest Board to agent_settings
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -227,7 +303,15 @@ export async function POST(req: NextRequest) {
     const user = await getAuthenticatedUser();
     const userId = user?.id || "c017bdb6-5708-4a8e-ba7d-ebf476485c61";
 
-    const allowedKeys = ["fb_page_id", "fb_page_name", "yt_channel_id", "yt_channel_title"];
+    const allowedKeys = [
+      "fb_page_id",
+      "fb_page_name",
+      "yt_channel_id",
+      "yt_channel_title",
+      "social_pinterest_board_id",
+      "social_pinterest_board_name",
+      "pinterest_board_id",
+    ];
     const updates: { user_id: string; key: string; value: string; updated_at: string }[] = [];
 
     for (const key of allowedKeys) {

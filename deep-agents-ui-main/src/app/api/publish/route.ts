@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { TwitterApi } from "twitter-api-v2";
 import { createClient } from "@supabase/supabase-js";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { spawnSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
@@ -20,6 +21,18 @@ const COMPOSIO_V3_FILES = "https://backend.composio.dev/api/v3/files/upload/requ
 function getSupabaseAdmin() {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) throw new Error("Supabase credentials not configured");
     return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
+}
+
+function extractStashedField(rawMarkdown: string | null | undefined, fieldName: string): any {
+    if (!rawMarkdown) return null;
+    const regex = new RegExp(`<!--\\s*STASHED_${fieldName.toUpperCase()}:\\s*([\\s\\S]*?)\\s*-->`);
+    const match = rawMarkdown.match(regex);
+    if (!match) return null;
+    try {
+        return JSON.parse(match[1]);
+    } catch {
+        return match[1];
+    }
 }
 
 function getMimeType(filePath: string): string {
@@ -594,8 +607,8 @@ async function publishInstagramUnified(
 }
 
 function isVideoMedia(urlOrPath: string): boolean {
-    const l = (urlOrPath || "").toLowerCase();
-    return l.endsWith(".mp4") || l.endsWith(".mov") || l.endsWith(".webm") || l.endsWith(".mkv");
+    const clean = (urlOrPath || "").split("?")[0].split("#")[0].toLowerCase();
+    return clean.endsWith(".mp4") || clean.endsWith(".mov") || clean.endsWith(".webm") || clean.endsWith(".mkv");
 }
 
 // Helper: Publish to Facebook via Composio (with target page selection)
@@ -980,10 +993,10 @@ async function publishTwitterUnified(
     const declaredType = String(twData.media_type || "").toLowerCase();
 
     // 1. Direct Twitter API v2 credentials (with R2 video/image upload support)
-    const appKey = cred("TWITTER_API_KEY", settings.social_twitter_api_key);
-    const appSecret = cred("TWITTER_API_SECRET", settings.social_twitter_api_secret);
-    const accessToken = cred("TWITTER_ACCESS_TOKEN", settings.social_twitter_access_token);
-    const accessSecret = cred("TWITTER_ACCESS_SECRET", settings.social_twitter_access_secret);
+    const appKey = cred("TWITTER_API_KEY", settings.social_twitter_api_key || settings.twitter_api_key);
+    const appSecret = cred("TWITTER_API_SECRET", settings.social_twitter_api_secret || settings.twitter_api_secret);
+    const accessToken = cred("TWITTER_ACCESS_TOKEN", settings.social_twitter_access_token || settings.twitter_access_token);
+    const accessSecret = cred("TWITTER_ACCESS_SECRET", settings.social_twitter_access_secret || settings.twitter_access_secret);
 
     if (appKey && appSecret && accessToken && accessSecret) {
         console.log("[publish] Publishing to Twitter / X via TwitterApi v2...");
@@ -1121,6 +1134,406 @@ async function publishTwitterUnified(
     throw new Error("Twitter/X not connected. Please configure Twitter API keys in Settings or connect X via Composio/Smithery.");
 }
 
+// Helper: Publish to TikTok via Buffer GraphQL API
+async function publishTiktokBuffer(
+    post: any,
+    settings: Record<string, string>,
+    ownerId: string | null
+): Promise<string> {
+    const bufferToken = cred("BUFFER_ACCESS_TOKEN", settings.buffer_access_token || settings.social_buffer_access_token);
+    if (!bufferToken) {
+        throw new Error("Buffer access token not configured. Please add BUFFER_ACCESS_TOKEN in Settings > ENV Keys.");
+    }
+
+    const tiktokData = post.tiktok_data || {};
+    const caption = tiktokData.caption || post.tiktok || post.title || "";
+    const rawVideo = tiktokData.video_url || post.video_url || "";
+    const title = (tiktokData.title || post.title || "").trim();
+    const isAiGenerated = Boolean(tiktokData.is_ai_generated);
+
+    if (!rawVideo) {
+        throw new Error("TikTok upload requires a video file. Re-save the post with a valid video URL.");
+    }
+
+    const publicVideoUrl = await ensurePublicMediaUrl(rawVideo, settings, ownerId);
+    if (/\.(png|jpe?g|webp|gif|bmp|svg)(\?|$)/i.test(publicVideoUrl)) {
+        throw new Error(`TikTok upload requires a video file, but URL points to an image: ${publicVideoUrl}`);
+    }
+
+    // Discover or use configured TikTok channel ID
+    let channelId = settings.buffer_tiktok_channel_id || settings.social_buffer_tiktok_channel_id || "";
+    if (!channelId) {
+        console.log("[publish] Discovering TikTok channel ID from Buffer...");
+        // 1. Get organization ID
+        const orgRes = await fetch("https://api.buffer.com", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${bufferToken}`,
+            },
+            body: JSON.stringify({
+                query: `query GetAccountOrgs {
+                    account {
+                        organizations {
+                            id
+                        }
+                    }
+                }`,
+            }),
+        });
+        const orgData = await orgRes.json().catch(() => ({}));
+        if (orgData.errors?.length) {
+            throw new Error(`Buffer API error: ${orgData.errors[0].message}`);
+        }
+        const orgId = orgData.data?.account?.organizations?.[0]?.id;
+        if (!orgId) {
+            throw new Error("No organization found in your Buffer account. Please ensure your Buffer account is set up.");
+        }
+
+        // 2. Query channels for this organization
+        const chRes = await fetch("https://api.buffer.com", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${bufferToken}`,
+            },
+            body: JSON.stringify({
+                query: `query GetChannels($input: ChannelsInput!) {
+                    channels(input: $input) {
+                        id
+                        name
+                        service
+                    }
+                }`,
+                variables: { input: { organizationId: orgId } },
+            }),
+        });
+        const chData = await chRes.json().catch(() => ({}));
+        if (chData.errors?.length) {
+            throw new Error(`Buffer API error: ${chData.errors[0].message}`);
+        }
+        const channels = chData.data?.channels || [];
+        const tiktokChannel = channels.find((c: any) => c.service?.toLowerCase() === "tiktok");
+        if (!tiktokChannel) {
+            throw new Error("No TikTok channel found in your Buffer account. Please connect TikTok in your Buffer dashboard (https://publish.buffer.com).");
+        }
+        channelId = tiktokChannel.id;
+    }
+
+    console.log(`[publish] Publishing to TikTok via Buffer GraphQL (channelId: ${channelId})...`);
+
+    const mutation = `
+        mutation CreateTikTokPost($input: CreatePostInput!) {
+            createPost(input: $input) {
+                ... on PostActionSuccess {
+                    post {
+                        id
+                        status
+                    }
+                }
+                ... on MutationError {
+                    message
+                }
+            }
+        }
+    `;
+
+    const input: Record<string, any> = {
+        channelId,
+        text: caption,
+        mode: "shareNow",
+        schedulingType: "automatic",
+        assets: {
+            video: {
+                url: publicVideoUrl,
+                ...(title ? { metadata: { title } } : {}),
+            },
+        },
+        metadata: {
+            tiktok: {
+                isAiGenerated,
+                ...(title ? { title } : {}),
+            },
+        },
+    };
+
+    const mutRes = await fetch("https://api.buffer.com", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${bufferToken}`,
+        },
+        body: JSON.stringify({
+            query: mutation,
+            variables: { input },
+        }),
+    });
+
+    const mutData = await mutRes.json().catch(() => ({}));
+    if (mutData.errors?.length) {
+        throw new Error(`Buffer GraphQL error: ${mutData.errors[0].message}`);
+    }
+
+    const payload = mutData.data?.createPost;
+    if (payload?.message) {
+        throw new Error(`Buffer error: ${payload.message}`);
+    }
+
+    const createdPostId = payload?.post?.id;
+    if (!createdPostId) {
+        throw new Error(`Buffer post creation failed: ${JSON.stringify(mutData)}`);
+    }
+
+    return createdPostId;
+}
+
+/** Extract a high-quality poster frame from a video URL using ffmpeg and upload to storage. */
+async function extractVideoPosterFrame(
+    videoUrl: string,
+    settings: Record<string, string>,
+    userId: string | null
+): Promise<string | null> {
+    try {
+        const res = spawnSync(
+            "ffmpeg",
+            ["-ss", "00:00:01", "-i", videoUrl, "-vframes", "1", "-f", "image2", "-q:v", "2", "pipe:1"],
+            { maxBuffer: 15 * 1024 * 1024 }
+        );
+        if (res.status === 0 && res.stdout && res.stdout.length > 1000) {
+            const frameBuf = Buffer.from(res.stdout);
+            const frameFilename = `pin_poster_${Date.now()}.jpg`;
+            const uploadedUrl = await uploadToUnifiedStorage(
+                frameBuf,
+                frameFilename,
+                "image/jpeg",
+                settings,
+                userId
+            );
+            console.log(`[publish] Extracted & uploaded video poster frame for Pinterest: ${uploadedUrl}`);
+            return uploadedUrl;
+        }
+    } catch (err) {
+        console.warn("[publish] Warning: ffmpeg video frame extraction failed:", err);
+    }
+    return null;
+}
+
+/** Upload a video file to Pinterest's Media API & S3, returning the numeric media_id. */
+async function uploadNativePinterestVideo(
+    videoUrl: string,
+    composioApiKey: string,
+    connectedAccountId: string,
+    userId: string
+): Promise<string> {
+    console.log("[publish] Step 1: Registering video with Pinterest Media API via Composio proxy...");
+    const proxyUrl = `${COMPOSIO_BASE}/tools/execute/proxy`;
+
+    // 1. Register media ticket
+    const regRes = await fetch(proxyUrl, {
+        method: "POST",
+        headers: {
+            "x-api-key": composioApiKey,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            connected_account_id: connectedAccountId,
+            endpoint: "/media",
+            method: "POST",
+            body: { media_type: "video" },
+        }),
+    });
+    const regJson = await regRes.json().catch(() => ({}));
+    const regData = regJson.data?.data || regJson.data || regJson;
+    const mediaId = regData?.media_id;
+    const uploadUrl = regData?.upload_url;
+    const uploadParams = regData?.upload_parameters;
+
+    if (!mediaId || !uploadUrl || !uploadParams) {
+        throw new Error(`Failed to register video with Pinterest: ${JSON.stringify(regJson)}`);
+    }
+
+    console.log(`[publish] Registered Pinterest media_id: ${mediaId}. Fetching video bytes...`);
+    const vidRes = await fetch(videoUrl, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    if (!vidRes.ok) {
+        throw new Error(`Failed to download video from ${videoUrl} (status ${vidRes.status})`);
+    }
+    const videoBuffer = Buffer.from(await vidRes.arrayBuffer());
+
+    console.log(`[publish] Uploading ${videoBuffer.length} bytes to Pinterest S3 bucket...`);
+    const formData = new FormData();
+    for (const [k, v] of Object.entries(uploadParams)) {
+        formData.append(k, String(v));
+    }
+    const videoBlob = new Blob([videoBuffer], { type: "video/mp4" });
+    formData.append("file", videoBlob, "video.mp4");
+
+    const s3Res = await fetch(uploadUrl, {
+        method: "POST",
+        body: formData,
+    });
+    if (!s3Res.ok && s3Res.status !== 204) {
+        throw new Error(`Pinterest S3 video upload failed with status ${s3Res.status}`);
+    }
+
+    console.log("[publish] S3 video upload succeeded. Waiting for Pinterest to process video...");
+    for (let attempt = 1; attempt <= 20; attempt++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const pollRes = await fetch(proxyUrl, {
+            method: "POST",
+            headers: {
+                "x-api-key": composioApiKey,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                connected_account_id: connectedAccountId,
+                endpoint: `/media/${mediaId}`,
+                method: "GET",
+            }),
+        });
+        const pollJson = await pollRes.json().catch(() => ({}));
+        const status = pollJson.data?.data?.status || pollJson.data?.status || pollJson.status;
+        console.log(`[publish] Pinterest video transcode attempt ${attempt}: status = ${status}`);
+        if (status === "succeeded") {
+            console.log(`[publish] Pinterest video ${mediaId} ready!`);
+            return String(mediaId);
+        }
+        if (status === "failed") {
+            throw new Error(`Pinterest video processing failed: ${JSON.stringify(pollJson)}`);
+        }
+    }
+
+    return String(mediaId);
+}
+
+// Helper: Publish to Pinterest via Composio MCP (PINTEREST_CREATE_PIN)
+async function publishPinterestUnified(
+    post: any,
+    settings: Record<string, string>,
+    composioApiKey: string,
+    conn: { composio_conn_id?: string; user_id?: string } | null,
+    ownerId: string | null
+): Promise<string> {
+    const pinData = post.pinterest_data || {};
+    const title = (pinData.title || post.title || "").trim().slice(0, 100);
+    const description = (pinData.description || post.facebook || post.instagram || post.title || "").trim().slice(0, 800);
+    const rawMedia = pinData.media_url || post.image_url || "";
+    let link = (pinData.link || "").trim().slice(0, 2048);
+    let boardId = (pinData.board_id || settings.social_pinterest_board_id || settings.pinterest_board_id || "").trim();
+
+    if (!composioApiKey || !conn) {
+        throw new Error("Pinterest not connected. Please connect Pinterest via Composio in Posts Settings.");
+    }
+
+    if (!rawMedia) {
+        throw new Error("Pinterest pin requires an image or video file. Re-save the post with a valid media URL.");
+    }
+
+    const publicMediaUrl = await ensurePublicMediaUrl(rawMedia, settings, ownerId);
+
+    // If boardId is not set, dynamically query user's boards using Composio PINTEREST_LIST_BOARDS
+    if (!boardId) {
+        console.log("[publish] Discovering Pinterest boards via Composio...");
+        try {
+            const boardsRes = await executeComposioTool(
+                composioApiKey,
+                "PINTEREST_LIST_BOARDS",
+                { page_size: 25 },
+                conn.composio_conn_id,
+                conn.user_id
+            );
+            const boardsList = boardsRes.items || boardsRes.data?.items || boardsRes.boards || boardsRes.data || [];
+            if (Array.isArray(boardsList) && boardsList.length > 0) {
+                boardId = String(boardsList[0].id);
+                console.log(`[publish] Auto-selected Pinterest board: ${boardsList[0].name} (${boardId})`);
+            } else {
+                console.log("[publish] No Pinterest boards found; auto-creating 'General Pins' board...");
+                try {
+                    const createBoardRes = await executeComposioTool(
+                        composioApiKey,
+                        "PINTEREST_CREATE_BOARD",
+                        { name: "General Pins" },
+                        conn.composio_conn_id,
+                        conn.user_id
+                    );
+                    const newBoardId = createBoardRes.id || createBoardRes.data?.id;
+                    if (newBoardId) {
+                        boardId = String(newBoardId);
+                        console.log(`[publish] Auto-created Pinterest board: ${boardId}`);
+                    }
+                } catch (createErr) {
+                    console.warn("[publish] Warning: Failed to auto-create Pinterest board:", createErr);
+                }
+            }
+        } catch (boardErr) {
+            console.warn("[publish] Warning: Failed to auto-list Pinterest boards:", boardErr);
+        }
+    }
+
+    if (!boardId) {
+        throw new Error("Pinterest publishing requires a Board ID. Please create a board on Pinterest or configure a Default Board ID in Posts Settings.");
+    }
+
+    const declaredType = pinData.media_type || post.media_type;
+    const isVideo = declaredType === "video" || isVideoMedia(publicMediaUrl) || Boolean(post.video_url);
+    let mediaSource: Record<string, any>;
+
+    if (isVideo && conn.composio_conn_id) {
+        try {
+            console.log("[publish] Publishing native Video Pin to Pinterest...");
+            const mediaId = await uploadNativePinterestVideo(
+                publicMediaUrl,
+                composioApiKey,
+                conn.composio_conn_id,
+                conn.user_id || "default"
+            );
+            mediaSource = {
+                source_type: "video_id",
+                media_id: mediaId,
+                cover_image_key_frame_time: 1,
+            };
+        } catch (videoErr) {
+            console.warn("[publish] Native Pinterest video upload failed, falling back to cover frame:", videoErr);
+            const frameUrl = await extractVideoPosterFrame(publicMediaUrl, settings, ownerId);
+            mediaSource = {
+                source_type: "image_url",
+                url: frameUrl || publicMediaUrl,
+            };
+            if (!link) link = publicMediaUrl;
+        }
+    } else {
+        mediaSource = {
+            source_type: "image_url",
+            url: publicMediaUrl,
+        };
+    }
+
+    console.log(`[publish] Creating Pinterest Pin via Composio on board ${boardId}...`);
+    const args: Record<string, any> = {
+        board_id: boardId,
+        media_source: mediaSource,
+    };
+    if (title) args.title = title;
+    if (description) args.description = description;
+    if (link) args.link = link;
+
+    const res = await executeComposioTool(
+        composioApiKey,
+        "PINTEREST_CREATE_PIN",
+        args,
+        conn.composio_conn_id,
+        conn.user_id
+    );
+
+    const pinId = res.id || res.pin_id || res.data?.id;
+    if (!pinId) {
+        throw new Error(`Composio Pinterest pin creation response missing pin ID: ${JSON.stringify(res)}`);
+    }
+
+    return String(pinId);
+}
+
 // ── Per-platform draft-row status writeback ────────────────────────────────────
 
 const PLATFORM_TABLES: Record<string, { table: string; idColumn: string }> = {
@@ -1129,6 +1542,8 @@ const PLATFORM_TABLES: Record<string, { table: string; idColumn: string }> = {
     youtube: { table: "social_youtube_posts", idColumn: "published_video_id" },
     linkedin: { table: "social_linkedin_posts", idColumn: "published_post_id" },
     twitter: { table: "social_twitter_posts", idColumn: "published_tweet_id" },
+    tiktok: { table: "social_tiktok_posts", idColumn: "published_post_id" },
+    pinterest: { table: "social_pinterest_posts", idColumn: "published_pin_id" },
 };
 
 /** Mirror the publish outcome onto the platform draft row so it stops showing as 'draft'. */
@@ -1171,7 +1586,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { post_id, platforms = ["facebook", "instagram", "youtube", "twitter", "linkedin"] } = body;
+    const { post_id, platforms = ["facebook", "instagram", "youtube", "twitter", "linkedin", "tiktok", "pinterest"] } = body;
 
     if (!post_id) {
         return NextResponse.json({ success: false, error: "post_id is required" }, { status: 400 });
@@ -1189,6 +1604,20 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: "Post not found" }, { status: 404 });
     }
 
+    const rawMarkdown = (post as any).raw_markdown || "";
+    if (!(post as any).tiktok) {
+        (post as any).tiktok = extractStashedField(rawMarkdown, "tiktok") || "";
+    }
+    if (!(post as any).tiktok_data) {
+        (post as any).tiktok_data = extractStashedField(rawMarkdown, "tiktok_data") || null;
+    }
+    if (!(post as any).pinterest) {
+        (post as any).pinterest = extractStashedField(rawMarkdown, "pinterest") || "";
+    }
+    if (!(post as any).pinterest_data) {
+        (post as any).pinterest_data = extractStashedField(rawMarkdown, "pinterest_data") || null;
+    }
+
     // A signed-in user may only publish their own posts. Legacy rows without an
     // owner stay accessible so existing drafts keep working.
     if (caller.kind === "user" && post.user_id && post.user_id !== caller.userId) {
@@ -1203,12 +1632,13 @@ export async function POST(req: Request) {
     const composioApiKey = process.env.COMPOSIO_API_KEY || settings.composio_api_key || "";
 
     // Fetch active Composio connections for each platform (owner-scoped)
-    const [fbConn, igConn, ytConn, twConn, liConn] = await Promise.all([
+    const [fbConn, igConn, ytConn, twConn, liConn, pinConn] = await Promise.all([
         getComposioConnection("facebook", ownerId),
         getComposioConnection("instagram", ownerId),
         getComposioConnection("youtube", ownerId),
         getComposioConnection("twitter", ownerId),
         getComposioConnection("linkedin", ownerId),
+        getComposioConnection("pinterest", ownerId),
     ]);
 
     const results: Record<string, { success: boolean; post_id?: string; error?: string; skipped?: boolean; status?: string }> = {};
@@ -1273,6 +1703,20 @@ export async function POST(req: Request) {
     if (platforms.includes("linkedin") && (post.linkedin || post.linkedin_data)) {
         await runPlatform("linkedin", () =>
             publishLinkedinUnified(post, settings, composioApiKey, liConn, ownerId)
+        );
+    }
+
+    // 6. TikTok (via Buffer GraphQL)
+    if (platforms.includes("tiktok") && (post.tiktok || post.tiktok_data)) {
+        await runPlatform("tiktok", () =>
+            publishTiktokBuffer(post, settings, ownerId)
+        );
+    }
+
+    // 7. Pinterest (via Composio MCP)
+    if (platforms.includes("pinterest") && (post.pinterest || post.pinterest_data)) {
+        await runPlatform("pinterest", () =>
+            publishPinterestUnified(post, settings, composioApiKey, pinConn, ownerId)
         );
     }
 
@@ -1371,8 +1815,8 @@ export async function GET(req: Request) {
             });
         }
         const hasApiKeys = !!(
-            cred("TWITTER_API_KEY", settings.social_twitter_api_key) &&
-            cred("TWITTER_ACCESS_TOKEN", settings.social_twitter_access_token)
+            cred("TWITTER_API_KEY", settings.social_twitter_api_key || settings.twitter_api_key) &&
+            cred("TWITTER_ACCESS_TOKEN", settings.social_twitter_access_token || settings.twitter_access_token)
         );
         if (hasApiKeys) {
             return NextResponse.json({
@@ -1400,13 +1844,86 @@ export async function GET(req: Request) {
         return NextResponse.json({ success: false, connected: false });
     }
 
-    const [fb, ig, yt, tw, li] = await Promise.all([
+    if (platform === "tiktok") {
+        const bufferToken = cred("BUFFER_ACCESS_TOKEN", settings.buffer_access_token || settings.social_buffer_access_token);
+        if (bufferToken) {
+            try {
+                // 1. Get organization ID
+                const orgRes = await fetch("https://api.buffer.com", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${bufferToken}`,
+                    },
+                    body: JSON.stringify({
+                        query: `query { account { organizations { id } } }`,
+                    }),
+                });
+                const orgJson = await orgRes.json().catch(() => ({}));
+                const orgId = orgJson.data?.account?.organizations?.[0]?.id;
+
+                let channels: any[] = [];
+                if (orgId) {
+                    const chRes = await fetch("https://api.buffer.com", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${bufferToken}`,
+                        },
+                        body: JSON.stringify({
+                            query: `query ($input: ChannelsInput!) { channels(input: $input) { id name service } }`,
+                            variables: { input: { organizationId: orgId } },
+                        }),
+                    });
+                    const chJson = await chRes.json().catch(() => ({}));
+                    channels = chJson.data?.channels || [];
+                }
+
+                const tiktokChannel = channels.find((c: any) => c.service?.toLowerCase() === "tiktok");
+                return NextResponse.json({
+                    success: true,
+                    connected: true,
+                    mode: "buffer",
+                    channel_name: tiktokChannel?.name || null,
+                    channel_id: tiktokChannel?.id || null,
+                    info: tiktokChannel
+                        ? `Connected to TikTok via Buffer: @${tiktokChannel.name}`
+                        : "Connected to Buffer (no TikTok channel linked yet)",
+                });
+            } catch {
+                return NextResponse.json({
+                    success: true,
+                    connected: true,
+                    mode: "buffer",
+                    info: "Buffer token configured",
+                });
+            }
+        }
+        return NextResponse.json({ success: false, connected: false });
+    }
+
+    if (platform === "pinterest") {
+        const conn = await getComposioConnection("pinterest", ownerId);
+        if (conn) {
+            return NextResponse.json({
+                success: true,
+                connected: true,
+                mode: "composio",
+                info: "Connected to Pinterest via Composio",
+            });
+        }
+        return NextResponse.json({ success: false, connected: false });
+    }
+
+    const [fb, ig, yt, tw, li, pin] = await Promise.all([
         getComposioConnection("facebook", ownerId),
         getComposioConnection("instagram", ownerId),
         getComposioConnection("youtube", ownerId),
         getComposioConnection("twitter", ownerId),
         getComposioConnection("linkedin", ownerId),
+        getComposioConnection("pinterest", ownerId),
     ]);
+    const bufferToken = cred("BUFFER_ACCESS_TOKEN", settings.buffer_access_token || settings.social_buffer_access_token);
 
     return NextResponse.json({
         success: true,
@@ -1415,6 +1932,8 @@ export async function GET(req: Request) {
         youtube: !!yt,
         twitter: !!tw,
         linkedin: !!li,
+        pinterest: !!pin,
+        tiktok: !!bufferToken,
     });
 }
 

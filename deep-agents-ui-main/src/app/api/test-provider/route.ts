@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { TwitterApi } from "twitter-api-v2";
 
 type Provider =
   | "openrouter"
@@ -10,7 +11,9 @@ type Provider =
   | "exa"
   | "brave"
   | "vercel"
-  | "grok_imagine";
+  | "grok_imagine"
+  | "twitter"
+  | "buffer";
 
 // In-memory rate limiting: provider -> last test timestamp
 const _lastTest: Record<string, number> = {};
@@ -143,6 +146,134 @@ async function testVercelGateway(key: string): Promise<{ latency_ms: number }> {
   return { latency_ms: Date.now() - start };
 }
 
+async function testTwitter(key: string, supabase?: any, userId?: string): Promise<{ latency_ms: number; message?: string }> {
+  let appSecret = process.env.TWITTER_API_SECRET || "";
+  let accessToken = process.env.TWITTER_ACCESS_TOKEN || "";
+  let accessSecret = process.env.TWITTER_ACCESS_SECRET || "";
+
+  if (supabase && userId) {
+    const userSecret = (await getUserKey(supabase, userId, "social_twitter_api_secret")) ||
+                       (await getUserKey(supabase, userId, "twitter_api_secret"));
+    const userToken = (await getUserKey(supabase, userId, "social_twitter_access_token")) ||
+                      (await getUserKey(supabase, userId, "twitter_access_token"));
+    const userAccessSecret = (await getUserKey(supabase, userId, "social_twitter_access_secret")) ||
+                             (await getUserKey(supabase, userId, "twitter_access_secret"));
+    if (userSecret) appSecret = userSecret;
+    if (userToken) accessToken = userToken;
+    if (userAccessSecret) accessSecret = userAccessSecret;
+  }
+
+  if (!appSecret || !accessToken || !accessSecret) {
+    throw new Error("Missing X credentials. Please save API Key Secret, Access Token, and Access Token Secret first.");
+  }
+
+  const start = Date.now();
+  const client = new TwitterApi({
+    appKey: key,
+    appSecret,
+    accessToken,
+    accessSecret,
+  });
+
+  const me = await client.v2.me();
+  const latency_ms = Date.now() - start;
+  if (!me?.data?.username) {
+    throw new Error("Could not verify account identity with X API v2.");
+  }
+  return { latency_ms, message: `@${me.data.username}` };
+}
+
+async function testBuffer(key: string): Promise<{ latency_ms: number; message?: string }> {
+  const start = Date.now();
+  const trimmedKey = key.trim();
+
+  // 1. Fetch account and organizations info (valid on all plans including Free)
+  const resp = await fetch("https://api.buffer.com", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${trimmedKey}`,
+    },
+    body: JSON.stringify({
+      query: `query TestBufferAccount {
+        account {
+          id
+          email
+          name
+          organizations {
+            id
+            name
+            channelCount
+          }
+        }
+      }`,
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (resp.status === 401 || resp.status === 403) {
+    throw new Error("Invalid or expired Buffer token. Please verify your Personal API Key from publish.buffer.com/settings/api.");
+  }
+
+  const json = await resp.json().catch(() => ({}));
+  if (json.errors?.length) {
+    const rawMsg = json.errors[0].message || "";
+    if (rawMsg.toLowerCase().includes("not authorized") || rawMsg.toLowerCase().includes("unauthenticated")) {
+      throw new Error("Buffer returned 'Not authorized'. Please generate a new Personal Access Key at publish.buffer.com/settings/api and paste it here.");
+    }
+    throw new Error(rawMsg);
+  }
+
+  const account = json.data?.account;
+  if (!account) {
+    throw new Error("Could not load Buffer account data. Please check your token permissions.");
+  }
+
+  const orgs = account.organizations || [];
+  const orgId = orgs[0]?.id;
+  let channelSummary = "";
+
+  // 2. Discover channels if organization exists
+  if (orgId) {
+    try {
+      const chResp = await fetch("https://api.buffer.com", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${trimmedKey}`,
+        },
+        body: JSON.stringify({
+          query: `query GetOrgChannels($input: ChannelsInput!) {
+            channels(input: $input) {
+              id
+              name
+              service
+            }
+          }`,
+          variables: { input: { organizationId: orgId } },
+        }),
+        signal: AbortSignal.timeout(6_000),
+      });
+      const chJson = await chResp.json().catch(() => ({}));
+      const channels = chJson.data?.channels || [];
+      if (channels.length > 0) {
+        const services = [...new Set(channels.map((c: any) => c.service).filter(Boolean))];
+        channelSummary = `${channels.length} channel${channels.length > 1 ? "s" : ""} (${services.join(", ")})`;
+      }
+    } catch {
+      // Non-fatal if channel fetch fails; account is already verified
+    }
+  }
+
+  const latency_ms = Date.now() - start;
+  const identifier = account.email || account.name || "Buffer Account";
+  const message = channelSummary
+    ? `Connected: ${identifier} — ${channelSummary}`
+    : `Connected: ${identifier}`;
+
+  return { latency_ms, message };
+}
+
 const PROVIDER_KEY_MAP: Record<Provider, string> = {
   openrouter: "openrouter_client_api_key",
   gemini: "gemini_client_api_key",
@@ -152,9 +283,11 @@ const PROVIDER_KEY_MAP: Record<Provider, string> = {
   brave: "brave_api_key",
   vercel: "ai_gateway_api_key",
   grok_imagine: "ai_gateway_api_key",
+  twitter: "social_twitter_api_key",
+  buffer: "buffer_access_token",
 };
 
-const PROVIDER_TEST_FUNCS: Record<Provider, (key: string) => Promise<{ latency_ms: number }>> = {
+const PROVIDER_TEST_FUNCS: Record<Provider, (key: string, supabase?: any, userId?: string) => Promise<{ latency_ms: number; message?: string }>> = {
   openrouter: testOpenRouter,
   gemini: testGemini,
   tavily: testTavily,
@@ -163,6 +296,8 @@ const PROVIDER_TEST_FUNCS: Record<Provider, (key: string) => Promise<{ latency_m
   brave: testBrave,
   vercel: testVercelGateway,
   grok_imagine: testVercelGateway,
+  twitter: testTwitter,
+  buffer: testBuffer,
 };
 
 export async function POST(request: NextRequest) {
@@ -175,8 +310,9 @@ export async function POST(request: NextRequest) {
   }
 
   let provider: Provider;
+  let body: any;
   try {
-    const body = await request.json();
+    body = await request.json();
     provider = body.provider as Provider;
   } catch {
     return NextResponse.json({ success: false, error: "Invalid JSON body." }, { status: 400 });
@@ -205,18 +341,22 @@ export async function POST(request: NextRequest) {
   }
   _lastTest[`${user.id}:${provider}`] = now;
 
-  // Retrieve key from user settings
-  const key = await getUserKey(supabase, user.id, keyName);
+  // Retrieve key from request body (live test without saving) or user settings
+  const bodyKey = typeof (body as any).key === "string" ? (body as any).key.trim() : "";
+  let key = bodyKey || (await getUserKey(supabase, user.id, keyName));
+  if (!key && provider === "twitter") {
+    key = (await getUserKey(supabase, user.id, "twitter_api_key")) || process.env.TWITTER_API_KEY || "";
+  }
   if (!key) {
     return NextResponse.json({
       success: false,
-      error: `API key for ${provider} (${keyName}) is not set in your settings. Please save it first.`,
+      error: `API key for ${provider} (${keyName}) is not set. Please enter or save your key first.`,
     });
   }
 
   try {
-    const { latency_ms } = await testFunc(key);
-    return NextResponse.json({ success: true, latency_ms });
+    const result = await testFunc(key, supabase, user.id);
+    return NextResponse.json({ success: true, latency_ms: result.latency_ms, message: result.message });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || "Test connection failed" });
   }

@@ -174,7 +174,8 @@ function getLangGraphApiUrl(): string {
  */
 export async function assertThreadOwnership(
   threadId: string,
-  userId: string
+  userId: string,
+  strict = false
 ): Promise<{ allowed: boolean; ownerId: string | null }> {
   try {
     const res = await fetch(`${getLangGraphApiUrl()}/threads/${encodeURIComponent(threadId)}`, {
@@ -185,7 +186,7 @@ export async function assertThreadOwnership(
       const thread = await res.json().catch(() => null);
       const ownerId: string | null =
         thread?.metadata?.user_id ?? thread?.config?.configurable?.user_id ?? null;
-      if (!ownerId) return { allowed: true, ownerId: null };
+      if (!ownerId) return { allowed: !strict, ownerId: null };
       return { allowed: ownerId === userId, ownerId };
     }
   } catch {
@@ -210,5 +211,5 @@ export async function assertThreadOwnership(
     /* ignore */
   }
 
-  return { allowed: true, ownerId: null };
+  return { allowed: !strict, ownerId: null };
 }

@@ -34,11 +34,15 @@ interface PostData {
     facebook: string;
     youtube?: string;
     linkedin?: string;
+    tiktok?: string;
+    pinterest?: string;
     instagram_data?: Record<string, any> | null;
     facebook_data?: Record<string, any> | null;
     youtube_data?: Record<string, any> | null;
     linkedin_data?: Record<string, any> | null;
     twitter_data?: Record<string, any> | null;
+    tiktok_data?: Record<string, any> | null;
+    pinterest_data?: Record<string, any> | null;
     sources: string[];
     image: boolean;
     image_url: string | null;
@@ -134,7 +138,7 @@ function SinglePlatformPublishButton({
     onPublished,
 }: {
     postId: string;
-    platform: "youtube" | "instagram" | "facebook" | "twitter" | "linkedin";
+    platform: "youtube" | "instagram" | "facebook" | "twitter" | "linkedin" | "tiktok" | "pinterest";
     label: string;
     isPublished: boolean;
     onPublished: (postId: string, publishedTo: Record<string, boolean>) => void;
@@ -627,6 +631,186 @@ function YouTubePost({ post, imageSrc, title, rawData }: { post: string; imageSr
     );
 }
 
+// ─── TikTok Video Card ────────────────────────────────────────────────────────
+function TikTokPost({
+    post,
+    imageSrc,
+    title,
+    rawData,
+}: {
+    post: string;
+    imageSrc: string | null;
+    title: string;
+    rawData?: any;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const videoUrl = rawData?.video_url || (isVideoMedia(imageSrc) ? imageSrc : null);
+    const isAiGenerated = Boolean(rawData?.is_ai_generated);
+    const caption = (post || rawData?.caption || title || "").trim();
+    const PREVIEW_CHARS = 120;
+    const needsTruncation = caption.length > PREVIEW_CHARS;
+    const visibleCaption = expanded || !needsTruncation ? caption : caption.slice(0, PREVIEW_CHARS) + "…";
+
+    return (
+        <div className="overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-sm w-full max-w-md mx-auto">
+            {/* TikTok Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                <div className="flex items-center gap-2.5">
+                    <div className="h-9 w-9 rounded-full bg-black flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4 fill-white">
+                            <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 2.89 3.5 2.77 1.81-.02 3.29-1.45 3.39-3.26.04-3.08.01-6.16.02-9.25V.02z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-1.5">
+                            <p className="text-[13px] font-semibold text-foreground leading-4">@agent.creator</p>
+                            {isAiGenerated && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-500 border border-violet-500/20">
+                                    AI Created
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground truncate max-w-[200px]">{title}</p>
+                    </div>
+                </div>
+                <button className="text-foreground p-1"><MoreHorizontal size={20} /></button>
+            </div>
+
+            {/* Video Player */}
+            <div className="w-full bg-black relative flex items-center justify-center min-h-[320px]">
+                {videoUrl ? (
+                    <VideoPlayer src={videoUrl} className="w-full aspect-[9/16] max-h-[500px]" />
+                ) : (
+                    <div className="w-full aspect-[9/16] max-h-[500px] bg-zinc-900 flex flex-col items-center justify-center text-zinc-500">
+                        <Play size={40} className="mb-2 opacity-50" />
+                        <span className="text-xs">No video URL provided</span>
+                    </div>
+                )}
+            </div>
+
+            {/* Caption & Metadata */}
+            <div className="p-4 space-y-2.5">
+                <div className="text-[13px] leading-relaxed">
+                    <p className="whitespace-pre-wrap text-foreground/90">{visibleCaption}</p>
+                    {needsTruncation && (
+                        <button onClick={() => setExpanded(!expanded)} className="text-primary font-semibold text-xs mt-1 hover:underline">
+                            {expanded ? "Show less" : "Show more"}
+                        </button>
+                    )}
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                        <Heart size={15} className="text-destructive/80" /> 2.4k
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                        <MessageCircle size={15} /> 182
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                        <Bookmark size={15} /> 430
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                        <Share2 size={15} /> Share
+                    </span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Pinterest Pin Card ───────────────────────────────────────────────────────
+function PinterestPost({
+    post,
+    imageSrc,
+    title,
+    rawData,
+}: {
+    post: string;
+    imageSrc: string | null;
+    title: string;
+    rawData?: any;
+}) {
+    const pinTitle = rawData?.title || title;
+    const pinDesc = rawData?.description || post || "";
+    const mediaUrl = rawData?.media_url || imageSrc;
+    const destinationLink = rawData?.link || "";
+    const boardId = rawData?.board_id || "";
+    const isVideo = isVideoMedia(mediaUrl, rawData?.media_type);
+
+    return (
+        <div className="overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-sm w-full max-w-sm mx-auto flex flex-col">
+            {/* Pin Header */}
+            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border">
+                <div className="flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-full bg-[#E60023] flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                        P
+                    </div>
+                    <div>
+                        <p className="text-xs font-semibold text-foreground">Pinterest Pin</p>
+                        {boardId && (
+                            <p className="text-[10px] text-muted-foreground truncate">Board: {boardId}</p>
+                        )}
+                    </div>
+                </div>
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#E60023] text-white">
+                    Save
+                </span>
+            </div>
+
+            {/* Pin Media */}
+            <div className="w-full bg-zinc-100 dark:bg-zinc-900 relative min-h-[260px] flex items-center justify-center">
+                {mediaUrl ? (
+                    isVideo ? (
+                        <div className="w-full aspect-[2/3] max-h-[440px] flex items-center justify-center bg-black">
+                            <VideoPlayer src={mediaUrl} className="w-full h-full" />
+                        </div>
+                    ) : (
+                        <div className="relative w-full aspect-[2/3] max-h-[440px] overflow-hidden">
+                            <Image
+                                src={getMediaStreamUrl(mediaUrl)!}
+                                alt={pinTitle}
+                                fill
+                                className="object-cover"
+                                unoptimized
+                            />
+                        </div>
+                    )
+                ) : (
+                    <div className="w-full aspect-[2/3] max-h-[360px] flex flex-col items-center justify-center text-muted-foreground text-xs">
+                        No media provided
+                    </div>
+                )}
+            </div>
+
+            {/* Content */}
+            <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
+                <div className="space-y-1">
+                    <h3 className="font-bold text-[15px] text-foreground leading-snug">{pinTitle}</h3>
+                    {pinDesc && (
+                        <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                            {pinDesc}
+                        </p>
+                    )}
+                </div>
+
+                {destinationLink && (
+                    <div className="pt-2 border-t border-border/40">
+                        <a
+                            href={destinationLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline truncate max-w-full"
+                        >
+                            <ExternalLink size={12} className="shrink-0" />
+                            <span className="truncate">{destinationLink}</span>
+                        </a>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ─── WordPress Blog Article Card ──────────────────────────────────────────────
 function BlogPostCard({
     post,
@@ -892,6 +1076,28 @@ const PLATFORMS = [
         icon: (active: boolean) => (
             <svg viewBox="0 0 24 24" className={`h-4 w-4 ${active ? "fill-white" : "fill-current"}`}>
                 <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.45a1.6 1.6 0 0 0-1.6 1.6 1.6 1.6 0 0 0 1.6-1.6 1.6 1.6 0 0 0 1.6-1.6 1.6 1.6 0 0 0-1.6-1.6z" />
+            </svg>
+        ),
+    },
+    {
+        key: "tiktok" as const,
+        label: "TikTok",
+        activeClass: "bg-black text-white shadow-sm",
+        inactiveClass: "bg-card text-muted-foreground hover:bg-accent hover:text-foreground border-border",
+        icon: (active: boolean) => (
+            <svg viewBox="0 0 24 24" className={`h-4 w-4 ${active ? "fill-white" : "fill-current"}`}>
+                <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 2.89 3.5 2.77 1.81-.02 3.29-1.45 3.39-3.26.04-3.08.01-6.16.02-9.25V.02z" />
+            </svg>
+        ),
+    },
+    {
+        key: "pinterest" as const,
+        label: "Pinterest",
+        activeClass: "bg-[#E60023] text-white shadow-sm",
+        inactiveClass: "bg-card text-muted-foreground hover:bg-accent hover:text-foreground border-border",
+        icon: (active: boolean) => (
+            <svg viewBox="0 0 24 24" className={`h-4 w-4 ${active ? "fill-white" : "fill-current"}`}>
+                <path d="M12 0a12 12 0 0 0-4.37 23.18c-.07-.98-.13-2.48.03-3.55.14-.98.92-6.52.92-6.52s-.23-.47-.23-1.17c0-1.1.64-1.92 1.43-1.92.68 0 1 .51 1 1.12 0 .68-.43 1.7-.66 2.65-.19.79.4 1.44 1.18 1.44 1.41 0 2.5-1.49 2.5-3.63 0-1.9-1.36-3.23-3.31-3.23-2.42 0-3.84 1.81-3.84 3.68 0 .73.28 1.51.63 1.93.07.08.08.16.06.24-.07.28-.22.89-.25 1.01-.04.16-.13.19-.3.12-1.12-.52-1.82-2.16-1.82-3.48 0-2.83 2.06-5.43 5.93-5.43 3.11 0 5.53 2.22 5.53 5.18 0 3.09-1.95 5.58-4.66 5.58-.91 0-1.76-.47-2.06-1.03l-.56 2.14c-.2.78-.75 1.75-1.12 2.35A12 12 0 1 0 12 0z" />
             </svg>
         ),
     },
@@ -1322,6 +1528,134 @@ function PostEditDialog({
                             </div>
                         </>
                     )}
+
+                    {/* 7. TikTok Fields */}
+                    {platform === "tiktok" && (
+                        <>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">TikTok Caption & Hashtags</label>
+                                <Textarea
+                                    rows={4}
+                                    value={formData.tiktok || formData.tiktok_data?.caption || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        tiktok: e.target.value,
+                                        tiktok_data: { ...(formData.tiktok_data || {}), caption: e.target.value },
+                                    })}
+                                    className="text-xs"
+                                    placeholder="Engaging short-form caption with #hashtags..."
+                                />
+                            </div>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Video File URL (Required for TikTok)</label>
+                                <Input
+                                    value={formData.tiktok_data?.video_url || formData.image_url || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        tiktok_data: { ...(formData.tiktok_data || {}), video_url: e.target.value },
+                                    })}
+                                    className="h-9 text-xs"
+                                    placeholder="https://.../video.mp4 (storage or public URL)"
+                                />
+                            </div>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Video Title</label>
+                                <Input
+                                    value={formData.tiktok_data?.title || formData.title || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        tiktok_data: { ...(formData.tiktok_data || {}), title: e.target.value },
+                                    })}
+                                    className="h-9 text-xs"
+                                    placeholder="Title for TikTok video"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2 pt-1">
+                                <input
+                                    type="checkbox"
+                                    id="tiktok-is-ai"
+                                    checked={Boolean(formData.tiktok_data?.is_ai_generated)}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        tiktok_data: { ...(formData.tiktok_data || {}), is_ai_generated: e.target.checked },
+                                    })}
+                                    className="rounded border-input text-primary focus:ring-primary h-4 w-4"
+                                />
+                                <label htmlFor="tiktok-is-ai" className="text-xs text-foreground cursor-pointer">
+                                    Disclose as AI-generated content (TikTok requirement)
+                                </label>
+                            </div>
+                        </>
+                    )}
+
+                    {/* 8. Pinterest Fields */}
+                    {platform === "pinterest" && (
+                        <>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Pin Title</label>
+                                <Input
+                                    value={formData.pinterest_data?.title || formData.title || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        pinterest_data: { ...(formData.pinterest_data || {}), title: e.target.value },
+                                    })}
+                                    className="h-9 text-xs"
+                                    placeholder="Eye-catching Pin Title"
+                                />
+                            </div>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Pin Description</label>
+                                <Textarea
+                                    rows={4}
+                                    value={formData.pinterest || formData.pinterest_data?.description || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        pinterest: e.target.value,
+                                        pinterest_data: { ...(formData.pinterest_data || {}), description: e.target.value },
+                                    })}
+                                    className="text-xs"
+                                    placeholder="Pin description with relevant keywords and search terms..."
+                                />
+                            </div>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Image Media URL (Required for Pinterest)</label>
+                                <Input
+                                    value={formData.pinterest_data?.media_url || formData.image_url || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        image_url: e.target.value,
+                                        pinterest_data: { ...(formData.pinterest_data || {}), media_url: e.target.value },
+                                    })}
+                                    className="h-9 text-xs"
+                                    placeholder="https://.../pin_image.jpg"
+                                />
+                            </div>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Destination Link (Optional)</label>
+                                <Input
+                                    value={formData.pinterest_data?.link || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        pinterest_data: { ...(formData.pinterest_data || {}), link: e.target.value },
+                                    })}
+                                    className="h-9 text-xs"
+                                    placeholder="https://yourwebsite.com/article"
+                                />
+                            </div>
+                            <div>
+                                <label className="font-semibold block mb-1 text-foreground">Board ID (Optional — auto-selects first board if empty)</label>
+                                <Input
+                                    value={formData.pinterest_data?.board_id || ""}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        pinterest_data: { ...(formData.pinterest_data || {}), board_id: e.target.value },
+                                    })}
+                                    className="h-9 text-xs"
+                                    placeholder="Numeric Board ID e.g. 123456789"
+                                />
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 <DialogFooter className="flex flex-row items-center justify-end gap-2 pt-2 border-t border-border">
@@ -1510,6 +1844,8 @@ export default function PostsPage() {
     const facebookPosts = posts.filter((p) => !!(p.facebook_data || p.facebook));
     const twitterPosts = posts.filter((p) => !!(p.twitter || p.twitter_data));
     const linkedinPosts = posts.filter((p) => !!(p.linkedin || p.linkedin_data));
+    const tiktokPosts = posts.filter((p) => !!(p.tiktok || p.tiktok_data));
+    const pinterestPosts = posts.filter((p) => !!(p.pinterest || p.pinterest_data));
 
     // Current tab items count
     let currentTabCount = 0;
@@ -1519,6 +1855,8 @@ export default function PostsPage() {
     else if (activeTab === "facebook") currentTabCount = facebookPosts.length;
     else if (activeTab === "twitter") currentTabCount = twitterPosts.length;
     else if (activeTab === "linkedin") currentTabCount = linkedinPosts.length;
+    else if (activeTab === "tiktok") currentTabCount = tiktokPosts.length;
+    else if (activeTab === "pinterest") currentTabCount = pinterestPosts.length;
 
     return (
         <PluginGate pluginKey="posts">
@@ -1567,6 +1905,8 @@ export default function PostsPage() {
                             else if (p.key === "facebook") count = facebookPosts.length;
                             else if (p.key === "twitter") count = twitterPosts.length;
                             else if (p.key === "linkedin") count = linkedinPosts.length;
+                            else if (p.key === "tiktok") count = tiktokPosts.length;
+                            else if (p.key === "pinterest") count = pinterestPosts.length;
 
                             return (
                                 <button
@@ -1945,6 +2285,124 @@ export default function PostsPage() {
                                                         imageSrc={post.image_url}
                                                         title={liTitle}
                                                         rawData={post.linkedin_data}
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* 7. TikTok Tab */}
+                            {activeTab === "tiktok" && (
+                                <div className="space-y-6">
+                                    {tiktokPosts.map((post) => {
+                                        const ttTitle = post.tiktok_data?.title || cleanTitle(post.title);
+                                        const isPublished = Boolean(post.published_to?.tiktok);
+
+                                        return (
+                                            <div key={post.id} className="rounded-2xl border border-border/80 bg-card/60 p-4 sm:p-6 shadow-sm space-y-4">
+                                                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
+                                                    <div className="min-w-0 flex-1">
+                                                        <h2 className="font-bold text-base text-foreground leading-snug truncate">{ttTitle}</h2>
+                                                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                                                            Created {new Date(post.created_at).toLocaleDateString()} · ID: {post.id.slice(0, 8)}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <SinglePlatformPublishButton
+                                                            postId={post.id}
+                                                            platform="tiktok"
+                                                            label="TikTok"
+                                                            isPublished={isPublished}
+                                                            onPublished={handlePublishedUpdate}
+                                                        />
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenEdit("social", post, "tiktok")}
+                                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                                            title="Edit TikTok Video"
+                                                        >
+                                                            <Pencil size={13} />
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenDelete(post.id, ttTitle, "social", "TikTok Video")}
+                                                            className="h-8 w-8 text-destructive/80 hover:text-destructive hover:bg-destructive/10 hover:border-destructive/30"
+                                                            title="Delete TikTok Video"
+                                                        >
+                                                            <Trash2 size={13} />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="max-w-md mx-auto">
+                                                    <TikTokPost
+                                                        post={post.tiktok || ""}
+                                                        imageSrc={post.image_url}
+                                                        title={ttTitle}
+                                                        rawData={post.tiktok_data}
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* 8. Pinterest Tab */}
+                            {activeTab === "pinterest" && (
+                                <div className="space-y-6">
+                                    {pinterestPosts.map((post) => {
+                                        const pinTitle = post.pinterest_data?.title || cleanTitle(post.title);
+                                        const isPublished = Boolean(post.published_to?.pinterest);
+
+                                        return (
+                                            <div key={post.id} className="rounded-2xl border border-border/80 bg-card/60 p-4 sm:p-6 shadow-sm space-y-4">
+                                                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
+                                                    <div className="min-w-0 flex-1">
+                                                        <h2 className="font-bold text-base text-foreground leading-snug truncate">{pinTitle}</h2>
+                                                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                                                            Created {new Date(post.created_at).toLocaleDateString()} · ID: {post.id.slice(0, 8)}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <SinglePlatformPublishButton
+                                                            postId={post.id}
+                                                            platform="pinterest"
+                                                            label="Pinterest"
+                                                            isPublished={isPublished}
+                                                            onPublished={handlePublishedUpdate}
+                                                        />
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenEdit("social", post, "pinterest")}
+                                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                                            title="Edit Pinterest Pin"
+                                                        >
+                                                            <Pencil size={13} />
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => handleOpenDelete(post.id, pinTitle, "social", "Pinterest Pin")}
+                                                            className="h-8 w-8 text-destructive/80 hover:text-destructive hover:bg-destructive/10 hover:border-destructive/30"
+                                                            title="Delete Pinterest Pin"
+                                                        >
+                                                            <Trash2 size={13} />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="max-w-sm mx-auto">
+                                                    <PinterestPost
+                                                        post={post.pinterest || ""}
+                                                        imageSrc={post.image_url}
+                                                        title={pinTitle}
+                                                        rawData={post.pinterest_data}
                                                     />
                                                 </div>
                                             </div>

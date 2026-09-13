@@ -4,19 +4,22 @@
 All unified tools (unified_search, unified_extract, unified_image) use this module
 to execute provider functions.
 
-Retry strategy (Round-based flat delay):
-  We perform `max_retries` rounds.
-  In each round:
-    1. Try Primary provider.
-    2. If it fails, try Secondary provider.
-    3. If BOTH fail in this round, wait `retry_delay_seconds` (default 15s).
+Retry strategy (Universal provider ladder — applies to ALL unified tool categories):
+  For each provider (chosen by priority order, schema match, or explicit ``provider`` argument):
+    1. Execute the provider.
+    2. On retryable failure, retry the SAME provider after 3s, 8s, 16s
+       (configurable via the ``fallback_retry_delays`` agent_settings key).
+    3. FATAL errors (401/403/bad config) skip the ladder immediately.
+    4. When the ladder is exhausted, the pipeline does NOT auto-execute the next
+       provider. Instead it returns a FALLBACK HANDOFF message to the agent with
+       the next provider's key and schema, so the agent re-invokes the SAME tool
+       with ``provider='<next_key>'``. Recently-failed providers (5-minute TTL)
+       are skipped during implicit provider selection to avoid retry loops.
+    5. When every provider has failed, a graceful "all providers failed" message
+       is returned (the pipeline never raises — prevents pipeline crashes).
 
-  If all rounds are exhausted, return a graceful ProviderResult with failed=True
-  (never raises  prevents pipeline crashes).
-
-Default retry counts:
-  Search / Extract : 4 rounds (Primary -> Secondary -> wait 15s)
-  Image            : 2 rounds (Primary -> Secondary -> wait 15s)
+Default retry ladders:
+  Search / Extract / Image / Custom : initial attempt + retries at 3s, 8s, 16s
 
 All defaults are overridable via Supabase ``agent_settings`` keys:
   search_max_retries     (int, default 4)
@@ -44,6 +47,7 @@ Enterprise pattern:
 """
 
 import asyncio
+import inspect
 import logging
 import os
 import time
@@ -360,6 +364,63 @@ def get_retry_delay() -> int:
         return 15
 
 
+#  Universal Fallback Ladder (same-provider retries) 
+
+_DEFAULT_RETRY_LADDER = [3, 8, 16]
+
+def get_retry_ladder() -> list[int]:
+    """Return the same-provider retry wait seconds (default: 3s, 8s, 16s).
+
+    Overridable via the ``fallback_retry_delays`` agent_settings key,
+    e.g. "3,8,16" (default), "2,5", or "5" for a single retry.
+    """
+    try:
+        settings = get_settings() or {}
+    except Exception:
+        settings = {}
+    raw = str(settings.get("fallback_retry_delays", "3,8,16") or "3,8,16")
+    delays: list[int] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            delays.append(max(0, int(float(part))))
+        except (ValueError, TypeError):
+            continue
+    return delays if delays else list(_DEFAULT_RETRY_LADDER)
+
+
+async def _pipeline_sleep(seconds: float) -> None:
+    """Indirection for retry sleeps so tests can patch it without touching asyncio."""
+    if seconds and seconds > 0:
+        await asyncio.sleep(seconds)
+
+
+#  Provider failure cache (short-lived, per process) 
+
+_PROVIDER_FAILURE_TTL_SECONDS = 300  # recently-failed providers get deprioritized 5 min
+_provider_failure_cache: dict[tuple[str, str], float] = {}
+
+def _mark_provider_failed(category: str, provider_key: str) -> None:
+    _provider_failure_cache[(str(category), str(provider_key))] = time.time()
+
+def _clear_provider_failure(category: str, provider_key: str) -> None:
+    _provider_failure_cache.pop((str(category), str(provider_key)), None)
+
+def _provider_recently_failed(category: str, provider_key: str) -> bool:
+    ts = _provider_failure_cache.get((str(category), str(provider_key)))
+    return bool(ts) and (time.time() - ts) < _PROVIDER_FAILURE_TTL_SECONDS
+
+def clear_provider_failures(category: Optional[str] = None) -> None:
+    """Reset the recently-failed provider cache (tests / manual reset)."""
+    if category is None:
+        _provider_failure_cache.clear()
+    else:
+        for key in [k for k in _provider_failure_cache if k[0] == str(category)]:
+            _provider_failure_cache.pop(key, None)
+
+
 #  Agent defaults 
 
 _AGENT_DEFAULTS = {
@@ -480,6 +541,18 @@ class ProviderResult:
     attempts_total: int
     fallback_used: bool
     failed: bool = False          # True when all providers exhausted
+
+
+@dataclass
+class UnifiedOutcome:
+    """Structured result of the universal unified-tool fallback pipeline."""
+    ok: bool
+    result: Any = None                  # raw provider result on success
+    provider_used: str = ""             # provider key that ran (or failed)
+    attempts_total: int = 0
+    handoff: bool = False               # True -> message offers the next provider
+    next_provider: str = ""             # provider key offered for the next call
+    message: str = ""                   # tool-result message when not ok
 
 
 #  Core Execution Engine 
@@ -862,6 +935,339 @@ async def load_mcp_tool_by_key(tool_key: str, user_id: Optional[str] = None) -> 
     return []
 
 
+def _kwargs_match_schema(tool_obj: Any, input_kwargs: dict) -> bool:
+    """Best-effort check that input kwargs satisfy a tool's required fields."""
+    try:
+        args = getattr(tool_obj, "args", {})
+        if not args:
+            return True
+        schema = getattr(tool_obj, "args_schema", None)
+        required_fields: list = []
+        if schema and hasattr(schema, "schema"):
+            required_fields = schema.schema().get("required", [])
+        elif schema and hasattr(schema, "__fields__"):
+            required_fields = [k for k, v in schema.__fields__.items() if getattr(v, "required", False)]
+        for field in required_fields:
+            if field not in input_kwargs and field != "config":
+                return False
+        return True
+    except Exception:
+        return True
+
+
+def _normalize_provider_row(row: dict) -> dict:
+    """Normalize a provider config row (unified_tool_configs JSON or DB row)."""
+    key = row.get("provider_key") or row.get("provider") or row.get("tool_key") or row.get("key") or ""
+    label = row.get("label") or row.get("provider_name") or row.get("name") or row.get("tool_name") or key
+    return {
+        "provider_key": str(key),
+        "label": str(label),
+        "priority_order": row.get("priority_order", 999),
+        "enabled": row.get("enabled", True),
+        "fallback_on_error": row.get("fallback_on_error", True),
+    }
+
+
+def _schema_from_signature(fn: Callable) -> str:
+    """Build a compact JSON schema description from a callable's signature."""
+    try:
+        sig = inspect.signature(fn)
+        fields: dict = {}
+        for name, p in sig.parameters.items():
+            if p.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                continue
+            if name == "config":
+                continue
+            ann = p.annotation
+            if ann is inspect.Parameter.empty:
+                ann = "string"
+            elif isinstance(ann, type):
+                ann = ann.__name__
+            else:
+                ann = str(ann)
+            field: dict = {"type": ann}
+            if p.default is not inspect.Parameter.empty and p.default is not None:
+                field["default"] = str(p.default)
+            fields[name] = field
+        return json.dumps(fields, ensure_ascii=False, default=str)
+    except Exception:
+        return '{"query": "string"}'
+
+
+def _describe_provider_schema(key: str, tool_obj: Any, built_in_map: dict) -> str:
+    """Best-effort schema description used in FALLBACK HANDOFF messages."""
+    if tool_obj is not None:
+        try:
+            args = tool_obj.args
+            if isinstance(args, dict) and args:
+                return json.dumps(args, ensure_ascii=False, default=str)
+        except Exception:
+            pass
+    fn = built_in_map.get(key)
+    if fn is not None:
+        return _schema_from_signature(fn)
+    if key in ("linkup", "parallel", "tavily", "exa"):
+        return '{"query": "string"}'
+    if key in ("tavily_extract", "exa_extract", "linkup_extract"):
+        return '{"urls": ["string"], "query": "string (optional)"}'
+    return '{"query": "string"}'
+
+
+async def _invoke_provider_once(
+    fn: Any, mode: str, kwargs: dict, config: Any, timeout_seconds: int,
+):
+    """Execute ONE attempt against a provider. Raises on failure."""
+    if mode == "preset":
+        return await asyncio.wait_for(fn(**kwargs), timeout=timeout_seconds)
+    if mode == "builtin":
+        tool_args: dict = {}
+        try:
+            for param_name in getattr(fn, "args", {}):
+                if param_name in kwargs:
+                    tool_args[param_name] = kwargs[param_name]
+                elif param_name == "config":
+                    tool_args["config"] = config
+        except Exception:
+            pass
+        if not tool_args:
+            tool_args = dict(kwargs)
+        return await asyncio.wait_for(fn.ainvoke(tool_args), timeout=timeout_seconds)
+    # mode == "mcp"
+    tool_args = {}
+    if kwargs.get("query"):
+        tool_args["query"] = kwargs["query"]
+    if kwargs.get("urls"):
+        tool_args["urls"] = kwargs["urls"]
+        tool_args.setdefault("url", kwargs["urls"][0])
+    try:
+        for param_name in getattr(fn, "args", {}):
+            if param_name in kwargs and param_name not in tool_args:
+                tool_args[param_name] = kwargs[param_name]
+    except Exception:
+        pass
+    return await asyncio.wait_for(fn.ainvoke(tool_args), timeout=timeout_seconds)
+
+
+async def execute_unified_pipeline_outcome(
+    category: str,
+    built_in_map: dict,
+    default_provider_keys: list[str],
+    max_retries: int,
+    timeout_seconds: int = 30,
+    **kwargs,
+) -> UnifiedOutcome:
+    """Universal fallback pipeline shared by ALL unified tool categories.
+
+    Behavior:
+      1. Select the provider: explicit ``provider`` hint > schema match > priority #1.
+         Recently-failed providers (5-minute TTL) are skipped during implicit selection.
+      2. Execute it. On retryable failure, retry the SAME provider with the ladder
+         delays (default 3s / 8s / 16s). FATAL errors (401/403/...) skip the ladder.
+      3. If the ladder is exhausted, DO NOT auto-call the next provider. Return a
+         FALLBACK HANDOFF message showing the agent the next provider's key and
+         schema so it re-invokes this tool with ``provider='<next_key>'``.
+      4. When no provider is left, return a graceful "all providers failed" message.
+    """
+    config = kwargs.pop("config", None)
+    provider_hint = ""
+    for hint_key in ("provider", "provider_key", "preferred_provider"):
+        val = kwargs.pop(hint_key, "")
+        if val and not provider_hint:
+            provider_hint = str(val).strip()
+
+    # Extract user_id from config
+    user_id = None
+    if config:
+        if isinstance(config, dict):
+            user_id = (config.get("configurable") or {}).get("user_id")
+        else:
+            user_id = getattr(config, "get", lambda *a: None)("configurable", {}).get("user_id")
+    if user_id:
+        active_user_id.set(user_id)
+
+    # 1. Resolve provider list (user unified_tool_configs > tool_provider_configs > defaults)
+    providers: list[dict] = []
+    uid = user_id or active_user_id.get()
+    settings = get_settings(uid)
+    configs_str = (settings.get("unified_tool_configs", "") or "").strip()
+    if configs_str:
+        try:
+            all_configs = json.loads(configs_str)
+            if isinstance(all_configs, list):
+                providers = [
+                    _normalize_provider_row(p)
+                    for p in all_configs
+                    if p.get("tool_category") == category and p.get("enabled", True)
+                ]
+                providers.sort(key=lambda x: x.get("priority_order", 999))
+        except Exception as e:
+            logger.error(f"[pipeline] Failed to parse unified_tool_configs JSON: {e}")
+
+    if not providers:
+        providers = [_normalize_provider_row(p) for p in get_ordered_providers(category)]
+
+    if not providers:
+        providers = [_normalize_provider_row({"provider_key": k}) for k in default_provider_keys]
+
+    if not providers:
+        return UnifiedOutcome(
+            ok=False,
+            message=f"❌ No providers configured for unified tool category '{category}'.",
+        )
+
+    # 2. Resolve tool objects for keys outside built_in_map (MCP / built-in tools)
+    resolved_tools: list = []
+    for prov in providers:
+        key = prov["provider_key"]
+        tool_obj = None
+        if key not in built_in_map:
+            try:
+                mcp_list = await load_mcp_tool_by_key(key)
+            except Exception:
+                mcp_list = []
+            if mcp_list:
+                tool_obj = mcp_list[0]
+            else:
+                import research_agent.tools as ratools
+                if hasattr(ratools, key):
+                    tool_obj = getattr(ratools, key)
+        resolved_tools.append(tool_obj)
+
+    # 3. Pick the starting provider
+    start_idx = -1
+    if provider_hint:
+        hint_l = provider_hint.lower()
+        for idx, prov in enumerate(providers):
+            if prov["provider_key"].lower() == hint_l or prov["label"].lower() == hint_l:
+                start_idx = idx
+                break
+        if start_idx == -1:
+            return UnifiedOutcome(
+                ok=False,
+                message=(
+                    f"❌ Provider '{provider_hint}' is not configured for unified tool "
+                    f"category '{category}'. Configured providers: "
+                    f"{[p['provider_key'] for p in providers]}."
+                ),
+            )
+    else:
+        # Implicit selection: first schema match, skipping recently-failed providers.
+        for idx, (prov, tool_obj) in enumerate(zip(providers, resolved_tools)):
+            if _provider_recently_failed(category, prov["provider_key"]):
+                continue
+            if tool_obj is not None:
+                if _kwargs_match_schema(tool_obj, kwargs):
+                    start_idx = idx
+                    break
+            else:
+                # Statically built-in presets (e.g. tavily, linkup) accept the
+                # standard search/extract kwargs (query/urls).
+                if "query" in kwargs or "urls" in kwargs:
+                    start_idx = idx
+                    break
+        if start_idx == -1:
+            # Everything recently failed or nothing matched: start from priority #1.
+            start_idx = 0
+
+    prov = providers[start_idx]
+    key = prov["provider_key"]
+    label = prov["label"]
+    fallback_on_error = prov.get("fallback_on_error", True)
+
+    logger.info(f"[pipeline] Executing provider {start_idx + 1}/{len(providers)}: {key}")
+
+    # 4. Resolve the executor for this provider
+    fn = None
+    mode = ""
+    if key in built_in_map:
+        fn = built_in_map[key]
+        mode = "preset"
+    else:
+        tool_obj = resolved_tools[start_idx]
+        if tool_obj is not None:
+            fn = tool_obj
+            import research_agent.tools as ratools
+            mode = "builtin" if hasattr(ratools, key) else "mcp"
+        else:
+            fn = None
+
+    # 5. Same-provider retry ladder (initial attempt + 3s/8s/16s retries)
+    delays = get_retry_ladder()
+    attempts = 0
+    last_error = "tool not found or connection offline"
+    if fn is None:
+        logger.error(f"[pipeline] Tool '{key}' not found or connection offline")
+    else:
+        for delay in [0] + delays:
+            if delay:
+                logger.info(f"[{key}] Waiting {delay}s before retry...")
+                await _pipeline_sleep(delay)
+            attempts += 1
+            try:
+                logger.info(f"[{key}] Attempt {attempts}/{len(delays) + 1} (timeout={timeout_seconds}s)")
+                result = await _invoke_provider_once(fn, mode, kwargs, config, timeout_seconds)
+                logger.info(f"[{key}] ✅ Success on attempt {attempts}")
+                _clear_provider_failure(category, key)
+                return UnifiedOutcome(
+                    ok=True,
+                    result=result,
+                    provider_used=key,
+                    attempts_total=attempts,
+                )
+            except Exception as e:
+                last_error = str(e)
+                if classify_error(e) == ErrorType.FATAL:
+                    logger.error(f"[{key}] ❌ Fatal error (no retry): {e}")
+                    break
+                logger.warning(f"[{key}] ❌ Attempt {attempts} failed: {e}")
+
+    _mark_provider_failed(category, key)
+
+    # 6. Handoff to the next provider (schema shown to the agent — NOT auto-executed)
+    if fallback_on_error and (start_idx + 1 < len(providers)):
+        next_prov = providers[start_idx + 1]
+        next_key = next_prov["provider_key"]
+        next_label = next_prov["label"]
+        next_schema = _describe_provider_schema(
+            next_key, resolved_tools[start_idx + 1], built_in_map
+        )
+        delay_txt = "/".join(f"{d}s" for d in delays) if delays else "none"
+        message = (
+            f"⚠️ FALLBACK HANDOFF — unified tool category '{category}': provider "
+            f"'{key}' ({label}) FAILED after {attempts} attempt(s) "
+            f"(same-provider retry waits: {delay_txt}). Last error: {last_error}\n"
+            f"Next fallback provider: '{next_key}' ({next_label}, priority #{start_idx + 2}). "
+            f"Do NOT retry '{key}' this turn. Re-invoke this SAME tool now with "
+            f"provider='{next_key}' and arguments matching that provider's schema:\n"
+            f"    {next_key} schema: {next_schema}"
+        )
+        logger.warning(f"[pipeline] {message}")
+        return UnifiedOutcome(
+            ok=False,
+            provider_used=key,
+            attempts_total=attempts,
+            handoff=True,
+            next_provider=next_key,
+            message=message,
+        )
+
+    message = (
+        f"❌ Provider '{key}' ({label}) failed for unified tool category '{category}' "
+        f"after {attempts} attempt(s) and no further fallback is available. "
+        f"Last error: {last_error}. Providers already tried: "
+        f"{[p['provider_key'] for p in providers[:start_idx + 1]]}. "
+        "Please continue with the information you have already gathered or mark it Not Found. "
+        "Skip this tool call and move to the next step."
+    )
+    logger.error(f"[pipeline] {message}")
+    return UnifiedOutcome(
+        ok=False,
+        provider_used=key,
+        attempts_total=attempts,
+        message=message,
+    )
+
+
 async def execute_unified_pipeline(
     category: str,
     built_in_map: dict,
@@ -870,204 +1276,23 @@ async def execute_unified_pipeline(
     timeout_seconds: int = 30,
     **kwargs,
 ) -> str:
-    """Execute the prioritized list of providers for a tool category.
+    """Backward-compatible string wrapper around execute_unified_pipeline_outcome.
 
-    Tries each enabled provider in order of priority_order.
-    Falls back to the next provider on failure, with schema adaptation feedback.
-    Supports built-in adapters, manual/Composio MCP tools, and built-in tools.
+    NOTE: ``max_retries`` is legacy — the old round-based Primary->Secondary loop
+    was replaced by the universal same-provider retry ladder (see get_retry_ladder).
+    It is accepted for signature compatibility but unused.
     """
-    # Extract user_id from config
-    config = kwargs.get("config")
-    user_id = None
-    if config:
-        if isinstance(config, dict):
-            user_id = config.get("configurable", {}).get("user_id")
-        else:
-            user_id = getattr(config, "get", lambda *a: None)("configurable", {}).get("user_id")
-    if user_id:
-        active_user_id.set(user_id)
-
-    # 1. Fetch user-specific configs from agent_settings
-    providers = []
-    uid = user_id or active_user_id.get()
-    settings = get_settings(uid)
-    configs_str = settings.get("unified_tool_configs", "").strip()
-    if configs_str:
-        try:
-            all_configs = json.loads(configs_str)
-            if isinstance(all_configs, list):
-                providers = [p for p in all_configs if p.get("tool_category") == category and p.get("enabled", True)]
-                providers.sort(key=lambda x: x.get("priority_order", 999))
-        except Exception as e:
-            logger.error(f"[pipeline] Failed to parse unified_tool_configs JSON: {e}")
-
-    # Fallback to global/default providers if user config is empty
-    if not providers:
-        providers = get_ordered_providers(category)
-
-    if not providers:
-        providers = [
-            {"provider_key": k, "fallback_on_error": True, "enabled": True}
-            for k in default_provider_keys
-        ]
-
-    # Helper to check schema match
-    def is_kwargs_matching_tool_schema(tool, input_kwargs) -> bool:
-        try:
-            args = getattr(tool, "args", {})
-            if not args:
-                return True
-            schema = getattr(tool, "args_schema", None)
-            required_fields = []
-            if schema and hasattr(schema, "schema"):
-                required_fields = schema.schema().get("required", [])
-            elif schema and hasattr(schema, "__fields__"):
-                required_fields = [k for k, v in schema.__fields__.items() if getattr(v, "required", False)]
-            
-            for field in required_fields:
-                if field not in input_kwargs and field != "config":
-                    return False
-            return True
-        except Exception:
-            return True
-
-    # 2. Resolve tools for each provider key
-    resolved_tools = []
-    for prov in providers:
-        key = prov.get("provider_key")
-        tool_obj = None
-        if key not in built_in_map:
-            # Check if it is manual/Composio MCP tool
-            mcp_list = await load_mcp_tool_by_key(key)
-            if mcp_list:
-                tool_obj = mcp_list[0]
-            else:
-                # Check if it is built-in tool function in tools module
-                import research_agent.tools as ratools
-                if hasattr(ratools, key):
-                    tool_obj = getattr(ratools, key)
-        resolved_tools.append(tool_obj)
-
-    # 3. Match kwargs to find the active provider index
-    matched_idx = -1
-    for idx, tool_obj in enumerate(resolved_tools):
-        if tool_obj:
-            if is_kwargs_matching_tool_schema(tool_obj, kwargs):
-                matched_idx = idx
-                break
-        else:
-            # Statically built-in presets (e.g. tavily, linkup)
-            # They match standard search/extract kwargs (query/urls)
-            if "query" in kwargs or "urls" in kwargs:
-                matched_idx = idx
-                break
-
-    if matched_idx == -1:
-        matched_idx = 0
-
-    prov = providers[matched_idx]
-    key = prov.get("provider_key")
-    fallback_on_error = prov.get("fallback_on_error", True)
-
-    logger.info(f"[pipeline] Executing matched provider {matched_idx+1}/{len(providers)}: {key}")
-
-    fn = None
-    is_mcp = False
-    is_builtin_tool = False
-
-    if key in built_in_map:
-        fn = built_in_map[key]
-    else:
-        # Resolve to tool_obj
-        tool_obj = resolved_tools[matched_idx]
-        if tool_obj:
-            fn = tool_obj
-            # Check if it is a built-in tool (starts with builtin name or loaded from research_agent.tools)
-            import research_agent.tools as ratools
-            if hasattr(ratools, key):
-                is_builtin_tool = True
-            else:
-                is_mcp = True
-        else:
-            return f" Tool '{key}' not found or connection offline"
-
-    try:
-        if is_builtin_tool:
-            tool_args = {}
-            try:
-                for param_name in getattr(fn, "args", {}):
-                    if param_name in kwargs:
-                        tool_args[param_name] = kwargs[param_name]
-                    elif param_name == "config":
-                        tool_args["config"] = config
-            except Exception:
-                pass
-            if not tool_args:
-                # Filter out system args
-                tool_args = {k: v for k, v in kwargs.items() if k not in ["config"]}
-            
-            result = await asyncio.wait_for(fn.ainvoke(tool_args), timeout=timeout_seconds)
-            logger.info(f"[pipeline]  Builtin Tool '{key}' succeeded!")
-            return str(result)
-            
-        elif is_mcp:
-            tool_args = {}
-            if "query" in kwargs and kwargs["query"]:
-                tool_args["query"] = kwargs["query"]
-            if "urls" in kwargs and kwargs["urls"]:
-                tool_args["urls"] = kwargs["urls"]
-                if "url" not in tool_args:
-                    tool_args["url"] = kwargs["urls"][0]
-            # Try parsing other custom parameters for MCP tools
-            try:
-                for param_name in getattr(fn, "args", {}):
-                    if param_name in kwargs and param_name not in tool_args:
-                        tool_args[param_name] = kwargs[param_name]
-            except Exception:
-                pass
-
-            result = await asyncio.wait_for(fn.ainvoke(tool_args), timeout=timeout_seconds)
-            res_str = str(result)
-            logger.info(f"[pipeline]  MCP Provider '{key}' succeeded!")
-            return res_str
-            
-        else:
-            # Built-in map presets
-            # Strip config from kwargs before calling preset functions
-            preset_args = {k: v for k, v in kwargs.items() if k not in ["config"]}
-            result = await asyncio.wait_for(fn(**preset_args), timeout=timeout_seconds)
-            logger.info(f"[pipeline]  Preset Provider '{key}' succeeded!")
-            return str(result)
-
-    except Exception as e:
-        msg = f"Provider '{key}' failed: {e}"
-        logger.warning(f"[pipeline]  {msg}")
-        
-        if fallback_on_error and (matched_idx + 1 < len(providers)):
-            next_prov = providers[matched_idx + 1]
-            next_key = next_prov.get("provider_key")
-            
-            # Extract schema description for agent adaptation
-            next_schema = "query: str"
-            next_tool_obj = resolved_tools[matched_idx + 1]
-            if next_tool_obj:
-                try:
-                    next_schema = str(next_tool_obj.args)
-                except Exception:
-                    pass
-            elif next_key in ["linkup", "parallel", "tavily", "exa"]:
-                next_schema = "{query: str}"
-
-            return (
-                f" Provider '{key}' failed: {e}. "
-                f"Next fallback provider is '{next_key}'. "
-                f"Please invoke this tool again with arguments matching the schema of '{next_key}': {next_schema}."
-            )
-        else:
-            return (
-                f" Provider '{key}' failed and no further fallback is available. "
-                f"Error: {e}"
-            )
+    outcome = await execute_unified_pipeline_outcome(
+        category=category,
+        built_in_map=built_in_map,
+        default_provider_keys=default_provider_keys,
+        max_retries=max_retries,
+        timeout_seconds=timeout_seconds,
+        **kwargs,
+    )
+    if outcome.ok:
+        return str(outcome.result)
+    return outcome.message
 
 
 def get_llm(provider_name: Optional[str] = None, model_name: Optional[str] = None, user_id: Optional[str] = None):

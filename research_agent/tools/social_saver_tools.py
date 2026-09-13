@@ -59,6 +59,42 @@ def _with_owner(row: dict) -> dict:
     return row
 
 
+def _insert_social_post(supabase_url: str, row: dict) -> tuple[Optional[str], Optional[str]]:
+    """Insert a social_posts row with automatic fallback for missing schema columns."""
+    current_row = dict(row)
+    headers = _supabase_headers()
+    max_retries = 4
+    for _ in range(max_retries):
+        try:
+            resp = requests.post(
+                f"{supabase_url}/rest/v1/social_posts",
+                headers=headers,
+                json=_with_owner(current_row),
+                timeout=15,
+            )
+            if resp.ok:
+                post_data = resp.json()
+                post_id = post_data[0]["id"] if post_data else "?"
+                return post_id, None
+
+            err_text = resp.text
+            if resp.status_code == 400 and ("Could not find the" in err_text or "PGRST204" in err_text):
+                import re
+                m = re.search(r"Could not find the '([^']+)' column", err_text)
+                if m:
+                    missing_col = m.group(1)
+                    omitted_val = current_row.pop(missing_col, None)
+                    if omitted_val is not None:
+                        existing_raw = current_row.get("raw_markdown") or ""
+                        stash_marker = f"\n<!-- STASHED_{missing_col.upper()}: {json.dumps(omitted_val)} -->"
+                        current_row["raw_markdown"] = existing_raw + stash_marker
+                        continue
+            return None, f"[Error] Failed to save post: {resp.status_code} {resp.text[:200]}"
+        except Exception as e:
+            return None, f"[Error] network error saving post: {str(e)}"
+    return None, "[Error] Failed to insert post after schema column fallback retries."
+
+
 # â”€â”€ Media URL normalization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #
 # Platforms (and the /api/publish route) need a PUBLIC HTTPS URL for every media
@@ -657,6 +693,153 @@ def save_twitter_post(
 
 
 @tool
+def save_tiktok_post(
+    caption: str,
+    video_url: str,
+    title: str = "",
+    is_ai_generated: bool = False,
+) -> str:
+    """Save a TikTok video post to the database for user review and 1-click publishing via Buffer.
+
+    Args:
+        caption: The caption text for the TikTok post including hashtags (e.g. #fyp #ai #tech).
+        video_url: PUBLIC HTTPS URL of the video (e.g. Cloudflare R2 storage URL of
+            the user's attachment). A local filename is accepted only if the file
+            exists in the workspace — it is then uploaded to storage automatically.
+        title: Optional title for the video (used for display and Buffer post title).
+        is_ai_generated: Whether the video discloses AI-generated content (defaults to False).
+    """
+    supabase_url = _get_supabase_url()
+    if not supabase_url:
+        return "[Error] SUPABASE_URL not configured — TikTok post kept in memory."
+
+    resolved, err = _normalize_media_fields({"video_url": video_url})
+    if err:
+        return err
+    video_url = resolved["video_url"]
+    if not video_url:
+        return "[Error] save_tiktok_post requires video_url (a public HTTPS video URL or workspace file)."
+
+    if _looks_like_image(video_url):
+        return f"[Error] video_url '{video_url}' looks like an image, not a video. TikTok publishing requires a video file."
+
+    display_title = title or (caption[:60] + "..." if len(caption) > 60 else caption)
+    row = {
+        "title": display_title,
+        "tiktok": caption,
+        "image_url": video_url,
+        "has_image": True,
+        "tiktok_data": {
+            "caption": caption,
+            "video_url": video_url,
+            "title": display_title,
+            "is_ai_generated": is_ai_generated,
+        },
+        "published_to": {"tiktok": False},
+    }
+
+    post_id, post_err = _insert_social_post(supabase_url, row)
+    if post_err:
+        return post_err
+
+    # Attempt insert into specialized social_tiktok_posts table
+    try:
+        tk_row = {
+            "post_id": post_id,
+            "text": caption,
+            "video_url": video_url,
+            "title": display_title,
+            "status": "draft",
+        }
+        requests.post(
+            f"{supabase_url}/rest/v1/social_tiktok_posts",
+            headers=_supabase_headers(),
+            json=_with_owner(tk_row),
+            timeout=10,
+        )
+    except Exception as e:
+        print(f"[social_saver] Note: social_tiktok_posts table insert skipped ({e})")
+
+    _trigger_auto_publish_if_enabled(post_id, ["tiktok"])
+
+    return f"[Success] TikTok video post saved to Posts console (ID: {post_id}). Ready for 1-click publishing via Buffer!"
+
+
+@tool
+def save_pinterest_post(
+    title: str,
+    description: str,
+    media_url: str,
+    link: str = "",
+    board_id: str = "",
+) -> str:
+    """Save a Pinterest pin to the database for user review and direct publishing via Composio.
+
+    Args:
+        title: Title of the Pin (up to 100 characters).
+        description: Pin description/caption text including keywords and hashtags.
+        media_url: PUBLIC HTTPS URL of the image or video (e.g. Cloudflare R2 storage URL of
+            the user's attachment). A local filename is accepted only if the file
+            exists in the workspace — it is then uploaded to storage automatically.
+        link: Optional destination click-through URL for the Pin.
+        board_id: Optional Pinterest Board ID. If omitted, the user's default/first board will be used.
+    """
+    supabase_url = _get_supabase_url()
+    if not supabase_url:
+        return "[Error] SUPABASE_URL not configured — Pinterest pin kept in memory."
+
+    resolved, err = _normalize_media_fields({"media_url": media_url})
+    if err:
+        return err
+    media_url = resolved["media_url"]
+    if not media_url:
+        return "[Error] save_pinterest_post requires media_url (a public HTTPS image or video URL)."
+
+    row = {
+        "title": title[:100] if title else (description[:60] + "..." if len(description) > 60 else description),
+        "pinterest": description,
+        "image_url": media_url,
+        "has_image": True,
+        "pinterest_data": {
+            "title": title,
+            "description": description,
+            "media_url": media_url,
+            "link": link,
+            "board_id": board_id,
+        },
+        "published_to": {"pinterest": False},
+    }
+
+    post_id, post_err = _insert_social_post(supabase_url, row)
+    if post_err:
+        return post_err
+
+    # Attempt insert into specialized social_pinterest_posts table
+    try:
+        pin_row = {
+            "post_id": post_id,
+            "title": title,
+            "description": description,
+            "link": link,
+            "media_url": media_url,
+            "board_id": board_id,
+            "status": "draft",
+        }
+        requests.post(
+            f"{supabase_url}/rest/v1/social_pinterest_posts",
+            headers=_supabase_headers(),
+            json=_with_owner(pin_row),
+            timeout=10,
+        )
+    except Exception as e:
+        print(f"[social_saver] Note: social_pinterest_posts table insert skipped ({e})")
+
+    _trigger_auto_publish_if_enabled(post_id, ["pinterest"])
+
+    return f"[Success] Pinterest pin saved to Posts console (ID: {post_id}). Ready for 1-click publishing via Composio!"
+
+
+@tool
 def save_social_bundle(
     title: str,
     instagram: Optional[Dict[str, Any]] = None,
@@ -664,8 +847,10 @@ def save_social_bundle(
     youtube: Optional[Dict[str, Any]] = None,
     twitter: Optional[Union[str, Dict[str, Any]]] = None,
     linkedin: Optional[Dict[str, Any]] = None,
+    tiktok: Optional[Dict[str, Any]] = None,
+    pinterest: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """Save a multi-platform social media campaign bundle across Instagram, Facebook, YouTube, X, and LinkedIn in one call.
+    """Save a multi-platform social media campaign bundle across Instagram, Facebook, YouTube, X, LinkedIn, TikTok, and Pinterest in one call.
 
     All media fields must be PUBLIC HTTPS URLs (e.g. Cloudflare R2 URLs of the user's
     attachments). Local filenames are accepted only if the file exists in the
@@ -678,6 +863,8 @@ def save_social_bundle(
         youtube: Dict with YouTube fields: {'title': str, 'description': str, 'video_url': str, 'thumbnail_url': str, 'tags': list}.
         twitter: Tweet text (str) or Dict with {'text': str, 'media_url': str, 'media_type': 'text'|'photo'|'video'}.
         linkedin: Dict with LinkedIn fields: {'commentary': str, 'media_url': str, 'media_type': 'text'|'image'|'video'|'article', 'title': str, 'link': str}.
+        tiktok: Dict with TikTok fields: {'caption': str, 'video_url': str, 'title': str, 'is_ai_generated': bool}.
+        pinterest: Dict with Pinterest fields: {'title': str, 'description': str, 'media_url': str, 'link': str, 'board_id': str}.
     """
     supabase_url = _get_supabase_url()
     if not supabase_url:
@@ -687,6 +874,8 @@ def save_social_bundle(
     facebook = dict(facebook) if facebook else None
     youtube = dict(youtube) if youtube else None
     linkedin = dict(linkedin) if linkedin else None
+    tiktok = dict(tiktok) if tiktok else None
+    pinterest = dict(pinterest) if pinterest else None
 
     # Handle twitter whether passed as string or dict
     twitter_dict: Optional[Dict[str, Any]] = None
@@ -704,6 +893,8 @@ def save_social_bundle(
         (youtube, ("video_url", "thumbnail_url"), "youtube"),
         (linkedin, ("media_url",), "linkedin"),
         (twitter_dict, ("media_url",), "twitter"),
+        (tiktok, ("video_url",), "tiktok"),
+        (pinterest, ("media_url",), "pinterest"),
     ):
         if not payload:
             continue
@@ -727,12 +918,18 @@ def save_social_bundle(
             )
     if linkedin and linkedin.get("media_type") in ("image", "video") and not linkedin.get("media_url"):
         return f"[Error] linkedin.media_url is required for media_type='{linkedin.get('media_type')}'."
+    if tiktok and not tiktok.get("video_url"):
+        return "[Error] tiktok.video_url is required (a public HTTPS video URL)."
+    if pinterest and not pinterest.get("media_url"):
+        return "[Error] pinterest.media_url is required (a public HTTPS image URL)."
 
     cover_image = None
     if instagram and instagram.get("cover_url"):
         cover_image = instagram["cover_url"]
     elif youtube and youtube.get("thumbnail_url"):
         cover_image = youtube["thumbnail_url"]
+    elif pinterest and pinterest.get("media_url"):
+        cover_image = pinterest["media_url"]
     elif instagram and instagram.get("media_url") and instagram.get("media_type") == "photo":
         cover_image = instagram["media_url"]
     elif facebook and facebook.get("media_url") and facebook.get("media_type") == "photo":
@@ -741,6 +938,8 @@ def save_social_bundle(
         cover_image = linkedin["media_url"]
     elif twitter_dict and twitter_dict.get("media_url") and twitter_dict.get("media_type") == "photo":
         cover_image = twitter_dict["media_url"]
+    elif tiktok and tiktok.get("video_url"):
+        cover_image = tiktok["video_url"]
 
     row = {
         "title": title,
@@ -749,11 +948,15 @@ def save_social_bundle(
         "facebook": facebook.get("message", "") if facebook else "",
         "youtube": f"{youtube.get('title', '')}\n\n{youtube.get('description', '')}" if youtube else "",
         "linkedin": linkedin.get("commentary", "") if linkedin else "",
+        "tiktok": tiktok.get("caption", "") if tiktok else "",
+        "pinterest": pinterest.get("description", "") if pinterest else "",
         "instagram_data": instagram,
         "facebook_data": facebook,
         "youtube_data": youtube,
         "twitter_data": twitter_dict,
         "linkedin_data": linkedin,
+        "tiktok_data": tiktok,
+        "pinterest_data": pinterest,
         "image_url": cover_image,
         "has_image": bool(cover_image),
         "published_to": {
@@ -762,21 +965,15 @@ def save_social_bundle(
             "youtube": False if youtube else None,
             "twitter": False if twitter_dict else None,
             "linkedin": False if linkedin else None,
+            "tiktok": False if tiktok else None,
+            "pinterest": False if pinterest else None,
         },
     }
 
     try:
-        resp = requests.post(
-            f"{supabase_url}/rest/v1/social_posts",
-            headers=_supabase_headers(),
-            json=_with_owner(row),
-            timeout=15,
-        )
-        if not resp.ok:
-            return f"[Error] Failed to save social bundle: {resp.status_code} {resp.text[:200]}"
-
-        post_data = resp.json()
-        post_id = post_data[0]["id"] if post_data else "?"
+        post_id, post_err = _insert_social_post(supabase_url, row)
+        if post_err:
+            return post_err
 
         if instagram:
             requests.post(
@@ -860,12 +1057,50 @@ def save_social_bundle(
                 timeout=10,
             )
 
+        if tiktok:
+            try:
+                requests.post(
+                    f"{supabase_url}/rest/v1/social_tiktok_posts",
+                    headers=_supabase_headers(),
+                    json=_with_owner({
+                        "post_id": post_id,
+                        "text": tiktok.get("caption", ""),
+                        "video_url": tiktok.get("video_url", ""),
+                        "title": tiktok.get("title", title),
+                        "status": "draft",
+                    }),
+                    timeout=10,
+                )
+            except Exception as e:
+                print(f"[social_saver] Note: social_tiktok_posts table insert skipped ({e})")
+
+        if pinterest:
+            try:
+                requests.post(
+                    f"{supabase_url}/rest/v1/social_pinterest_posts",
+                    headers=_supabase_headers(),
+                    json=_with_owner({
+                        "post_id": post_id,
+                        "title": pinterest.get("title", title),
+                        "description": pinterest.get("description", ""),
+                        "link": pinterest.get("link", ""),
+                        "media_url": pinterest.get("media_url", ""),
+                        "board_id": pinterest.get("board_id", ""),
+                        "status": "draft",
+                    }),
+                    timeout=10,
+                )
+            except Exception as e:
+                print(f"[social_saver] Note: social_pinterest_posts table insert skipped ({e})")
+
         channels = []
         if instagram: channels.append("Instagram")
         if facebook: channels.append("Facebook")
         if youtube: channels.append("YouTube")
         if twitter_dict: channels.append("X/Twitter")
         if linkedin: channels.append("LinkedIn")
+        if tiktok: channels.append("TikTok")
+        if pinterest: channels.append("Pinterest")
 
         _trigger_auto_publish_if_enabled(post_id, [c.lower().replace("x/twitter", "twitter") for c in channels])
 

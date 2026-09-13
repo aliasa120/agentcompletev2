@@ -9,6 +9,25 @@ export const dynamic = "force-dynamic";
 
 // Standard schemas for all built-in tools
 const BUILTIN_SCHEMAS: Record<string, any> = {
+  add_to_desk: {
+    name: "add_to_desk",
+    description: "Create and manage prepared task cards on the user's Desk for reviewed one-click execution.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["create", "list", "get", "update", "complete"] },
+        title: { type: "string" },
+        summary: { type: "string" },
+        user_prompt: { type: "string" },
+        fields: { type: "array", items: { type: "object" } },
+        buttons: { type: "array", items: { type: "object" } },
+        files: { type: "array", items: {} },
+        task_id: { type: "string" },
+        status: { type: "string", enum: ["pending", "executing", "done", "failed"] },
+      },
+      required: ["action"],
+    },
+  },
   create_post_image: {
     name: "create_post_image",
     description: "Create or edit a styled post image using the configured AI image model. Supports text-to-image and editing.",
@@ -332,6 +351,40 @@ const BUILTIN_SCHEMAS: Record<string, any> = {
       required: ["text"],
     },
   },
+  save_tiktok_post: {
+    name: "save_tiktok_post",
+    description: "Save a TikTok short-form video draft for Buffer publishing with captions, hashtags, and sound metadata.",
+    parameters: {
+      type: "object",
+      properties: {
+        video_url: { type: "string", description: "Public HTTPS URL or workspace video file path (MP4/MOV)." },
+        caption: { type: "string", description: "Engaging TikTok caption including trending hashtags (#fyp #viral) and sound attribution." },
+        title: { type: "string", description: "Internal title for the TikTok video draft.", default: "" },
+        tags: { type: "array", items: { type: "string" }, description: "Hashtags and tags for the video.", default: [] },
+        is_ai_generated: { type: "boolean", description: "Flag if the content was generated with AI.", default: false },
+        allow_comments: { type: "boolean", description: "Allow comments on the video.", default: true },
+        allow_duet: { type: "boolean", description: "Allow Duet on TikTok.", default: true },
+        allow_stitch: { type: "boolean", description: "Allow Stitch on TikTok.", default: true },
+      },
+      required: ["video_url", "caption"],
+    },
+  },
+  save_pinterest_post: {
+    name: "save_pinterest_post",
+    description: "Save a Pinterest Pin with destination link, board name, high-res image or video, and rich description.",
+    parameters: {
+      type: "object",
+      properties: {
+        media_url: { type: "string", description: "Public HTTPS URL or workspace file for the image (2:3 vertical) or video." },
+        title: { type: "string", description: "Catchy Pin title (up to 100 characters)." },
+        description: { type: "string", description: "Detailed Pinterest Pin description with search keywords and hashtags." },
+        board_name: { type: "string", description: "Target Pinterest board name or existing board ID.", default: "General" },
+        link: { type: "string", description: "Destination website or landing page URL when users click the Pin.", default: "" },
+        alt_text: { type: "string", description: "Accessibility alt text describing the image.", default: "" },
+      },
+      required: ["media_url", "title", "description"],
+    },
+  },
   save_social_bundle: {
     name: "save_social_bundle",
     description: "Save a multi-platform coordinated campaign across YouTube, Instagram, Facebook, and X in one turn.",
@@ -393,7 +446,7 @@ print(json.dumps(schemas))
       return NextResponse.json({ schema: parsed[toolKey] || BUILTIN_SCHEMAS[toolKey] || null });
     }
     return NextResponse.json({ schemas: { ...BUILTIN_SCHEMAS, ...parsed } });
-  } catch (err) {
+  } catch {
     // Fallback to pre-defined static schemas
     if (toolKey) {
       return NextResponse.json({ schema: BUILTIN_SCHEMAS[toolKey] || null });

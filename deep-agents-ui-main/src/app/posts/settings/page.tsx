@@ -15,12 +15,17 @@ interface SocialSettings {
     social_ig_enabled: string;
     social_youtube_enabled: string;
     social_twitter_enabled: string;
+    social_tiktok_enabled?: string;
+    social_pinterest_enabled?: string;
     social_auto_publish: string;
     wp_auto_publish: string;
     fb_page_id?: string;
     fb_page_name?: string;
     yt_channel_id?: string;
     yt_channel_title?: string;
+    social_pinterest_board_id?: string;
+    social_pinterest_board_name?: string;
+    pinterest_board_id?: string;
 }
 
 const DEFAULT_SETTINGS: SocialSettings = {
@@ -28,6 +33,8 @@ const DEFAULT_SETTINGS: SocialSettings = {
     social_ig_enabled: "true",
     social_youtube_enabled: "true",
     social_twitter_enabled: "false",
+    social_tiktok_enabled: "true",
+    social_pinterest_enabled: "true",
     social_auto_publish: "false",
     wp_auto_publish: "false",
 };
@@ -37,6 +44,8 @@ const TOGGLE_KEYS: (keyof SocialSettings)[] = [
     "social_ig_enabled",
     "social_youtube_enabled",
     "social_twitter_enabled",
+    "social_tiktok_enabled",
+    "social_pinterest_enabled",
     "social_auto_publish",
     "wp_auto_publish",
 ];
@@ -62,6 +71,13 @@ interface YouTubeChannel {
     customUrl?: string;
     subscriberCount?: string;
     thumbnail?: string;
+}
+
+interface PinterestBoard {
+    id: string;
+    name: string;
+    privacy?: string;
+    pin_count?: number;
 }
 
 function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
@@ -241,6 +257,13 @@ export default function PostSettingsPage() {
     const [savingYtChannel, setSavingYtChannel] = useState(false);
     const [ytChannelStatus, setYtChannelStatus] = useState("");
 
+    // Pinterest Boards state
+    const [pinterestBoards, setPinterestBoards] = useState<PinterestBoard[]>([]);
+    const [loadingPinterestBoards, setLoadingPinterestBoards] = useState(false);
+    const [selectedPinterestBoardId, setSelectedPinterestBoardId] = useState("");
+    const [savingPinterestBoard, setSavingPinterestBoard] = useState(false);
+    const [pinterestBoardStatus, setPinterestBoardStatus] = useState("");
+
     // Fetch Facebook pages from Composio
     const fetchFacebookPages = useCallback(async (currentSelectedId?: string) => {
         setLoadingFbPages(true);
@@ -291,6 +314,31 @@ export default function PostSettingsPage() {
         }
     }, []);
 
+    // Fetch Pinterest boards from Composio
+    const fetchPinterestBoards = useCallback(async (currentSelectedId?: string) => {
+        setLoadingPinterestBoards(true);
+        setPinterestBoardStatus("");
+        try {
+            const res = await fetch("/api/social-settings/channels?platform=pinterest");
+            const data = await res.json();
+            if (data.boards && Array.isArray(data.boards)) {
+                setPinterestBoards(data.boards);
+                if (data.boards.length > 0) {
+                    const found = currentSelectedId && data.boards.some((b: any) => b.id === currentSelectedId);
+                    if (!found) {
+                        setSelectedPinterestBoardId(data.boards[0].id);
+                    }
+                }
+            } else if (data.error) {
+                setPinterestBoardStatus(`Error: ${data.error}`);
+            }
+        } catch (e: any) {
+            setPinterestBoardStatus(`Failed to load boards: ${e.message}`);
+        } finally {
+            setLoadingPinterestBoards(false);
+        }
+    }, []);
+
     const loadAll = useCallback(async () => {
         setLoading(true);
         try {
@@ -302,6 +350,7 @@ export default function PostSettingsPage() {
 
             let savedFbId = "";
             let savedYtId = "";
+            let savedPinId = "";
 
             if (savedChannelsRes.ok) {
                 const savedData = await savedChannelsRes.json();
@@ -313,6 +362,10 @@ export default function PostSettingsPage() {
                     if (savedData.saved.yt_channel_id) {
                         savedYtId = savedData.saved.yt_channel_id;
                         setSelectedYtChannelId(savedYtId);
+                    }
+                    if (savedData.saved.social_pinterest_board_id || savedData.saved.pinterest_board_id) {
+                        savedPinId = savedData.saved.social_pinterest_board_id || savedData.saved.pinterest_board_id;
+                        setSelectedPinterestBoardId(savedPinId);
                     }
                 }
             }
@@ -338,19 +391,35 @@ export default function PostSettingsPage() {
                 if (ytActive) {
                     fetchYouTubeChannels(savedYtId);
                 }
+
+                const pinActive = conns.some((c) => c.toolkit_slug?.toLowerCase() === "pinterest" && c.status?.toLowerCase() === "active");
+                if (pinActive) {
+                    fetchPinterestBoards(savedPinId);
+                }
             }
         } catch (err) {
             console.error("Failed to load settings:", err);
         } finally {
             setLoading(false);
         }
-    }, [fetchFacebookPages, fetchYouTubeChannels]);
+    }, [fetchFacebookPages, fetchYouTubeChannels, fetchPinterestBoards]);
 
     useEffect(() => {
         loadAll();
     }, [loadAll]);
 
+    const hasDirectTwitterKeys = Boolean(
+        ((settings as any).social_twitter_api_key || (settings as any).twitter_api_key) &&
+        ((settings as any).social_twitter_access_token || (settings as any).twitter_access_token)
+    );
+
+    const hasBufferToken = Boolean(
+        (settings as any).buffer_access_token || (settings as any).social_buffer_access_token
+    );
+
     const isConnected = (slug: string) => {
+        if (slug.toLowerCase() === "twitter" && hasDirectTwitterKeys) return true;
+        if (slug.toLowerCase() === "tiktok" && hasBufferToken) return true;
         return connections.some((c) => c.toolkit_slug?.toLowerCase() === slug.toLowerCase() && c.status?.toLowerCase() === "active");
     };
 
@@ -414,10 +483,50 @@ export default function PostSettingsPage() {
         }
     };
 
+    const handleSavePinterestBoard = async () => {
+        if (!selectedPinterestBoardId) return;
+        setSavingPinterestBoard(true);
+        setPinterestBoardStatus("");
+        try {
+            const boardObj = pinterestBoards.find((b) => b.id === selectedPinterestBoardId);
+            const boardName = boardObj?.name || selectedPinterestBoardId;
+
+            const res = await fetch("/api/social-settings/channels", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    social_pinterest_board_id: selectedPinterestBoardId,
+                    social_pinterest_board_name: boardName,
+                    pinterest_board_id: selectedPinterestBoardId,
+                }),
+            });
+            if (res.ok) {
+                setPinterestBoardStatus(`Saved default board: ${boardName}`);
+                setSettings((prev) => ({
+                    ...prev,
+                    social_pinterest_board_id: selectedPinterestBoardId,
+                    social_pinterest_board_name: boardName,
+                    pinterest_board_id: selectedPinterestBoardId,
+                }));
+                setTimeout(() => setPinterestBoardStatus(""), 3500);
+            } else {
+                setPinterestBoardStatus("Failed to save board selection");
+            }
+        } catch (e: any) {
+            setPinterestBoardStatus(`Error: ${e.message}`);
+        } finally {
+            setSavingPinterestBoard(false);
+        }
+    };
+
     const toggle = (key: keyof SocialSettings) =>
         setSettings((prev) => ({ ...prev, [key]: prev[key] === "true" ? "false" : "true" }));
 
     const handleConnect = async (toolkitSlug: string) => {
+        if (toolkitSlug === "tiktok") {
+            window.location.href = "/agent-settings";
+            return;
+        }
         setConnectingSlug(toolkitSlug);
         try {
             const res = await fetch("/api/mcp/composio/connections", {
@@ -755,7 +864,11 @@ export default function PostSettingsPage() {
                                 </div>
                             }
                             title="X (Twitter)"
-                            description="Publish tweets and threads directly through Composio Twitter MCP gateway."
+                            description={
+                                hasDirectTwitterKeys
+                                    ? "Connected via Direct API keys configured in ENV Keys."
+                                    : "Publish tweets and threads directly through Direct Developer API (ENV Keys) or Composio Twitter MCP gateway."
+                            }
                             toolkitSlug="twitter"
                             toggleKey="social_twitter_enabled"
                             enabled={settings.social_twitter_enabled === "true"}
@@ -765,6 +878,109 @@ export default function PostSettingsPage() {
                             onConnect={handleConnect}
                             onDisconnect={handleDisconnect}
                         />
+
+                        {/* TikTok (via Buffer) */}
+                        <ChannelCard
+                            icon={
+                                <div className="h-full w-full rounded-xl bg-black flex items-center justify-center text-white">
+                                    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current">
+                                        <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 2.89 3.5 2.77 1.81-.02 3.29-1.45 3.39-3.26.04-3.08.01-6.16.02-9.25V.02z" />
+                                    </svg>
+                                </div>
+                            }
+                            title="TikTok (via Buffer)"
+                            description={
+                                hasBufferToken
+                                    ? "Connected via Buffer Access Token (Settings > ENV Keys). Short-form videos publish directly."
+                                    : "Publish short-form video posts to TikTok via Buffer GraphQL API. Enter your Buffer token in Settings > ENV Keys."
+                            }
+                            toolkitSlug="tiktok"
+                            toggleKey="social_tiktok_enabled"
+                            enabled={settings.social_tiktok_enabled !== "false"}
+                            isConnected={isConnected("tiktok")}
+                            isConnecting={connectingSlug === "tiktok"}
+                            onToggle={() => toggle("social_tiktok_enabled")}
+                            onConnect={handleConnect}
+                            onDisconnect={() => alert("To disconnect Buffer, remove your Buffer Access Token in Settings > ENV Keys.")}
+                        />
+
+                        {/* Pinterest (via Composio) */}
+                        <ChannelCard
+                            icon={
+                                <div className="h-full w-full rounded-xl bg-[#E60023] flex items-center justify-center text-white">
+                                    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current">
+                                        <path d="M12 0a12 12 0 0 0-4.37 23.18c-.07-.98-.13-2.48.03-3.55.14-.98.92-6.52.92-6.52s-.23-.47-.23-1.17c0-1.1.64-1.92 1.43-1.92.68 0 1 .51 1 1.12 0 .68-.43 1.7-.66 2.65-.19.79.4 1.44 1.18 1.44 1.41 0 2.5-1.49 2.5-3.63 0-1.9-1.36-3.23-3.31-3.23-2.42 0-3.84 1.81-3.84 3.68 0 .73.28 1.51.63 1.93.07.08.08.16.06.24-.07.28-.22.89-.25 1.01-.04.16-.13.19-.3.12-1.12-.52-1.82-2.16-1.82-3.48 0-2.83 2.06-5.43 5.93-5.43 3.11 0 5.53 2.22 5.53 5.18 0 3.09-1.95 5.58-4.66 5.58-.91 0-1.76-.47-2.06-1.03l-.56 2.14c-.2.78-.75 1.75-1.12 2.35A12 12 0 1 0 12 0z" />
+                                    </svg>
+                                </div>
+                            }
+                            title="Pinterest (via Composio)"
+                            description="Publish Pins with images, boards, titles, and links directly via Composio MCP connection."
+                            toolkitSlug="pinterest"
+                            toggleKey="social_pinterest_enabled"
+                            enabled={settings.social_pinterest_enabled !== "false"}
+                            isConnected={isConnected("pinterest")}
+                            isConnecting={connectingSlug === "pinterest"}
+                            onToggle={() => toggle("social_pinterest_enabled")}
+                            onConnect={handleConnect}
+                            onDisconnect={handleDisconnect}
+                        >
+                            <div className="space-y-2.5 bg-muted/20 p-3 rounded-lg border border-border/40">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                        <Layers size={13} className="text-[#E60023]" /> Target Pinterest Board
+                                    </label>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => fetchPinterestBoards(selectedPinterestBoardId)}
+                                        disabled={loadingPinterestBoards}
+                                        className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground gap-1"
+                                    >
+                                        <RefreshCw size={10} className={loadingPinterestBoards ? "animate-spin" : ""} />
+                                        Refresh Boards
+                                    </Button>
+                                </div>
+
+                                {loadingPinterestBoards ? (
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+                                        <Loader2 size={12} className="animate-spin" /> Fetching Pinterest boards...
+                                    </div>
+                                ) : pinterestBoards.length > 0 ? (
+                                    <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+                                        <select
+                                            value={selectedPinterestBoardId}
+                                            onChange={(e) => setSelectedPinterestBoardId(e.target.value)}
+                                            className="h-8 px-2.5 rounded-md border border-input bg-background text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary flex-1"
+                                        >
+                                            {pinterestBoards.map((b) => (
+                                                <option key={b.id} value={b.id}>
+                                                    {b.name} ({b.privacy}) — ID: {b.id}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <Button
+                                            size="sm"
+                                            onClick={handleSavePinterestBoard}
+                                            disabled={savingPinterestBoard || !selectedPinterestBoardId}
+                                            className="h-8 px-3 text-xs font-semibold shrink-0 gap-1"
+                                        >
+                                            {savingPinterestBoard ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
+                                            Set Default Board
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-muted-foreground italic">
+                                        No boards found. Click &quot;Refresh Boards&quot; to fetch or auto-create your Pinterest boards.
+                                    </p>
+                                )}
+
+                                {pinterestBoardStatus && (
+                                    <p className={`text-[11px] font-medium ${pinterestBoardStatus.startsWith("Saved") ? "text-emerald-500" : "text-destructive"}`}>
+                                        {pinterestBoardStatus}
+                                    </p>
+                                )}
+                            </div>
+                        </ChannelCard>
                     </section>
 
                     <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 pb-8">

@@ -12,7 +12,7 @@ from typing import List
 
 from langchain_core.tools import tool
 
-from .provider_engine import execute_with_fallback, get_settings
+from .provider_engine import execute_unified_pipeline
 
 logger = logging.getLogger("unified_extract")
 
@@ -113,11 +113,17 @@ _PROVIDER_MAP = {
 from langchain_core.runnables import RunnableConfig
 
 @tool(parse_docstring=True)
-def unified_extract(urls: List[str], query: str = "", config: RunnableConfig = None) -> str:
+def unified_extract(urls: List[str], query: str = "", provider: str = "", config: RunnableConfig = None) -> str:
     """Extract full article content from URLs.
 
     Provider selection, priority, retry count, and fallback logic are
     handled automatically based on the numbered settings in Supabase.
+
+    Fallback protocol:
+    - The active provider is retried automatically (waits of 3s / 8s / 16s).
+    - If it keeps failing, the tool result will contain a FALLBACK HANDOFF
+      message naming the next provider and its schema. In that case, call
+      this tool AGAIN with provider='<next_provider_key>' from that message.
 
     When to use:
     - A search snippet hints at the answer but is too short.
@@ -130,7 +136,8 @@ def unified_extract(urls: List[str], query: str = "", config: RunnableConfig = N
 
     Args:
         urls: List of 1-2 credible news URLs to extract. Max 2 URLs per call.
-        query: Optional keyword string — helps Tavily rerank chunks by relevance.
+        query: Optional keyword string — helps providers rerank chunks by relevance.
+        provider: Optional provider key to pin this call to one configured provider (e.g. 'tavily', 'exa'). Set this ONLY when following a FALLBACK HANDOFF message.
         config: Optional LangChain runnable configuration.
 
     Returns:
@@ -156,6 +163,7 @@ def unified_extract(urls: List[str], query: str = "", config: RunnableConfig = N
             timeout_seconds=30,
             urls=urls,
             query=query,
+            provider=provider,
             config=config,
         )
     )

@@ -23,6 +23,8 @@ PLUGIN_TOOLS: Dict[str, List[str]] = {
         "save_youtube_video",
         "save_linkedin_post",
         "save_twitter_post",
+        "save_tiktok_post",
+        "save_pinterest_post",
         "save_social_bundle",
         "get_wordpress_categories",
         "publish_to_wordpress",

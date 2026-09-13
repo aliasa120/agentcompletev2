@@ -1,7 +1,12 @@
 """Unified Image Generation tool — wraps KIE AI and xAI Grok Imagine Image (via Vercel AI Gateway).
 
-Reads provider settings and fallback priority from Supabase agent_settings / unified_tool_configs.
-Image generation uses configurable retries (default 2 retries per provider).
+Reads provider priority from Supabase agent_settings (unified_tool_configs) /
+tool_provider_configs. Uses the universal fallback pipeline:
+
+  - The active provider is retried with the standard ladder (3s / 8s / 16s).
+  - When the ladder is exhausted, the next provider is NOT called automatically.
+    The tool returns a FALLBACK HANDOFF message (next provider key + schema) so
+    the agent can re-invoke the tool with provider='<next_key>'.
 
 Supported Providers:
   - KIE AI (gpt-image/1.5-image-to-image, brand-style image editing)
@@ -31,7 +36,7 @@ from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 from PIL import Image
 
-from .provider_engine import execute_with_fallback, get_settings
+from .provider_engine import execute_unified_pipeline_outcome, get_settings, UnifiedOutcome
 from research_agent.fs_backend import get_thread_output_dir
 from research_agent.brand_assets import _supabase_client, get_agent_brand_assets, _asset_media_type
 
@@ -46,7 +51,6 @@ _LATEST_IMAGE_FILE = _OUTPUT_DIR / "latest_image_path.txt"
 _DEFAULTS = {
     "image_provider_primary": "kie",
     "image_provider_secondary": "grok_imagine",
-    "image_max_retries": "2",
 }
 
 
@@ -356,12 +360,12 @@ async def _grok_imagine_generate(
     return img
 
 
-# ── Provider Map ───────────────────────────────────────────────────────────────
+# ── Provider Map (universal fallback pipeline format: key -> async fn) ────────
 
-_PROVIDER_MAP = {
-    "kie":          ("KIE AI",             _kie_generate),
-    "grok_imagine": ("Grok Imagine Image", _grok_imagine_generate),
-    "gemini_flash": ("Grok Imagine Image", _grok_imagine_generate),  # Backwards compat alias
+_IMAGE_PROVIDER_FNS = {
+    "kie":          _kie_generate,
+    "grok_imagine": _grok_imagine_generate,
+    "gemini_flash": _grok_imagine_generate,  # Backwards compat alias
 }
 
 
@@ -376,6 +380,7 @@ def create_post_image(
     aspect_ratio: str = "1:1",
     reference_image_urls: list[str] = None,
     reference_asset_keys: list[str] = None,
+    provider: str = "",
     config: RunnableConfig = None,
 ) -> str:
     """Create or edit a styled post image using the configured AI image model (KIE AI or Grok Imagine Image).
@@ -385,6 +390,12 @@ def create_post_image(
     You can select the aspect ratio ('1:1', '16:9', '4:3', '3:2', '2:3', '3:4', '9:16') and
     optionally pass reference image URLs (<20MB each) or brand reference_asset_keys for style consistency.
 
+    Fallback protocol:
+    - The active image provider is retried automatically (waits of 3s / 8s / 16s).
+    - If it keeps failing, the tool result will contain a FALLBACK HANDOFF message
+      naming the next provider (e.g. 'grok_imagine') and its schema. In that case,
+      call this tool AGAIN with provider='<next_provider_key>' from that message.
+
     Args:
         image_url: URL of the chosen target image/photo to edit (optional; leave empty for text-to-image).
         editing_prompt: Detailed editing instructions or JSON from analyze_images_gemini.
@@ -393,6 +404,7 @@ def create_post_image(
         aspect_ratio: Aspect ratio for the image: '1:1', '16:9', '4:3', '3:2', '2:3', '3:4', '9:16'. Default is '1:1'.
         reference_image_urls: Optional list of reference image URLs (<20MB each) for style/brand guidance.
         reference_asset_keys: Optional list of attached brand asset keys or labels to use as references.
+        provider: Optional image provider key to pin this call to one provider (e.g. 'kie', 'grok_imagine'). Set this ONLY when following a FALLBACK HANDOFF message.
         config: LangChain runnable configuration.
 
     Returns:
@@ -461,20 +473,18 @@ def create_post_image(
     if source_img is not None:
         supabase_url = _upload_to_supabase(source_img, slug) or image_url
 
-    # 5. Read provider priority settings
+    # 5. Read provider priority settings (legacy keys order the static defaults;
+    #    the universal pipeline reads unified_tool_configs / tool_provider_configs)
     settings = get_settings()
     primary_key = settings.get("image_provider_primary", _DEFAULTS["image_provider_primary"])
     secondary_key = settings.get("image_provider_secondary", _DEFAULTS["image_provider_secondary"])
-    max_retries = int(settings.get("image_max_retries", _DEFAULTS["image_max_retries"]))
-
-    primary_name, primary_fn = _PROVIDER_MAP.get(primary_key, _PROVIDER_MAP["kie"])
-    secondary_entry = _PROVIDER_MAP.get(secondary_key)
-    secondary_name = secondary_entry[0] if secondary_entry else "none"
-    secondary_fn = secondary_entry[1] if secondary_entry else None
+    default_keys = [k for k in (primary_key, secondary_key) if k in _IMAGE_PROVIDER_FNS]
+    if not default_keys:
+        default_keys = ["kie", "grok_imagine"]
 
     logger.info(
-        f"[unified_image] Primary={primary_name}, Fallback={secondary_name}, "
-        f"Aspect={aspect_ratio}, Thread={thread_id or 'default'}, Retries={max_retries}"
+        f"[unified_image] Default providers={default_keys}, "
+        f"Aspect={aspect_ratio}, Thread={thread_id or 'default'}, Provider hint='{provider or 'auto'}'"
     )
 
     try:
@@ -483,17 +493,17 @@ def create_post_image(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    result_img: Image.Image | None = None
+    # 6. Run the universal fallback pipeline (retry ladder + schema handoff —
+    #    the next provider is NEVER called automatically; the agent decides).
     try:
-        result = loop.run_until_complete(
-            execute_with_fallback(
-                primary_fn=primary_fn,
-                secondary_fn=secondary_fn,
-                primary_name=primary_name,
-                secondary_name=secondary_name,
-                max_retries=max_retries,
+        outcome = loop.run_until_complete(
+            execute_unified_pipeline_outcome(
+                category="image",
+                built_in_map=_IMAGE_PROVIDER_FNS,
+                default_provider_keys=default_keys,
+                max_retries=2,
                 timeout_seconds=300,
-                # kwargs passed to provider adapters:
+                provider=provider,
                 target_url=supabase_url,
                 editing_prompt=effective_prompt,
                 source_img=source_img,
@@ -501,57 +511,53 @@ def create_post_image(
                 aspect_ratio=aspect_ratio,
             )
         )
-        if result.failed:
-            logger.error(f"[unified_image] All image providers failed: {result.data}")
-            result_img = None
-        else:
-            result_img = result.data
-            if result.fallback_used:
-                logger.warning(f"[unified_image] Used fallback provider: {result.provider_used}")
     except RuntimeError as e:
-        logger.error(f"[unified_image] Unexpected error: {e}")
-        result_img = None
+        logger.error(f"[unified_image] Unexpected pipeline error: {e}")
+        outcome = UnifiedOutcome(ok=False, message=f"❌ Image pipeline error: {e}")
 
-    # 6. Save output image locally in thread directory and upload to Supabase Storage
-    if result_img is not None:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        result_img.save(str(output_path), "JPEG", quality=92)
-        try:
-            _LATEST_IMAGE_FILE.write_text(str(output_path), encoding="utf-8")
-        except Exception:
-            pass
-
-        # Upload generated image to Supabase Storage so it is accessible everywhere
-        public_url = _upload_output_image_to_supabase(result_img, filename, thread_id=thread_id)
-
-        posix_path = output_path.resolve().as_posix()
-        if public_url:
-            return (
-                f"✅ Image generated and saved to thread workspace:\n{posix_path}\n"
-                f"FILE_URL:{public_url}"
-            )
-        return posix_path
-
-    # Last resort fallback: save raw source image if available
-    if source_img is not None:
-        logger.warning("[unified_image] All edit providers failed. Saving raw source image as fallback.")
-        fallback_path = output_path.with_name(f"{output_path.stem}-fallback.jpg")
-        try:
-            fallback_path.parent.mkdir(parents=True, exist_ok=True)
-            source_img.save(str(fallback_path), "JPEG", quality=92)
+    if outcome.ok and outcome.result is not None:
+        result_img: Image.Image = outcome.result
+        if outcome.provider_used != default_keys[0]:
+            logger.info(f"[unified_image] Provider used: {outcome.provider_used}")
+    else:
+        message = outcome.message
+        # Only when NO further fallback exists do we keep the legacy behavior of
+        # saving the raw source image so the thread still receives a file.
+        if not outcome.handoff and source_img is not None:
+            logger.warning("[unified_image] All image providers failed. Saving raw source image as fallback.")
+            fallback_path = output_path.with_name(f"{output_path.stem}-fallback.jpg")
             try:
-                _LATEST_IMAGE_FILE.write_text(str(fallback_path), encoding="utf-8")
-            except Exception:
-                pass
-            fallback_public = _upload_output_image_to_supabase(source_img, fallback_path.name, thread_id=thread_id)
-            posix_path = fallback_path.resolve().as_posix()
-            if fallback_public:
-                return (
-                    f"⚠️ Edit providers failed. Saved source image fallback:\n{posix_path}\n"
-                    f"FILE_URL:{fallback_public}"
-                )
-            return posix_path
-        except Exception as e:
-            return f"❌ Image providers failed and fallback save failed: {e}"
+                fallback_path.parent.mkdir(parents=True, exist_ok=True)
+                source_img.save(str(fallback_path), "JPEG", quality=92)
+                try:
+                    _LATEST_IMAGE_FILE.write_text(str(fallback_path), encoding="utf-8")
+                except Exception:
+                    pass
+                fallback_public = _upload_output_image_to_supabase(source_img, fallback_path.name, thread_id=thread_id)
+                posix_path = fallback_path.resolve().as_posix()
+                if fallback_public:
+                    message += f"\n⚠️ Saved source image fallback:\n{posix_path}\nFILE_URL:{fallback_public}"
+                else:
+                    message += f"\n⚠️ Saved source image fallback:\n{posix_path}"
+            except Exception as save_err:
+                message += f"\n❌ Fallback save failed: {save_err}"
+        return message
 
-    return "❌ Image generation failed across all configured providers."
+    # 7. Save output image locally in thread directory and upload to Supabase Storage
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    result_img.save(str(output_path), "JPEG", quality=92)
+    try:
+        _LATEST_IMAGE_FILE.write_text(str(output_path), encoding="utf-8")
+    except Exception:
+        pass
+
+    # Upload generated image to Supabase Storage so it is accessible everywhere
+    public_url = _upload_output_image_to_supabase(result_img, filename, thread_id=thread_id)
+
+    posix_path = output_path.resolve().as_posix()
+    if public_url:
+        return (
+            f"✅ Image generated and saved to thread workspace:\n{posix_path}\n"
+            f"FILE_URL:{public_url}"
+        )
+    return posix_path

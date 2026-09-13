@@ -59,6 +59,8 @@ from research_agent.tools import (
     save_instagram_post,
     save_facebook_post,
     save_youtube_video,
+    save_tiktok_post,
+    save_pinterest_post,
     save_social_bundle,
     get_design_guide,
     read_skill,
@@ -70,6 +72,7 @@ from research_agent.tools import (
     text_to_speech,
     terminal,
     upload_to_storage,
+    add_to_desk,
 )
 from research_agent.plugins import enabled_plugins_from_db, is_tool_allowed
 from research_agent.tools.provider_engine import get_llm_config
@@ -128,6 +131,135 @@ def route_workflow(state, config):
     raise ValueError(f"No active compiled workflows found. Available: {list(compiled_workflows.keys())}")
 
 
+# ── Add to Desk: deterministic one-click execution ────────────────────────────
+# A Desk card's Execute button triggers a background run on the origin thread
+# whose single user message is "[DESK_EXECUTE] {json}". The master graph routes
+# that run straight to the desk_execute node — NO model call, no re-planning:
+# the saved tool schema + (user-edited) arguments are executed exactly as-is.
+DESK_EXECUTE_MARKER = "[DESK_EXECUTE]"
+
+
+def _message_text(msg) -> str:
+    """Extract plain text from a message (str or content-block list)."""
+    content = getattr(msg, "content", None)
+    if content is None and isinstance(msg, dict):
+        content = msg.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict) and isinstance(block.get("text"), str):
+                parts.append(block["text"])
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts)
+    return ""
+
+
+def _message_type(msg) -> str:
+    m_type = getattr(msg, "type", None)
+    if m_type is None and isinstance(msg, dict):
+        m_type = msg.get("type") or msg.get("role")
+    return str(m_type or "")
+
+
+def _is_desk_execute_run(state) -> bool:
+    """True when the run's last message is a [DESK_EXECUTE] directive."""
+    messages = (state or {}).get("messages", [])
+    if not messages:
+        return False
+    last = messages[-1]
+    if _message_type(last) not in ("human", "user"):
+        return False
+    return _message_text(last).strip().startswith(DESK_EXECUTE_MARKER)
+
+
+def desk_execute(state, config):
+    """Execute a Desk task card's tool call deterministically (no LLM involved).
+
+    The user already approved this exact call by clicking the card's Execute
+    button, so the mid-chat 'ask' permission interrupt is skipped (skip_ask=True)
+    — 'deny' permissions still block. Updates the desk_tasks row and leaves a
+    clean audit-trail message in the origin thread.
+    """
+    import json as _json
+    from datetime import datetime, timezone as _tz
+    from langchain_core.messages import AIMessage, RemoveMessage
+    from research_agent.tools.desk import _get_supabase_client, update_desk_task_status
+    from research_agent.tools.dynamic_router import execute_tool_for_desk
+
+    messages = state.get("messages", [])
+    marker_msg = messages[-1] if messages else None
+    raw = _message_text(marker_msg)
+    payload = {}
+    try:
+        payload = _json.loads(raw.strip()[len(DESK_EXECUTE_MARKER):].strip())
+    except Exception as e:
+        error_text = f"[desk_execute] Could not parse [DESK_EXECUTE] payload: {e}"
+        print(error_text, flush=True)
+        return {"messages": [AIMessage(content=f"⚠️ {error_text}")]}
+
+    task_id = str(payload.get("task_id") or "")
+    execution_id = str(payload.get("execution_id") or "")
+    configurable = config.get("configurable", {}) if config else {}
+    user_id = str(configurable.get("user_id") or "")
+    if not task_id or not execution_id or not user_id:
+        error_text = "[desk_execute] Missing claimed task, execution, or user identity."
+        return {"messages": [AIMessage(content=error_text)]}
+
+    client = _get_supabase_client()
+    claimed = (
+        client.table("desk_tasks")
+        .select("title,execution_payload")
+        .eq("id", task_id)
+        .eq("user_id", user_id)
+        .eq("status", "executing")
+        .eq("execution_id", execution_id)
+        .maybe_single()
+        .execute()
+    )
+    if not claimed.data or not isinstance(claimed.data.get("execution_payload"), dict):
+        return {"messages": [AIMessage(content="Desk execution claim is missing, stale, or invalid.")]}
+
+    task = claimed.data
+    execution = task["execution_payload"]
+    title = str(task.get("title") or "Desk task")
+    tool_name = str(execution.get("tool_name") or "")
+    arguments = execution.get("arguments")
+    agent_id = str(execution.get("agent_id") or "")
+    if not tool_name or not agent_id or not isinstance(arguments, dict):
+        outcome = {"ok": False, "code": "invalid_claim", "error": "Stored Desk execution payload is invalid."}
+    else:
+        outcome = execute_tool_for_desk(tool_name, arguments, agent_id, config=config)
+
+    executed_at = datetime.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    result = str(outcome.get("output") if outcome.get("ok") else outcome.get("error") or "Desk execution failed.")
+    update_desk_task_status(
+        task_id=task_id,
+        user_id=user_id,
+        execution_id=execution_id,
+        expected_status="executing",
+        status="done" if outcome.get("ok") else "failed",
+        result=result if outcome.get("ok") else None,
+        error=None if outcome.get("ok") else result,
+        executed_at=executed_at,
+    )
+
+    icon = "✅" if outcome.get("ok") else "⚠️"
+    summary = (
+        f"{icon} Desk task \"{title}\" executed via `{tool_name}`.\n\n"
+        f"**Result:** {result[:2000]}"
+    )
+
+    new_messages = []
+    marker_id = getattr(marker_msg, "id", None)
+    if marker_id:
+        new_messages.append(RemoveMessage(id=marker_id))
+    new_messages.append(AIMessage(content=summary))
+    return {"messages": new_messages}
+
+
 # ── Master StateGraph Assembly ─────────────────────────────────────────────────
 builder = StateGraph(AgentState)
 
@@ -135,6 +267,7 @@ if compiled_workflows:
     builder.add_node("load_memories", load_memories)
     builder.add_node("finalize_response", finalize_response)
     builder.add_node("save_chat_history", save_chat_history)
+    builder.add_node("desk_execute", desk_execute)
 
     for wf_key, wf_agent in compiled_workflows.items():
         builder.add_node(wf_key, wf_agent)
@@ -142,7 +275,21 @@ if compiled_workflows:
 
     builder.add_edge("finalize_response", "save_chat_history")
     builder.add_edge("save_chat_history", END)
-    builder.add_edge(START, "load_memories")
+    builder.add_edge("desk_execute", "save_chat_history")
+
+    def route_entry(state, config):
+        """Desk task execution runs bypass the LLM pipeline entirely."""
+        return "desk_execute" if _is_desk_execute_run(state) else "load_memories"
+
+    builder.add_conditional_edges(
+        START,
+        route_entry,
+        {
+            "desk_execute": "desk_execute",
+            "load_memories": "load_memories",
+            **{wf_key: wf_key for wf_key in compiled_workflows.keys()},
+        }
+    )
 
     builder.add_conditional_edges(
         "load_memories",
@@ -226,6 +373,7 @@ else:
         text_to_speech,
         terminal,
         upload_to_storage,
+        add_to_desk,
     ]
     _enabled_plugins = enabled_plugins_from_db()
     fallback_tools = [
@@ -244,10 +392,16 @@ else:
     )
 
     builder.add_node("static_fallback", fallback_agent)
+    builder.add_node("desk_execute", desk_execute)
     builder.add_edge("static_fallback", END)
+    builder.add_edge("desk_execute", END)
 
     def route_fallback(state, config):
-        return "static_fallback"
+        return "desk_execute" if _is_desk_execute_run(state) else "static_fallback"
 
-    builder.add_conditional_edges(START, route_fallback, {"static_fallback": "static_fallback"})
+    builder.add_conditional_edges(
+        START,
+        route_fallback,
+        {"static_fallback": "static_fallback", "desk_execute": "desk_execute"}
+    )
     agent = builder.compile()

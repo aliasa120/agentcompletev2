@@ -17,6 +17,18 @@ function getSupabaseAdmin() {
   return createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
 }
 
+function extractStashedField(rawMarkdown: string | null | undefined, fieldName: string): any {
+  if (!rawMarkdown) return null;
+  const regex = new RegExp(`<!--\\s*STASHED_${fieldName.toUpperCase()}:\\s*([\\s\\S]*?)\\s*-->`);
+  const match = rawMarkdown.match(regex);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
 export async function GET(req: Request) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     return NextResponse.json(
@@ -55,25 +67,37 @@ export async function GET(req: Request) {
       if (error) {
         console.error("Supabase error fetching social posts:", error);
       } else {
-        posts = (rows || []).map((row: any) => ({
-          id: row.id,
-          created_at: row.created_at,
-          title: row.title,
-          twitter: row.twitter ?? "",
-          instagram: row.instagram ?? "",
-          facebook: row.facebook ?? "",
-          youtube: row.youtube ?? "",
-          linkedin: row.linkedin ?? "",
-          instagram_data: row.instagram_data ?? null,
-          facebook_data: row.facebook_data ?? null,
-          youtube_data: row.youtube_data ?? null,
-          linkedin_data: row.linkedin_data ?? null,
-          twitter_data: row.twitter_data ?? null,
-          sources: row.sources ?? [],
-          image: row.has_image,
-          image_url: row.image_url ?? null,
-          published_to: row.published_to ?? {},
-        }));
+        posts = (rows || []).map((row: any) => {
+          const raw = row.raw_markdown || "";
+          const tiktok = row.tiktok || extractStashedField(raw, "tiktok") || "";
+          const tiktokData = row.tiktok_data || extractStashedField(raw, "tiktok_data") || null;
+          const pinterest = row.pinterest || extractStashedField(raw, "pinterest") || "";
+          const pinterestData = row.pinterest_data || extractStashedField(raw, "pinterest_data") || null;
+
+          return {
+            id: row.id,
+            created_at: row.created_at,
+            title: row.title,
+            twitter: row.twitter ?? "",
+            instagram: row.instagram ?? "",
+            facebook: row.facebook ?? "",
+            youtube: row.youtube ?? "",
+            linkedin: row.linkedin ?? "",
+            tiktok,
+            pinterest,
+            instagram_data: row.instagram_data ?? null,
+            facebook_data: row.facebook_data ?? null,
+            youtube_data: row.youtube_data ?? null,
+            linkedin_data: row.linkedin_data ?? null,
+            twitter_data: row.twitter_data ?? null,
+            tiktok_data: tiktokData,
+            pinterest_data: pinterestData,
+            sources: row.sources ?? [],
+            image: row.has_image,
+            image_url: row.image_url ?? null,
+            published_to: row.published_to ?? {},
+          };
+        });
       }
     }
 

@@ -32,6 +32,7 @@ import { AppearanceSection } from "@/app/components/settings/AppearanceSection";
 import { VoiceSection } from "@/app/components/settings/VoiceSection";
 import { AIProvidersSection } from "@/app/components/settings/AIProvidersSection";
 import { PluginsSection } from "@/app/components/settings/PluginsSection";
+import { DeskSection } from "@/app/components/settings/DeskSection";
 import { usePlugins, isPluginEnabled } from "@/lib/plugins";
 import { JanCard, CardItem } from "@/components/settings/JanCard";
 
@@ -76,15 +77,28 @@ const AGENT_SETTING_KEYS = [
   "wp_username",
   "wp_app_password",
   // ── Platform ──
+  "buffer_access_token",
   "composio_api_key",
   "smithery_api_key",
   "zapier_mcp_secret",
   "langsmith_api_key",
+  // ── Social & Boards ──
+  "social_pinterest_board_id",
+  "social_tiktok_enabled",
+  "social_pinterest_enabled",
   // ── Social ──
   "social_fb_token",
   "social_fb_page_id",
   "social_ig_account_id",
   "social_twitter_api_key",
+  "social_twitter_api_secret",
+  "social_twitter_access_token",
+  "social_twitter_access_secret",
+  "social_twitter_bearer_token",
+  "twitter_api_key",
+  "twitter_api_secret",
+  "twitter_access_token",
+  "twitter_access_secret",
   "social_twitter_username",
   "social_twitter_email",
   "social_twitter_password",
@@ -1017,6 +1031,7 @@ export default function AgentSettingsPage() {
       );
       case "telegram-bots": return <TelegramBotsSection />;
       case "scheduled-tasks": return <ScheduledTasksSection />;
+      case "desk":          return <DeskSection />;
       case "additional-features":
       case "additional-features-voice": return <VoiceSection />;
       default:              return null;

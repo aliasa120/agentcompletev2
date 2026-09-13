@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import {
   Palette, Shield, Layers, AlarmClock, Wrench, Cpu, Route, Brain, Bot, Users,
   BookOpen, ImageIcon, ListChecks, Settings2, Database, Share2, LayoutGrid,
-  Zap, LogOut, ChevronDown, Menu, X, SlidersHorizontal, Puzzle, Mic,
+  Zap, LogOut, ChevronDown, Menu, X, SlidersHorizontal, Puzzle, Mic, Inbox,
 } from "lucide-react";
 import { type SettingsSection } from "./SettingsSidebar";
 import { isPluginEnabled, type PluginInfo } from "@/lib/plugins";
@@ -53,6 +53,7 @@ function buildNavGroups(plugins: PluginInfo[]): NavGroup[] {
         { title: "ENV Keys", id: "env-keys", icon: Shield, badge: "NEW" },
         { title: "Workflows", id: "workflows", icon: Layers },
         { title: "Scheduled Tasks", id: "scheduled-tasks", icon: AlarmClock },
+        { title: "Desk", id: "desk", icon: Inbox, badge: "NEW" },
         { title: "Voice & TTS", id: "additional-features-voice", icon: Mic },
         {
           title: "Plugins",

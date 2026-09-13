@@ -387,6 +387,8 @@ from research_agent.tools import (
     save_youtube_video,
     save_linkedin_post,
     save_twitter_post,
+    save_tiktok_post,
+    save_pinterest_post,
     save_social_bundle,
     get_design_guide,
     read_skill,
@@ -415,6 +417,7 @@ from research_agent.tools import (
     load_tools,
     call_tool,
     build_tools_index,
+    add_to_desk,
 )
 from research_agent.commands import resolve_command
 from research_agent.learn_prompt import build_learn_prompt
@@ -661,6 +664,8 @@ def load_dynamic_agents_by_workflow() -> dict:
             "save_youtube_video": save_youtube_video,
             "save_linkedin_post": save_linkedin_post,
             "save_twitter_post": save_twitter_post,
+            "save_tiktok_post": save_tiktok_post,
+            "save_pinterest_post": save_pinterest_post,
             "save_social_bundle": save_social_bundle,
             "get_design_guide": get_design_guide,
             "read_skill": read_skill,
@@ -676,6 +681,7 @@ def load_dynamic_agents_by_workflow() -> dict:
             "text_to_speech": text_to_speech,
             "terminal": terminal,
             "upload_to_storage": upload_to_storage,
+            "add_to_desk": add_to_desk,
             "search_conversation_history": search_conversation_history,
             "omni_analyzer": omni_analyzer,
             "analyze_attachment": omni_analyzer,
@@ -692,6 +698,8 @@ def load_dynamic_agents_by_workflow() -> dict:
 
         tool_assignments_by_agent = {}
         for a in assignments:
+            if a.get("enabled") is not True:
+                continue
             agent_id = a.get("agent_id")
             if agent_id not in tool_assignments_by_agent:
                 tool_assignments_by_agent[agent_id] = []

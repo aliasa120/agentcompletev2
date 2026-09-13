@@ -198,6 +198,15 @@ async def _aheal_unsupported_media(kwargs: dict, user_id: str = None) -> dict:
     return new_kwargs
 
 
+def _sanitize_message_names(kwargs: dict) -> None:
+    """Strip 'name' from non-tool messages for strict OpenAI-compatible providers (e.g. GLM/ExperientialLabs)."""
+    raw_messages = kwargs.get("messages")
+    if isinstance(raw_messages, list):
+        for msg in raw_messages:
+            if isinstance(msg, dict) and msg.get("role") != "tool" and "name" in msg:
+                del msg["name"]
+
+
 def _heal_unsupported_media_sync(kwargs: dict, user_id: str = None) -> dict:
     """Sync fallback for reactive healing of media payloads."""
     import concurrent.futures
@@ -213,6 +222,11 @@ class ResilientChatModel(ChatOpenAI):
     agent_config_id: str = ""  # UUID from agent_configs table; when set, dynamic reload reads per-workflow settings
     is_omni_call: bool = False
     max_tokens: Optional[int] = 4096
+
+    def _get_request_payload(self, input_, *, stop=None, **kwargs):
+        payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+        _sanitize_message_names(payload)
+        return payload
 
     def _inject_memory_to_messages(self, messages: list) -> list:
         """Inject USER.md + MEMORY.md + Honcho context into the LAST HumanMessage without dropping multimodal blocks or user text."""
@@ -453,26 +467,33 @@ class ResilientChatModel(ChatOpenAI):
         for attr in ["client", "root_client"]:
             client_obj = getattr(self, attr, None)
             if client_obj and hasattr(client_obj, "chat") and hasattr(client_obj.chat, "completions"):
-                original_create = client_obj.chat.completions.create
+                sync_orig_create = client_obj.chat.completions.create
 
-                if not getattr(original_create, "_is_wrapped_reasoning", False):
-                    def wrapped_create_sync(*args, **kwargs):
-                        base_url_str = getattr(self, "openai_api_base", "")
+                if not getattr(sync_orig_create, "_is_wrapped_reasoning", False):
+                    def wrapped_create_sync(*args, _orig=sync_orig_create, **kwargs):
+                        _sanitize_message_names(kwargs)
+                        base_url_str = str(getattr(self, "openai_api_base", "") or "")
                         if "openrouter.ai" in base_url_str:
                             extra_body = kwargs.get("extra_body") or {}
                             extra_body["include_reasoning"] = True
                             kwargs["extra_body"] = extra_body
 
                         try:
-                            response = original_create(*args, **kwargs)
+                            response = _orig(*args, **kwargs)
                         except Exception as req_err:
                             err_str = str(req_err).lower()
+                            # ── Reactive Fallback: Self-healing on strict provider name rejection ──
+                            if "name is valid only for tool messages" in err_str:
+                                print(f"[ResilientChatModel] [REACTIVE HEAL SYNC] Provider rejected name parameter ({req_err}). Sanitizing message names and retrying...")
+                                _sanitize_message_names(kwargs)
+                                response = _orig(*args, **kwargs)
                             # ── Reactive Fallback: Self-healing on 400 unsupported media type (Sync) ──
-                            if "unsupported media type" in err_str or ("400" in err_str and any(w in err_str for w in ["media", "video", "audio", "image", "content"])):
+                            elif "unsupported media type" in err_str or ("400" in err_str and any(w in err_str for w in ["media", "video", "audio", "image", "content"])):
                                 print(f"[ResilientChatModel] [REACTIVE HEAL SYNC] Provider rejected media payload: {req_err}. Transducing via Omni layer and retrying...")
                                 try:
                                     healed_kwargs = _heal_unsupported_media_sync(kwargs, getattr(self, "user_id", None))
-                                    response = original_create(*args, **healed_kwargs)
+                                    _sanitize_message_names(healed_kwargs)
+                                    response = _orig(*args, **healed_kwargs)
                                     print(f"[ResilientChatModel] [REACTIVE HEAL SYNC] ✅ Retry succeeded seamlessly!")
                                 except Exception as heal_err:
                                     print(f"[ResilientChatModel] [REACTIVE HEAL SYNC] Retry failed: {heal_err}")
@@ -493,10 +514,10 @@ class ResilientChatModel(ChatOpenAI):
                                         delta = chunk.choices[0].delta
                                         reasoning = getattr(delta, "reasoning", None)
                                         if reasoning:
-                                            try:
-                                                delta.reasoning_content = reasoning
-                                            except Exception:
-                                                object.__setattr__(delta, "reasoning_content", reasoning)
+                                             try:
+                                                 delta.reasoning_content = reasoning
+                                             except Exception:
+                                                 object.__setattr__(delta, "reasoning_content", reasoning)
                                     yield chunk
                             return WrappedSyncStream(response, chunk_generator())
                         return response
@@ -507,26 +528,33 @@ class ResilientChatModel(ChatOpenAI):
         for attr in ["async_client", "root_async_client"]:
             client_obj = getattr(self, attr, None)
             if client_obj and hasattr(client_obj, "chat") and hasattr(client_obj.chat, "completions"):
-                original_create = client_obj.chat.completions.create
+                async_orig_create = client_obj.chat.completions.create
 
-                if not getattr(original_create, "_is_wrapped_reasoning", False):
-                    async def wrapped_create_async(*args, **kwargs):
-                        base_url_str = getattr(self, "openai_api_base", "")
+                if not getattr(async_orig_create, "_is_wrapped_reasoning", False):
+                    async def wrapped_create_async(*args, _orig=async_orig_create, **kwargs):
+                        _sanitize_message_names(kwargs)
+                        base_url_str = str(getattr(self, "openai_api_base", "") or "")
                         if "openrouter.ai" in base_url_str:
                             extra_body = kwargs.get("extra_body") or {}
                             extra_body["include_reasoning"] = True
                             kwargs["extra_body"] = extra_body
 
                         try:
-                            response = await original_create(*args, **kwargs)
+                            response = await _orig(*args, **kwargs)
                         except Exception as req_err:
                             err_str = str(req_err).lower()
+                            # ── Reactive Fallback: Self-healing on strict provider name rejection ──
+                            if "name is valid only for tool messages" in err_str:
+                                print(f"[ResilientChatModel] [REACTIVE HEAL] Provider rejected name parameter ({req_err}). Sanitizing message names and retrying...")
+                                _sanitize_message_names(kwargs)
+                                response = await _orig(*args, **kwargs)
                             # ── Reactive Fallback: Self-healing on 400 unsupported media type ──
-                            if "unsupported media type" in err_str or ("400" in err_str and any(w in err_str for w in ["media", "video", "audio", "image", "content"])):
+                            elif "unsupported media type" in err_str or ("400" in err_str and any(w in err_str for w in ["media", "video", "audio", "image", "content"])):
                                 print(f"[ResilientChatModel] [REACTIVE HEAL] Provider rejected media payload: {req_err}. Transducing via Omni layer and retrying...")
                                 try:
                                     healed_kwargs = await _aheal_unsupported_media(kwargs, getattr(self, "user_id", None))
-                                    response = await original_create(*args, **healed_kwargs)
+                                    _sanitize_message_names(healed_kwargs)
+                                    response = await _orig(*args, **healed_kwargs)
                                     print(f"[ResilientChatModel] [REACTIVE HEAL] ✅ Retry succeeded seamlessly!")
                                 except Exception as heal_err:
                                     print(f"[ResilientChatModel] [REACTIVE HEAL] Retry failed: {heal_err}")
@@ -547,10 +575,10 @@ class ResilientChatModel(ChatOpenAI):
                                         delta = chunk.choices[0].delta
                                         reasoning = getattr(delta, "reasoning", None)
                                         if reasoning:
-                                            try:
-                                                delta.reasoning_content = reasoning
-                                            except Exception:
-                                                object.__setattr__(delta, "reasoning_content", reasoning)
+                                             try:
+                                                 delta.reasoning_content = reasoning
+                                             except Exception:
+                                                 object.__setattr__(delta, "reasoning_content", reasoning)
                                     yield chunk
                             return WrappedAsyncStream(response, chunk_generator())
                         return response
